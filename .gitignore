@@ -141,3 +141,5 @@ alembic/__pycache__/
 
 node_modules/
 **/node_modules/
+# Sensitive key files
+*SECRET_KEY*
