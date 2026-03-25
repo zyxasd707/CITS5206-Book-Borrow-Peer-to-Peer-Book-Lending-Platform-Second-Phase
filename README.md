@@ -269,7 +269,7 @@ next-frontend    |  ✓ Ready in ...ms
 | URL | Purpose |
 |-----|---------|
 | `http://localhost` | Frontend (main entry point) |
-| `http://localhost:8000/api/v1/docs` | Backend API docs |
+| `http://localhost:8000/docs` | Backend API docs |
 
 ---
 
