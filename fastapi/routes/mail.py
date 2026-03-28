@@ -1,7 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from core.config import settings
 
-import brevo_python
 import random
 import time
 

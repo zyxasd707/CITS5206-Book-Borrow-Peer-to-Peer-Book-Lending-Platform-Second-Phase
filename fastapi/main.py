@@ -23,9 +23,16 @@ from routes.review import router as review_router
 # update order statuses automatically
 from contextlib import asynccontextmanager
 from tasks import start_scheduler, stop_scheduler
+from database.connection import engine
+from models.base import Base as MainBase
+from models.service_fee import Base as ServiceFeeBase
+from models.checkout import Base as CheckoutBase
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    MainBase.metadata.create_all(bind=engine)
+    ServiceFeeBase.metadata.create_all(bind=engine)
+    CheckoutBase.metadata.create_all(bind=engine)
     start_scheduler()
     yield
     stop_scheduler()
