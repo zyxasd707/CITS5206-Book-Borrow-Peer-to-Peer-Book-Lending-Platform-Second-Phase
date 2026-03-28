@@ -46,10 +46,14 @@ export default function RegisterPage() {
         setOtpSent(true);
         alert("Verification code sent! Please check your inbox.");
       } else {
-        alert(res.message || "Failed to send verification email.");
+        // OTP is generated on the server even if email fails; allow verify step
+        setOtpSent(true);
+        alert("Email delivery failed. If running locally, check backend logs for the OTP code.");
       }
     } catch {
-      alert("Failed to send verification email.");
+      // OTP is generated on the server even if email fails; allow verify step
+      setOtpSent(true);
+      alert("Email delivery failed. If running locally, check backend logs for the OTP code.");
     } finally {
       setIsLoading(false);
     }

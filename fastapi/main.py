@@ -23,9 +23,36 @@ from routes.review import router as review_router
 # update order statuses automatically
 from contextlib import asynccontextmanager
 from tasks import start_scheduler, stop_scheduler
+from database.connection import engine
+from sqlalchemy import text
+
+# Import all models to register them with their Base instances
+import models.user, models.book, models.order, models.cart, models.message
+import models.complaint, models.ban, models.blacklist, models.review
+import models.payment_gateway, models.payment_split, models.mail
+from models.base import Base
+from models.checkout import Base as CheckoutBase
+from models.service_fee import Base as ServiceFeeBase
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    import time
+    # Wait for database to be ready (retry up to 30 times, 2s apart)
+    for attempt in range(30):
+        try:
+            with engine.connect() as conn:
+                conn.execute(text("SELECT 1"))
+            print("Database connection successful")
+            break
+        except Exception as e:
+            print(f"Waiting for database... attempt {attempt + 1}/30 ({e})")
+            time.sleep(2)
+    else:
+        raise RuntimeError("Database not available after 60 seconds")
+    # Create all database tables if they don't exist
+    Base.metadata.create_all(bind=engine)
+    CheckoutBase.metadata.create_all(bind=engine)
+    ServiceFeeBase.metadata.create_all(bind=engine)
     start_scheduler()
     yield
     stop_scheduler()
