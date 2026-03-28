@@ -6,8 +6,7 @@ import os
 from dotenv import load_dotenv
 from typing import List
 import brevo_python
-from brevo_python.rest import ApiException
-import stripe 
+import stripe
 
 # Load the root .env file (adjust path if your structure differs)
 load_dotenv(os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), '.env'))

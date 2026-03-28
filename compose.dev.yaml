@@ -1,15 +1,14 @@
 version: "3.9"
 
 services:
-  db:
+  db:             # Local MySQL database for development only;
     image: mysql:8.0
     container_name: mysql-db
-    restart: always
     environment:
       MYSQL_ROOT_PASSWORD: rootpassword
       MYSQL_DATABASE: BookHive
       MYSQL_USER: myuser
-      MYSQL_PASSWORD: 123456
+      MYSQL_PASSWORD: "123456"
     ports:
       - "3307:3306"
     volumes:
@@ -17,9 +16,9 @@ services:
     networks:
       - mynetwork
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "myuser", "-p123456"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-prootpassword"]
       interval: 5s
-      timeout: 10s
+      timeout: 5s
       retries: 10
       start_period: 30s
 
@@ -27,13 +26,13 @@ services:
     image: fastapi:latest
     build: ./fastapi              # Path to backend Dockerfile
     container_name: fastapi-backend
-    ports:
-      - "8000:8000"
+    ports: 
+      - "8000:8000"       # Exposed for direct browser access to backend API
     env_file:
       - ./.env
     depends_on:
       db:
-        condition: service_healthy
+        condition: service_healthy    # Wait for MySQL to be ready before starting backend
     networks:
       - mynetwork
 
