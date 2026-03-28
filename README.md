@@ -209,6 +209,109 @@ make up-dev
 
 ---
 
+## 🖥️ Local Development Setup (Windows / Without `make`)
+
+### Prerequisites
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/) installed and running
+- Git installed
+
+### Step 1 — Configure `.env`
+
+Copy the example file and fill in the values:
+
+```powershell
+cp .env.example .env
+```
+
+Minimum required values for local development:
+
+```env
+DB_USER=myuser
+DB_PASSWORD=123456
+DB_HOST=db
+DB_PORT=3306
+DB_NAME=BookHive
+
+SECRET_KEY=<any-random-string-32-chars-or-more>
+ALGORITHM=HS256
+ACCESS_TOKEN_EXPIRE_MINUTES=30
+
+# Placeholder values — email/payment won't work locally, but the app will start
+BREVO_API_KEY=xkeysib-local-dev-placeholder-key-not-real
+BREVO_KEY_TYPE=api-key
+STRIPE_SECRET_KEY=sk_test_local_dev_placeholder_not_real
+
+# Must include http://localhost to avoid CORS errors
+ALLOWED_ORIGINS=http://localhost:3000,http://127.0.0.1:3000,http://localhost,http://127.0.0.1
+```
+
+### Step 2 — Start Docker Desktop
+
+Open Docker Desktop and wait until the icon in the system tray is stable (not spinning). This takes ~1–2 minutes.
+
+### Step 3 — Build and start (first time only)
+
+```powershell
+docker compose -f compose.yaml -f compose.dev.yaml up --build
+```
+
+### Step 4 — Wait for startup
+
+Startup is complete when you see both lines:
+
+```
+fastapi-backend  | INFO:     Application startup complete.
+next-frontend    |  ✓ Ready in ...ms
+```
+
+### Step 5 — Open in browser
+
+| URL | Purpose |
+|-----|---------|
+| `http://localhost` | Frontend (main entry point) |
+| `http://localhost:8000/docs` | Backend API docs |
+
+---
+
+### Daily startup (after first time)
+
+```powershell
+docker compose -f compose.yaml -f compose.dev.yaml up
+```
+
+### Stop the project
+
+```powershell
+# Stop but keep database data
+docker compose -f compose.yaml -f compose.dev.yaml down
+
+# Stop and delete database data (full reset)
+docker compose -f compose.yaml -f compose.dev.yaml down -v
+```
+
+---
+
+### Troubleshooting
+
+| Error | Cause | Fix |
+|-------|-------|-----|
+| `open //./pipe/dockerDesktopLinuxEngine` | Docker Desktop not running | Start Docker Desktop and wait for it to be ready |
+| `Conflict. The container name already in use` | Stale containers from previous run | Run `docker compose ... down` then retry |
+| `ports are not available: 3306` | Local MySQL occupying port 3306 | Already handled — config uses `3307:3306` |
+| `Missing BREVO_API_KEY` | `.env` not configured | Follow Step 1 above |
+| `CORS policy blocked` | `ALLOWED_ORIGINS` missing `http://localhost` | Add `http://localhost` to `ALLOWED_ORIGINS` in `.env` |
+| `localhost:3000 refused` | Port 3000 not exposed to host | Access `http://localhost` (no port number) |
+
+**Full reset (when nothing else works):**
+
+```powershell
+docker compose -f compose.yaml -f compose.dev.yaml down -v
+docker rm -f fastapi-backend next-frontend nginx-proxy mysql-db
+docker compose -f compose.yaml -f compose.dev.yaml up --build
+```
+
+---
+
 ## 🛠 Prerequisites
 
 - **Docker & Docker Compose** (required in all environments)  
