@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect, status, Query, WebSocketException, UploadFile, File, Form
 from fastapi.security import OAuth2PasswordBearer
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 from typing import List
 import uuid
@@ -14,7 +14,6 @@ from core.security import decode_access_token
 from services.message_service import MessageService
 from models.message import Message
 from models.user import User
-from pydantic import BaseModel
 from typing import Optional
 from database.connection import SessionLocal
 from services.blacklist_service import BlacklistService
@@ -71,8 +70,7 @@ class UserResponse(BaseModel):
     # Add any other fields you need for the chat header, e.g., avatar_url
     # avatar_url: Optional[str] = None
 
-    class Config:
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)
 
 manager = ConnectionManager()
 

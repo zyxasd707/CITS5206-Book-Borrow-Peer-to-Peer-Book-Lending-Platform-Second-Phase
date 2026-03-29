@@ -5,7 +5,6 @@ Configuration for the API
 import os
 from dotenv import load_dotenv
 from typing import List
-import brevo_python
 import stripe
 
 # Load the root .env file (adjust path if your structure differs)
@@ -52,8 +51,8 @@ class Settings:
         if not brevo_api_key:
             raise ValueError("Missing BREVO_API_KEY in .env")
         
-        self.brevo_config = brevo_python.Configuration()
-        self.brevo_config.api_key[brevo_key_type] = brevo_api_key
+        self.BREVO_API_KEY = brevo_api_key
+        self.BREVO_KEY_TYPE = brevo_key_type
 
         # Stripe (required)
         stripe_api_key = os.getenv("STRIPE_SECRET_KEY")

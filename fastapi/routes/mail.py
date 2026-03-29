@@ -5,8 +5,7 @@ import random
 import time
 
 from typing import Dict
-from brevo_python import SendSmtpEmail, TransactionalEmailsApi, ApiClient
-from brevo_python.rest import ApiException
+from brevo import Brevo
 from sqlalchemy.orm import Session
 
 from models.mail import VerificationEmailRequest, ReceiptEmailRequest, ShipmentConfirmationRequest
@@ -17,7 +16,13 @@ router = APIRouter(prefix="/email", tags=["Email"])
 
 # -------- Helper --------
 def get_brevo_config():
-    return settings.brevo_config
+    headers = None
+    if settings.BREVO_KEY_TYPE != "api-key":
+        headers = {settings.BREVO_KEY_TYPE: settings.BREVO_API_KEY}
+    return {
+        "api_key": settings.BREVO_API_KEY,
+        "headers": headers,
+    }
 
 def set_otp(email: str, ttl_seconds: int = OTP_TTL_SECONDS) -> str:
     otp = str(random.randint(100000, 999999))
@@ -46,21 +51,17 @@ def delete_otp(email: str):
 def send_verification_email(verificationEmailRequest: VerificationEmailRequest):
     
     configuration = get_brevo_config()
-    api_instance = TransactionalEmailsApi(ApiClient(configuration))
+    api_instance = Brevo(**configuration).transactional_emails
     otp = set_otp(verificationEmailRequest.emailAddress)
     print("otp : " + otp)
-    
-    send_smtp_email = SendSmtpEmail(
-        to=[{"email": verificationEmailRequest.emailAddress}],
-        template_id=3,  
-        params={
-            "OTP": otp
-        },
-    )
 
     try:
-        api_instance.send_transac_email(send_smtp_email)
-    except ApiException as e:
+        api_instance.send_transac_email(
+            to=[{"email": verificationEmailRequest.emailAddress}],
+            template_id=3,
+            params={"OTP": otp},
+        )
+    except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to send email: {e}")
 
     return {"message": "Verification email sent successfully."}
@@ -87,21 +88,19 @@ def verify_otp(verificationEmailRequest: VerificationEmailRequest):
 def send_receipt_email(receipt_request: ReceiptEmailRequest):
 
     configuration = get_brevo_config()
-    api_instance = TransactionalEmailsApi(ApiClient(configuration))
-
-    send_smtp_email = SendSmtpEmail(
-        to=[{"email": receipt_request.email}],
-        template_id=4, 
-        params={
-            "username": receipt_request.username,
-            "total_amount": f"${receipt_request.total_amount:.2f}",
-            "order_id": receipt_request.order_id
-        },
-    )
+    api_instance = Brevo(**configuration).transactional_emails
 
     try:
-        api_instance.send_transac_email(send_smtp_email)
-    except ApiException as e:
+        api_instance.send_transac_email(
+            to=[{"email": receipt_request.email}],
+            template_id=4,
+            params={
+                "username": receipt_request.username,
+                "total_amount": f"${receipt_request.total_amount:.2f}",
+                "order_id": receipt_request.order_id,
+            },
+        )
+    except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to send receipt email: {e}")
 
     return {"message": "Receipt email sent successfully."}
@@ -110,25 +109,22 @@ def send_receipt_email(receipt_request: ReceiptEmailRequest):
 @router.post("/send_shipment_confirmation", status_code=status.HTTP_200_OK)
 def send_shipment_confirmation_email(shipment_request: ShipmentConfirmationRequest):
     configuration = get_brevo_config()
-    api_instance = TransactionalEmailsApi(ApiClient(configuration))
-
-    send_smtp_email = SendSmtpEmail(
-        to=[{"email": shipment_request.email}],
-        template_id=5,  
-        params={
-            "order_id" : shipment_request.order_id,
-            "username": shipment_request.username,
-            "tracking_number": shipment_request.tracking_number,
-            "carrier": shipment_request.courier_name,
-            "estimated_delivery_date": shipment_request.estimated_delivery_date.strftime("%d/%m/%Y")
-        },
-    )
+    api_instance = Brevo(**configuration).transactional_emails
 
     try:
-        api_instance.send_transac_email(send_smtp_email)
-    except ApiException as e:
+        api_instance.send_transac_email(
+            to=[{"email": shipment_request.email}],
+            template_id=5,
+            params={
+                "order_id": shipment_request.order_id,
+                "username": shipment_request.username,
+                "tracking_number": shipment_request.tracking_number,
+                "carrier": shipment_request.courier_name,
+                "estimated_delivery_date": shipment_request.estimated_delivery_date.strftime("%d/%m/%Y"),
+            },
+        )
+    except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to send shipment confirmation email: {e}")
 
     return {"message": "Shipment confirmation email sent successfully."}
-
 
