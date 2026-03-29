@@ -25,6 +25,7 @@ from contextlib import asynccontextmanager
 from tasks import start_scheduler, stop_scheduler
 from database.connection import engine
 from sqlalchemy import text
+from seed import seed as seed_sample_data
 
 # Import all models to register them with their Base instances
 import models.user, models.book, models.order, models.cart, models.message
@@ -53,6 +54,7 @@ async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
     CheckoutBase.metadata.create_all(bind=engine)
     ServiceFeeBase.metadata.create_all(bind=engine)
+    seed_sample_data()
     start_scheduler()
     yield
     stop_scheduler()

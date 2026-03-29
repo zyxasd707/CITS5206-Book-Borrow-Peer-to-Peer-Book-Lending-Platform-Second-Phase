@@ -1,12 +1,16 @@
 """
 Seed script — populates the database with demo users and books.
-Run inside the backend container:
+
+For local Docker development, run this inside the backend container:
     docker exec -it fastapi-backend python seed.py
+
+Why this matters:
+    The root `.env` uses `DB_HOST=db`, which resolves correctly inside Docker
+    but usually does not resolve from the host machine.
 """
 
 import os
 import uuid
-import sys
 from dotenv import load_dotenv
 
 load_dotenv(os.path.join(os.path.dirname(os.path.dirname(__file__)), '.env'))
@@ -228,15 +232,16 @@ BOOKS = [
 
 # ── main ──────────────────────────────────────────────────────────────────────
 
-def seed():
+def is_database_empty(db) -> bool:
+    return db.query(User).count() == 0 and db.query(Book).count() == 0
+
+
+def seed(*, force: bool = False):
     db = SessionLocal()
     try:
-        # Check if already seeded
-        existing = db.query(User).filter(User.email == "alice@example.com").first()
-        if existing:
-            print("Database already seeded. Use --force to re-seed.")
-            if "--force" not in sys.argv:
-                return
+        if not force and not is_database_empty(db):
+            print("Database is not empty. Skipping auto-seed.")
+            return
 
         print("Seeding users...")
         created_users = []
@@ -303,4 +308,13 @@ def seed():
 
 
 if __name__ == "__main__":
-    seed()
+    try:
+        seed(force="--force" in os.sys.argv)
+    except ModuleNotFoundError as exc:
+        if exc.name == "dotenv":
+            print(
+                "Missing dependency: python-dotenv.\n"
+                "If you are using Docker, run the seed inside the backend container:\n"
+                "  docker exec -it fastapi-backend python seed.py"
+            )
+        raise

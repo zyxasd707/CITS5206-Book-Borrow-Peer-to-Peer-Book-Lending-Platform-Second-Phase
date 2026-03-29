@@ -259,6 +259,41 @@ docker compose -f compose.yaml -f compose.dev.yaml up --build
 
 Startup is complete when you see both lines:
 
+### Step 5 — Seed sample data
+
+In the default local Docker setup, the backend now auto-seeds sample users and books on startup if both the `users` and `book` tables are empty.
+
+That means after:
+
+```powershell
+docker compose -f compose.yaml -f compose.dev.yaml up
+```
+
+you normally do not need a second terminal just to seed data.
+
+If you want to re-seed manually from inside the backend container:
+
+```powershell
+docker exec -it fastapi-backend python seed.py
+```
+
+To force a manual re-seed:
+
+```powershell
+docker exec -it fastapi-backend python seed.py --force
+```
+
+To verify the sample books were inserted, open:
+
+- `http://localhost:8000/api/v1/books`
+- `http://localhost/books`
+
+Important:
+
+- Auto-seeding only happens when both the `users` and `book` tables are empty.
+- Do not run `python fastapi/seed.py` directly from the host unless your local Python environment has the backend dependencies installed and your database host is reachable from the host machine.
+- In the default local Docker setup, `.env` uses `DB_HOST=db`, which works inside the Docker network and is why manual seed commands should be run in `fastapi-backend`.
+
 ```
 fastapi-backend  | INFO:     Application startup complete.
 next-frontend    |  ✓ Ready in ...ms
@@ -385,4 +420,3 @@ make clean     # prune unused Docker images, networks, volumes
 
 This project is for academic purposes (University Capstone Project).
 All rights reserved to the project contributors. 
-
