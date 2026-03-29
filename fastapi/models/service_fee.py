@@ -1,6 +1,6 @@
 from sqlalchemy import Column, String, Numeric, Boolean, Text, TIMESTAMP, func
 from sqlalchemy.ext.declarative import declarative_base
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from typing import Optional
 
 Base = declarative_base()
@@ -44,5 +44,4 @@ class ServiceFeeResponse(ServiceFeeBase):
     created_at: str
     updated_at: str
 
-    class Config:
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)

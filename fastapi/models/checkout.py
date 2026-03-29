@@ -2,7 +2,7 @@ import uuid
 from sqlalchemy import Column, String, Numeric, TIMESTAMP, Integer, ForeignKey, func
 from sqlalchemy.orm import relationship
 from sqlalchemy.ext.declarative import declarative_base
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from typing import Optional, List
 
 Base = declarative_base()
@@ -87,8 +87,7 @@ class CheckoutItemResponse(CheckoutItemBase):
     createdAt: str
     updatedAt: str
 
-    class Config:
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class CheckoutBase(BaseModel):
@@ -118,5 +117,4 @@ class CheckoutResponse(CheckoutBase):
     updatedAt: str
     items: List[CheckoutItemResponse] = []
 
-    class Config:
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)

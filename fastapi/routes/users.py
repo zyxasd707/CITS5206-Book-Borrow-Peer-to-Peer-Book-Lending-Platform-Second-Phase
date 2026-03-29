@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from datetime import date, datetime
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from typing import Optional, Union
 
 from core.dependencies import get_db,get_current_user
@@ -60,8 +60,7 @@ class UserUpdate(BaseModel):
     avatar: Optional[str] = Field(None, alias="avatar")
     profile_picture: Optional[str] = Field(None, alias="profilePicture")
 
-    class Config:
-        allow_population_by_field_name = True
+    model_config = ConfigDict(populate_by_name=True)
 
 
 # ------------Helper: Covert ORM to UserResponse--------------------
