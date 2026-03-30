@@ -40,7 +40,7 @@ export default function ForgotPasswordPage() {
         {submitted ? (
           <div className="text-center space-y-4">
             <p className="text-gray-700">
-              A password reset link has been sent to <strong>{email}</strong>. <br>Please check your inbox.</br>
+              A password reset link has been sent to <strong>{email}</strong>. Please check your inbox.
             </p>
             <Link href="/login" className="text-blue-600 hover:text-blue-700 text-sm">
               Back to Sign In

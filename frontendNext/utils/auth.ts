@@ -233,15 +233,14 @@ export const initAuth = () => {
       (response) => response,
       (error) => {
         if (error.response?.status === 401) {
-          console.warn("Session expired, logging out...");
-          // Clear the local login status
-          localStorage.removeItem("access_token");
-          delete axios.defaults.headers.common["Authorization"];
-
-          // Notify the global refresh
-          window.dispatchEvent(new Event("auth-changed"));
-
-          window.location.href = "/auth";
+          const hadToken = !!localStorage.getItem("access_token");
+          if (hadToken) {
+            console.warn("Session expired, logging out...");
+            localStorage.removeItem("access_token");
+            delete axios.defaults.headers.common["Authorization"];
+            window.dispatchEvent(new Event("auth-changed"));
+            window.location.href = "/auth";
+          }
         }
         return Promise.reject(error);
       }
