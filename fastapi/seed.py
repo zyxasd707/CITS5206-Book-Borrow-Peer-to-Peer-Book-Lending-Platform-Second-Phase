@@ -11,6 +11,7 @@ Why this matters:
 
 import os
 import uuid
+from datetime import date
 from dotenv import load_dotenv
 
 load_dotenv(os.path.join(os.path.dirname(os.path.dirname(__file__)), '.env'))
@@ -36,33 +37,69 @@ USERS = [
     {
         "user_id": short_uid(),
         "name": "Alice Chen",
+        "first_name": "Alice",
+        "last_name": "Chen",
         "email": "alice@example.com",
         "password": "Password123!",
         "location": "Perth, WA",
+        "phone_number": "0412345678",
+        "date_of_birth": date(1996, 4, 12),
+        "country": "Australia",
+        "street_address": "12 Hay Street",
+        "city": "Perth",
+        "state": "WA",
+        "zip_code": "6000",
         "is_admin": False,
     },
     {
         "user_id": short_uid(),
         "name": "Bob Smith",
+        "first_name": "Bob",
+        "last_name": "Smith",
         "email": "bob@example.com",
         "password": "Password123!",
         "location": "Melbourne, VIC",
+        "phone_number": "0411222333",
+        "date_of_birth": date(1994, 9, 3),
+        "country": "Australia",
+        "street_address": "88 Swanston Street",
+        "city": "Melbourne",
+        "state": "VIC",
+        "zip_code": "3000",
         "is_admin": False,
     },
     {
         "user_id": short_uid(),
         "name": "Carol Wang",
+        "first_name": "Carol",
+        "last_name": "Wang",
         "email": "carol@example.com",
         "password": "Password123!",
         "location": "Sydney, NSW",
+        "phone_number": "0499888777",
+        "date_of_birth": date(1997, 1, 25),
+        "country": "Australia",
+        "street_address": "25 George Street",
+        "city": "Sydney",
+        "state": "NSW",
+        "zip_code": "2000",
         "is_admin": False,
     },
     {
         "user_id": short_uid(),
         "name": "Admin User",
+        "first_name": "Admin",
+        "last_name": "User",
         "email": "admin@bookhive.com",
         "password": "Admin123!",
         "location": "Perth, WA",
+        "phone_number": "0400000000",
+        "date_of_birth": date(1990, 6, 18),
+        "country": "Australia",
+        "street_address": "1 St Georges Terrace",
+        "city": "Perth",
+        "state": "WA",
+        "zip_code": "6000",
         "is_admin": True,
     },
 ]
@@ -248,7 +285,26 @@ def seed(*, force: bool = False):
         for u in USERS:
             existing_user = db.query(User).filter(User.email == u["email"]).first()
             if existing_user:
-                print(f"  Skipping existing user: {u['email']}")
+                if force:
+                    existing_user.name = u["name"]
+                    existing_user.password_hash = get_password_hash(u["password"])
+                    existing_user.password_algo = "bcrypt"
+                    existing_user.location = u["location"]
+                    existing_user.first_name = u["first_name"]
+                    existing_user.last_name = u["last_name"]
+                    existing_user.phone_number = u["phone_number"]
+                    existing_user.date_of_birth = u["date_of_birth"]
+                    existing_user.country = u["country"]
+                    existing_user.street_address = u["street_address"]
+                    existing_user.city = u["city"]
+                    existing_user.state = u["state"]
+                    existing_user.zip_code = u["zip_code"]
+                    existing_user.is_admin = u["is_admin"]
+                    db.add(existing_user)
+                    db.flush()
+                    print(f"  Updated existing user: {u['email']}")
+                else:
+                    print(f"  Skipping existing user: {u['email']}")
                 created_users.append(existing_user)
                 continue
             user = User(
@@ -258,6 +314,15 @@ def seed(*, force: bool = False):
                 password_hash=get_password_hash(u["password"]),
                 password_algo="bcrypt",
                 location=u["location"],
+                first_name=u["first_name"],
+                last_name=u["last_name"],
+                phone_number=u["phone_number"],
+                date_of_birth=u["date_of_birth"],
+                country=u["country"],
+                street_address=u["street_address"],
+                city=u["city"],
+                state=u["state"],
+                zip_code=u["zip_code"],
                 is_admin=u["is_admin"],
             )
             db.add(user)
@@ -268,6 +333,42 @@ def seed(*, force: bool = False):
         print("Seeding books...")
         for b in BOOKS:
             owner = created_users[b["owner_index"]]
+            existing_book = (
+                db.query(Book)
+                .filter(Book.isbn == b["isbn"])
+                .first()
+            )
+            if not existing_book:
+                existing_book = (
+                    db.query(Book)
+                    .filter(Book.title_en == b["title_en"], Book.author == b["author"])
+                    .first()
+                )
+            if existing_book and force:
+                existing_book.owner_id = owner.user_id
+                existing_book.title_or = b["title_or"]
+                existing_book.title_en = b["title_en"]
+                existing_book.original_language = b["original_language"]
+                existing_book.author = b["author"]
+                existing_book.category = b["category"]
+                existing_book.description = b["description"]
+                existing_book.condition = b["condition"]
+                existing_book.status = b["status"]
+                existing_book.can_rent = b["can_rent"]
+                existing_book.can_sell = b["can_sell"]
+                existing_book.deposit = b["deposit"]
+                existing_book.sale_price = b["sale_price"]
+                existing_book.max_lending_days = b["max_lending_days"]
+                existing_book.delivery_method = b["delivery_method"]
+                existing_book.publish_year = b["publish_year"]
+                existing_book.isbn = b["isbn"]
+                existing_book.tags = b["tags"]
+                db.add(existing_book)
+                print(f"  Updated existing book owner: {b['title_en']}")
+                continue
+            if existing_book:
+                print(f"  Skipping existing book: {b['title_en']}")
+                continue
             book = Book(
                 id=uid(),
                 owner_id=owner.user_id,
