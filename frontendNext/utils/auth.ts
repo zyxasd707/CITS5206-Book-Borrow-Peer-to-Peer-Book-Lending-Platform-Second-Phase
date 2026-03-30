@@ -4,10 +4,17 @@ import type { User } from "@/app/types/user";
 
 // API Configuration
 export const getApiUrl = () => {
-  if (process.env.NODE_ENV === "production") {
-    return process.env.NEXT_PUBLIC_API_URL || "https://api.bookborrow.org/";
+  const configuredUrl = process.env.NEXT_PUBLIC_API_URL;
+  if (configuredUrl) {
+    return configuredUrl.replace(/\/$/, "");
   }
-  return process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
+  // Default to same-origin so nginx can proxy /api requests to FastAPI.
+  if (typeof window !== "undefined") {
+    return window.location.origin;
+  }
+
+  return "";
 };
 
 
@@ -235,16 +242,16 @@ export const initAuth = () => {
     axios.interceptors.response.use(
       (response) => response,
       (error) => {
-        if (error.response?.status === 401) {
-          console.warn("Session expired, logging out...");
-          // Clear the local login status
+        const hasToken = !!localStorage.getItem("access_token");
+
+        if (error.response?.status === 401 && hasToken) {
+            console.warn("Session expired, logging out...");
+            // Clear the local login status
           localStorage.removeItem("access_token");
           delete axios.defaults.headers.common["Authorization"];
 
           // Notify the global refresh
           window.dispatchEvent(new Event("auth-changed"));
-
-          window.location.href = "/auth";
         }
         return Promise.reject(error);
       }

@@ -50,6 +50,16 @@ export default function AuthProvider({ children }: AuthProviderProps) {
     };
 
     checkAuth();
+
+    const handleAuthChange = () => {
+      checkAuth();
+    };
+
+    window.addEventListener("auth-changed", handleAuthChange);
+
+    return () => {
+      window.removeEventListener("auth-changed", handleAuthChange);
+    };
   }, [pathname, router]);
 
 
