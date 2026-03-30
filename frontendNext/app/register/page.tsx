@@ -41,7 +41,7 @@ export default function RegisterPage() {
     }
     setIsLoading(true);
     try {
-      const res = await sendVerificationEmail(formData.email);
+      const res = await sendVerificationEmail(formData.email, formData.name);
       if (res.success) {
         setOtpSent(true);
         alert("Verification code sent! Please check your inbox.");

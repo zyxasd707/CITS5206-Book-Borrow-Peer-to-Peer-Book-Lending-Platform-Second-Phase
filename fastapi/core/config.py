@@ -53,6 +53,8 @@ class Settings:
         
         self.BREVO_API_KEY = brevo_api_key
         self.BREVO_KEY_TYPE = brevo_key_type
+        self.BREVO_SENDER_EMAIL = os.getenv("BREVO_SENDER_EMAIL")
+        self.BREVO_SENDER_NAME = os.getenv("BREVO_SENDER_NAME", "BookHive")
 
         # Stripe (required)
         stripe_api_key = os.getenv("STRIPE_SECRET_KEY")

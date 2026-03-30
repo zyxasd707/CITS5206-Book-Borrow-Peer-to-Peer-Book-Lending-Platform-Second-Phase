@@ -6,6 +6,7 @@ import time
 
 from typing import Dict
 from brevo import Brevo
+from brevo.transactional_emails import SendTransacEmailRequestSender
 from sqlalchemy.orm import Session
 
 from models.mail import VerificationEmailRequest, ReceiptEmailRequest, ShipmentConfirmationRequest
@@ -23,6 +24,18 @@ def get_brevo_config():
         "api_key": settings.BREVO_API_KEY,
         "headers": headers,
     }
+
+
+def get_brevo_sender() -> SendTransacEmailRequestSender:
+    if not settings.BREVO_SENDER_EMAIL:
+        raise HTTPException(
+            status_code=500,
+            detail="BREVO_SENDER_EMAIL is not configured.",
+        )
+    return SendTransacEmailRequestSender(
+        email=settings.BREVO_SENDER_EMAIL,
+        name=settings.BREVO_SENDER_NAME,
+    )
 
 def set_otp(email: str, ttl_seconds: int = OTP_TTL_SECONDS) -> str:
     otp = str(random.randint(100000, 999999))
@@ -52,14 +65,27 @@ def send_verification_email(verificationEmailRequest: VerificationEmailRequest):
     
     configuration = get_brevo_config()
     api_instance = Brevo(**configuration).transactional_emails
+    sender = get_brevo_sender()
     otp = set_otp(verificationEmailRequest.emailAddress)
+    display_name = verificationEmailRequest.username.strip() or "there"
     print("otp : " + otp)
 
     try:
         api_instance.send_transac_email(
+            sender=sender,
             to=[{"email": verificationEmailRequest.emailAddress}],
-            template_id=3,
-            params={"OTP": otp},
+            subject="Your BookBorrow verification code",
+            html_content=(
+                f"<p>Hello, {display_name},</p>"
+                "<p>Your BookBorrow verification code is:</p>"
+                f"<p style='font-size: 24px; font-weight: bold;'>{otp}</p>"
+                "<p>This code will expire in 10 minutes.</p>"
+            ),
+            text_content=(
+                f"Hello, {display_name}. "
+                f"Your BookBorrow verification code is: {otp}. "
+                "This code will expire in 10 minutes."
+            ),
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to send email: {e}")
@@ -127,4 +153,3 @@ def send_shipment_confirmation_email(shipment_request: ShipmentConfirmationReque
         raise HTTPException(status_code=500, detail=f"Failed to send shipment confirmation email: {e}")
 
     return {"message": "Shipment confirmation email sent successfully."}
-

@@ -239,6 +239,8 @@ ACCESS_TOKEN_EXPIRE_MINUTES=30
 # Placeholder values — email/payment won't work locally, but the app will start
 BREVO_API_KEY=xkeysib-local-dev-placeholder-key-not-real
 BREVO_KEY_TYPE=api-key
+BREVO_SENDER_EMAIL=no-reply@example.com
+BREVO_SENDER_NAME=BookHive
 STRIPE_SECRET_KEY=sk_test_local_dev_placeholder_not_real
 
 # Must include http://localhost to avoid CORS errors
@@ -334,6 +336,7 @@ docker compose -f compose.yaml -f compose.dev.yaml down -v
 | `Conflict. The container name already in use` | Stale containers from previous run | Run `docker compose ... down` then retry |
 | `ports are not available: 3306` | Local MySQL occupying port 3306 | Already handled — config uses `3307:3306` |
 | `Missing BREVO_API_KEY` | `.env` not configured | Follow Step 1 above |
+| `BREVO_SENDER_EMAIL is not configured` | Verification email sender is missing | Add `BREVO_SENDER_EMAIL` and a verified sender in Brevo |
 | `CORS policy blocked` | `ALLOWED_ORIGINS` missing `http://localhost` | Add `http://localhost` to `ALLOWED_ORIGINS` in `.env` |
 | `localhost:3000 refused` | Port 3000 not exposed to host | Access `http://localhost` (no port number) |
 
