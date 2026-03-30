@@ -391,6 +391,49 @@ export const getUserById = async (id: string): Promise<User | null> => {
   }
 };
 
+// -------- Forgot / Reset Password --------
+
+export const forgotPassword = async (email: string) => {
+  const API_URL = getApiUrl();
+  try {
+    const response = await axios.post(
+      `${API_URL}/api/v1/auth/forgot-password`,
+      { email },
+      { headers: { "Content-Type": "application/json" } }
+    );
+    return { success: true, message: response.data.message };
+  } catch (err) {
+    let errorMessage = "Failed to send reset email";
+    if (axios.isAxiosError(err)) {
+      errorMessage = err.response?.data?.detail || err.message;
+    }
+    throw new Error(errorMessage);
+  }
+};
+
+export const resetPassword = async (
+  email: string,
+  token: string,
+  newPassword: string,
+  confirmPassword: string
+) => {
+  const API_URL = getApiUrl();
+  try {
+    const response = await axios.post(
+      `${API_URL}/api/v1/auth/reset-password`,
+      { email, token, new_password: newPassword, confirm_password: confirmPassword },
+      { headers: { "Content-Type": "application/json" } }
+    );
+    return { success: true, message: response.data.message };
+  } catch (err) {
+    let errorMessage = "Failed to reset password";
+    if (axios.isAxiosError(err)) {
+      errorMessage = err.response?.data?.detail || err.message;
+    }
+    throw new Error(errorMessage);
+  }
+};
+
 //-------- Administrator ban users
 const API_URL = getApiUrl();
 
