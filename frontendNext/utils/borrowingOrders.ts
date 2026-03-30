@@ -21,11 +21,11 @@ export type Order = {
   borrower_id: string;
 };
 
-export async function createOrder(checkoutId: string) {
+export async function createOrder(checkoutId: string, paymentId: string) {
   const token = getToken();
   const response = await axios.post(
     `${API_URL}/api/v1/orders/`,
-    { checkout_id: checkoutId },
+    { checkout_id: checkoutId, payment_id: paymentId },
     {
       headers: { Authorization: `Bearer ${token}` },
     }

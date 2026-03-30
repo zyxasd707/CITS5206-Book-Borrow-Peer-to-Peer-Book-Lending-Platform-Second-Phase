@@ -86,7 +86,7 @@ app.include_router(checkout_router, prefix="/api/v1")
 app.include_router(service_fee_router, prefix="/api/v1")
 
 # shipping router
-app.include_router(shipping_router)
+app.include_router(shipping_router, prefix="/api/v1")
 
 # media root directory: /media is mounted to the app/media folder
 MEDIA_ROOT = Path(__file__).parent / "media"
@@ -115,7 +115,7 @@ app.include_router(complaints_router, prefix="/api/v1")
 app.include_router(mail_router) 
 
 # payment gateway router
-app.include_router(payment_gateway_router) 
+app.include_router(payment_gateway_router, prefix="/api/v1") 
 
 # order router
 app.include_router(orders_router, prefix="/api/v1/orders")

@@ -1,0 +1,10 @@
+Hello, {username},
+
+Your order has been shipped.
+
+Order ID: {order_id}
+Carrier: {carrier}
+Tracking Number: {tracking_number}
+Estimated Delivery Date: {estimated_delivery_date}
+
+You can track your shipment and view the latest order status in BookBorrow.

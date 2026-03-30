@@ -36,6 +36,57 @@ type UpdateUserPayload = Omit<User, "dateOfBirth"> & {
   dateOfBirth?: string | null;
 };
 
+const splitUserName = (name?: string | null) => {
+  const safeName = (name || "").trim();
+  if (!safeName) {
+    return { firstName: "", lastName: "" };
+  }
+
+  const parts = safeName.split(/\s+/);
+  return {
+    firstName: parts[0] || "",
+    lastName: parts.slice(1).join(" "),
+  };
+};
+
+const mapApiUserToUser = (userData: any): User => {
+  const derivedName = splitUserName(userData.name);
+  const firstName = userData.firstName || derivedName.firstName;
+  const lastName = userData.lastName || derivedName.lastName;
+
+  return {
+    id: userData.id,
+    firstName,
+    lastName,
+    name: userData.name,
+    email: userData.email,
+    phoneNumber: userData.phoneNumber || undefined,
+    dateOfBirth: userData.dateOfBirth || undefined,
+
+    country: userData.country,
+    streetAddress: userData.streetAddress,
+    city: userData.city,
+    state: userData.state,
+    zipCode: userData.zipCode,
+    coordinates: userData.coordinates || undefined,
+    maxDistance: userData.maxDistance || undefined,
+
+    avatar:
+      userData.avatar ||
+      `https://ui-avatars.com/api/?name=${encodeURIComponent(
+        userData.name
+      )}&background=f97316&color=fff`,
+    profilePicture: userData.profilePicture || undefined,
+
+    createdAt: new Date(userData.createdAt),
+
+    bio: userData.bio || undefined,
+    preferredLanguages: userData.preferredLanguages || undefined,
+    stripe_account_id: userData.stripe_account_id || undefined,
+    is_admin: userData.is_admin,
+  };
+};
+
 // User login function
 export const loginUser = async (credentials: LoginCredentials) => {
   const API_URL = getApiUrl();
@@ -276,38 +327,7 @@ export const getCurrentUser = async (): Promise<User | null> => {
 
     const userData = response.data;
 
-    const user: User = {
-      id: userData.id,
-      firstName: userData.firstName,
-      lastName: userData.lastName,
-      name: userData.name,
-      email: userData.email,
-      phoneNumber: userData.phoneNumber || undefined,
-      dateOfBirth: userData.dateOfBirth || undefined,
-
-      country: userData.country,
-      streetAddress: userData.streetAddress,
-      city: userData.city,
-      state: userData.state,
-      zipCode: userData.zipCode,
-      coordinates: userData.coordinates || undefined,
-      maxDistance: userData.maxDistance || undefined,
-
-      avatar:
-        userData.avatar ||
-        `https://ui-avatars.com/api/?name=${encodeURIComponent(
-          userData.name
-        )}&background=f97316&color=fff`,
-      profilePicture: userData.profilePicture || undefined,
-
-      createdAt: new Date(userData.createdAt),
-
-      bio: userData.bio || undefined,
-      preferredLanguages: userData.preferredLanguages || undefined,
-      stripe_account_id: userData.stripe_account_id || undefined,
-    };
-
-    return user;
+    return mapApiUserToUser(userData);
   } catch (error) {
     console.error("Failed to get user info:", error);
     localStorage.removeItem("access_token");
@@ -362,39 +382,7 @@ export const getUserById = async (id: string): Promise<User | null> => {
 
     const userData = response.data;
 
-    const user: User = {
-      id: userData.id,
-      firstName: userData.firstName,
-      lastName: userData.lastName,
-      name: userData.name,
-      email: userData.email,
-      phoneNumber: userData.phoneNumber || undefined,
-      dateOfBirth: userData.dateOfBirth || undefined,
-
-      country: userData.country,
-      streetAddress: userData.streetAddress,
-      city: userData.city,
-      state: userData.state,
-      zipCode: userData.zipCode,
-      coordinates: userData.coordinates || undefined,
-      maxDistance: userData.maxDistance || undefined,
-
-      avatar:
-        userData.avatar ||
-        `https://ui-avatars.com/api/?name=${encodeURIComponent(
-          userData.name
-        )}&background=f97316&color=fff`,
-      profilePicture: userData.profilePicture || undefined,
-
-      createdAt: new Date(userData.createdAt),
-
-      bio: userData.bio || undefined,
-      preferredLanguages: userData.preferredLanguages || undefined,
-      stripe_account_id: userData.stripe_account_id || undefined,
-
-    };
-
-    return user;
+    return mapApiUserToUser(userData);
   } catch (error) {
     console.error(`Failed to get user ${id}:`, error);
     return null;

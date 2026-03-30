@@ -16,7 +16,7 @@ export async function initiatePayment(payload: {
   checkout_id: string;
   lender_account_id: string;
 }) {
-  const res = await axios.post(`${API_URL}/payment_gateway/payment/initiate`, payload, {
+  const res = await axios.post(`${API_URL}/api/v1/payment_gateway/payment/initiate`, payload, {
     headers: {
       Authorization: `Bearer ${localStorage.getItem("access_token")}`,
     },
@@ -38,7 +38,7 @@ export async function initiatePayment(payload: {
 // Create a Stripe Express account and get onboarding link
 export async function createExpressAccount(email: string) {
   const res = await axios.post(
-    `${API_URL}/payment_gateway/accounts/express`,
+    `${API_URL}/api/v1/payment_gateway/accounts/express`,
     { email },
     {
       headers: {
@@ -59,7 +59,7 @@ export async function distributeShippingFee(
   lenderAccountId: string,      // e.g "acct_123..."
 ) {
   const res = await axios.post(
-    `${API_URL}/payment_gateway/payment/distribute_shipping_fee/${paymentId}`,
+    `${API_URL}/api/v1/payment_gateway/payment/distribute_shipping_fee/${paymentId}`,
     { lender_account_id: lenderAccountId },
     {
       headers: {
@@ -84,7 +84,7 @@ export async function refundPayment(
   opts?: { amount_cents?: number; reason?: string } // partial refunds in the future
 ) {
   const res = await axios.post(
-    `${API_URL}/payment_gateway/payment/refund/${paymentId}`,
+    `${API_URL}/api/v1/payment_gateway/payment/refund/${paymentId}`,
     { reason: opts?.reason },
     {
       headers: {
@@ -114,7 +114,7 @@ export async function createPaymentDispute(
   }
 ) {
   const res = await axios.post(
-    `${API_URL}/payment_gateway/payment/dispute/create/${paymentId}`,
+    `${API_URL}/api/v1/payment_gateway/payment/dispute/create/${paymentId}`,
     {
       payment_id: paymentId,
       ...data,
@@ -142,7 +142,7 @@ export async function handlePaymentDispute(
   console.log("handlePaymentDispute payload:", paymentId, data);
 
   const res = await axios.post(
-    `${API_URL}/payment_gateway/payment/dispute/handle/${paymentId}`,
+    `${API_URL}/api/v1/payment_gateway/payment/dispute/handle/${paymentId}`,
     data,
     {
       headers: {
@@ -164,7 +164,7 @@ export async function compensatePayment(
   console.log("🚀 Trigger compensatePayment:", { paymentId, destination });
 
   const res = await axios.post(
-    `${API_URL}/payment_gateway/payment/compensate/${paymentId}?destination=${encodeURIComponent(destination)}`,
+    `${API_URL}/api/v1/payment_gateway/payment/compensate/${paymentId}?destination=${encodeURIComponent(destination)}`,
     {},
     {
       headers: {
