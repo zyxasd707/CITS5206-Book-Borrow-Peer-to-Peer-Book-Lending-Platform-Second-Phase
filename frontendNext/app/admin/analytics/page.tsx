@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import {
     Chart as ChartJS,
     LineElement,
@@ -12,6 +13,9 @@ import {
     ArcElement,
 } from "chart.js";
 import { Line, Doughnut } from "react-chartjs-2";
+import { getApiUrl, getToken } from "@/utils/auth";
+import { listBans } from "@/utils/auth";
+import { getBooks } from "@/utils/books";
 
 ChartJS.register(
     LineElement,
@@ -59,13 +63,18 @@ const fallbackRecentTransactions = [
 export default function AdminAnalyticsPage() {
     const [data, setData] = useState<AnalyticsData>(fallbackSummary);
     const [chartData, setChartData] = useState<any>(null);
+    const [banCount, setBanCount] = useState<number>(0);
+    const [listedBooksCount, setListedBooksCount] = useState<number>(0);
+    const [lentBooksCount, setLentBooksCount] = useState<number>(0);
+    const [soldBooksCount, setSoldBooksCount] = useState<number>(0);
 
     useEffect(() => {
-        const token = localStorage.getItem("access_token");
+        const token = getToken();
+        const apiUrl = getApiUrl();
 
         const fetchSummary = async () => {
             try {
-                const res = await fetch("http://localhost:8000/api/v1/analytics/summary", {
+                const res = await fetch(`${apiUrl}/api/v1/analytics/summary`, {
                     headers: {
                         Authorization: `Bearer ${token}`,
                     },
@@ -98,7 +107,7 @@ export default function AdminAnalyticsPage() {
         const fetchTransactions = async () => {
             try {
                 const res = await fetch(
-                    "http://localhost:8000/api/v1/analytics/transactions-over-time",
+                    `${apiUrl}/api/v1/analytics/transactions-over-time`,
                     {
                         headers: {
                             Authorization: `Bearer ${token}`,
@@ -138,8 +147,38 @@ export default function AdminAnalyticsPage() {
             }
         };
 
+        const fetchUserPanelData = async () => {
+            try {
+                const bans = await listBans();
+                setBanCount(bans.filter((b) => b.is_active).length);
+            } catch (error) {
+                console.error("Failed to load ban stats:", error);
+                setBanCount(0);
+            }
+        };
+
+        const fetchBookPanelData = async () => {
+            try {
+                const [listed, lent, sold] = await Promise.all([
+                    getBooks({ status: "listed", pageSize: 100 }),
+                    getBooks({ status: "lent", pageSize: 100 }),
+                    getBooks({ status: "sold", pageSize: 100 }),
+                ]);
+                setListedBooksCount(listed.length);
+                setLentBooksCount(lent.length);
+                setSoldBooksCount(sold.length);
+            } catch (error) {
+                console.error("Failed to load book panel stats:", error);
+                setListedBooksCount(0);
+                setLentBooksCount(0);
+                setSoldBooksCount(0);
+            }
+        };
+
         fetchSummary();
         fetchTransactions();
+        fetchUserPanelData();
+        fetchBookPanelData();
     }, []);
 
     const categoryChartData = {
@@ -194,7 +233,8 @@ export default function AdminAnalyticsPage() {
 
                 <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
                     <div className="rounded-2xl bg-white p-6 shadow-sm">
-                        <h3 className="font-semibold text-gray-900">Transactions Over Time</h3>
+                        <h3 className="font-semibold text-gray-900">Transaction Panel</h3>
+                        <p className="text-xs text-gray-500 mt-1">Timeline of order transactions over time</p>
                         <div className="mt-4 min-h-[16rem]">
                             {chartData ? (
                                 <Line data={chartData} />
@@ -207,9 +247,24 @@ export default function AdminAnalyticsPage() {
                     </div>
 
                     <div className="rounded-2xl bg-white p-6 shadow-sm">
-                        <h3 className="font-semibold text-gray-900">Categories</h3>
-                        <div className="mt-4 flex min-h-[16rem] items-center justify-center">
-                            <div className="w-full max-w-sm">
+                        <h3 className="font-semibold text-gray-900">Book Panel</h3>
+                        <p className="text-xs text-gray-500 mt-1">Inventory and category distribution overview</p>
+                        <div className="mt-4 grid grid-cols-3 gap-3">
+                            <div className="rounded-xl border p-3">
+                                <p className="text-xs text-gray-500">Listed</p>
+                                <p className="text-xl font-bold">{listedBooksCount}</p>
+                            </div>
+                            <div className="rounded-xl border p-3">
+                                <p className="text-xs text-gray-500">Lent</p>
+                                <p className="text-xl font-bold">{lentBooksCount}</p>
+                            </div>
+                            <div className="rounded-xl border p-3">
+                                <p className="text-xs text-gray-500">Sold</p>
+                                <p className="text-xl font-bold">{soldBooksCount}</p>
+                            </div>
+                        </div>
+                        <div className="mt-4 flex min-h-[12rem] items-center justify-center">
+                            <div className="w-full max-w-xs">
                                 <Doughnut data={categoryChartData} />
                             </div>
                         </div>
@@ -217,7 +272,35 @@ export default function AdminAnalyticsPage() {
                 </div>
 
                 <div className="rounded-2xl bg-white p-6 shadow-sm">
-                    <h3 className="font-semibold text-gray-900">Recent Transactions</h3>
+                    <div className="flex items-center justify-between">
+                        <h3 className="font-semibold text-gray-900">User Panel</h3>
+                        <Link href="/admin/users" className="text-sm underline text-gray-700">
+                            Manage Users
+                        </Link>
+                    </div>
+                    <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <div className="rounded-xl border p-3">
+                            <p className="text-xs text-gray-500">Total Users</p>
+                            <p className="text-xl font-bold">{data.total_users}</p>
+                        </div>
+                        <div className="rounded-xl border p-3">
+                            <p className="text-xs text-gray-500">Active Bans</p>
+                            <p className="text-xl font-bold">{banCount}</p>
+                        </div>
+                        <div className="rounded-xl border p-3">
+                            <p className="text-xs text-gray-500">Support Cases</p>
+                            <p className="text-xl font-bold">See complaints panel</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="rounded-2xl bg-white p-6 shadow-sm">
+                    <div className="flex items-center justify-between">
+                        <h3 className="font-semibold text-gray-900">Recent Transactions</h3>
+                        <Link href="/admin/complaints" className="text-sm underline text-gray-700">
+                            Review Complaints
+                        </Link>
+                    </div>
 
                     <table className="mt-4 w-full text-sm">
                         <thead>
