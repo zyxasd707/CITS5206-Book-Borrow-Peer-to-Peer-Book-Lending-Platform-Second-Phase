@@ -146,7 +146,9 @@ export default function CheckoutPage() {
   const [globalShippingChoice, setGlobalShippingChoice] = useState<"standard" | "express" | null>("standard");
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [checkouts, setCheckouts] = useState<any[]>([]);
-  const [ownersMap, setOwnersMap] = useState<Record<string, { name: string; zipCode: string }>>({});
+  const [ownersMap, setOwnersMap] = useState<
+    Record<string, { name: string; zipCode: string; stripeAccountId?: string }>
+  >({});
   const [serviceRate, setServiceRate] = useState<number>(0);
   const currentCheckout = checkouts.length > 0 ? checkouts[0] : null;
   const items: CheckoutItem[] = currentCheckout?.items || [];
@@ -193,7 +195,7 @@ export default function CheckoutPage() {
   useEffect(() => {
     async function loadOwners() {
       const uniqueOwnerIds = Array.from(new Set(items.map((b) => b.ownerId)));
-      const map: Record<string, { name: string; zipCode: string }> = {};
+      const map: Record<string, { name: string; zipCode: string; stripeAccountId?: string }> = {};
 
       for (const id of uniqueOwnerIds) {
         try {
@@ -201,9 +203,10 @@ export default function CheckoutPage() {
           map[id] = {
             name: [u?.firstName, u?.lastName].filter(Boolean).join(" ") || "Unknown Owner",
             zipCode: u?.zipCode || "0000",
+            stripeAccountId: u?.stripe_account_id,
           };
         } catch {
-          map[id] = { name: "Unknown Owner", zipCode: "0000" };
+          map[id] = { name: "Unknown Owner", zipCode: "0000", stripeAccountId: undefined };
         }
       }
 
@@ -425,17 +428,18 @@ export default function CheckoutPage() {
     const co = checkouts[0];
     if (!co || !currentUser) return;
 
+    const ownerIds = Array.from(new Set(items.map((it) => it.ownerId))).filter(Boolean);
     const lenderAccountId =
-      (currentUser as any).stripe_account_id;
+      ownerIds.length > 0 ? ownersMap[ownerIds[0]]?.stripeAccountId : undefined;
 
     if (!lenderAccountId) {
-      alert("No payout account found. Please open your payment account first.");
+      alert("Owner payout account is not set. Please contact the book owner and try again.");
       return;
     }
 
     const toCents = (n: number | undefined | null) =>
       Math.max(0, Math.round((n || 0) * 100));
-    console.log("[startPayment] currentUser.stripe_account_id =", (currentUser as any)?.stripe_account_id);
+    console.log("[startPayment] lenderAccountId =", lenderAccountId);
     console.log("[startPayment] checkout[0] =", co);
     console.log("[startPayment] donation =", donation);
 

@@ -10,12 +10,6 @@ const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PK!);
 export default function CheckoutSuccessPage() {
   const [status, setStatus] = useState<"succeeded"|"processing"|"canceled"|"unknown">("unknown");
   const [pi, setPi] = useState<string | null>(null);
-  const [logs, setLogs] = useState<string[]>([]);
-
-  const log = (msg: string, extra?: any) => {
-    console.log(msg, extra ?? "");
-    setLogs(prev => [...prev, `${msg} ${extra ? JSON.stringify(extra) : ""}`]);
-  };
 
   useEffect(() => {
   (async () => {
@@ -23,11 +17,10 @@ export default function CheckoutSuccessPage() {
     const paymentIntentFromUrl = p.get("payment_intent");
     const redirectStatus = p.get("redirect_status");
     const csFromUrl = p.get("payment_intent_client_secret");
-
-    log("[success] params ->", {
+    console.log("[success] params ->", {
       paymentIntentId: paymentIntentFromUrl,
       redirectStatus,
-      clientSecret: csFromUrl,
+      hasClientSecret: !!csFromUrl,
     });
 
     // 先从 URL，再从 localStorage 兜底
@@ -47,10 +40,13 @@ export default function CheckoutSuccessPage() {
     // 先展示 processing，等 webhook 创建订单
     if (!clientSecret) {
       if (piId) {
-        log("[success] no client_secret, but have PI -> processing");
-        setStatus("processing");
+        // If Stripe redirected with explicit succeeded status, prioritize it.
+        if (redirectStatus === "succeeded") {
+          setStatus("succeeded");
+        } else {
+          setStatus("processing");
+        }
       } else {
-        log("[success] no client_secret & no PI -> unknown");
         setStatus("unknown");
       }
       return;
@@ -58,7 +54,6 @@ export default function CheckoutSuccessPage() {
 
     const stripe = await stripePromise;
     if (!stripe) {
-      log("[success] stripe not loaded");
       setStatus("unknown");
       return;
     }
@@ -66,7 +61,7 @@ export default function CheckoutSuccessPage() {
     const { paymentIntent: piObj, error } =
       await stripe.retrievePaymentIntent(clientSecret);
 
-    log("[success] retrievePaymentIntent ->", {
+    console.log("[success] retrievePaymentIntent ->", {
       piId: piObj?.id,
       status: piObj?.status,
       error,
