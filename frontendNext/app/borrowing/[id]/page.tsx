@@ -31,6 +31,13 @@ const fmtAUD = (amount?: number) =>
 
 const fmtDate = (v?: string | null) => (v ? new Date(v).toLocaleString() : "—");
 
+const TX_STAGE_META = {
+  pending: { label: "Pending", className: "bg-amber-100 text-amber-800" },
+  paid: { label: "Paid", className: "bg-blue-100 text-blue-800" },
+  shipped: { label: "Shipped", className: "bg-green-100 text-green-800" },
+  canceled: { label: "Canceled", className: "bg-gray-100 text-gray-700" },
+} as const;
+
 const fetchOrderDetails = async (orderId: string): Promise<ApiOrder | null> => {
   try {
     const apiUrl = getApiUrl();
@@ -168,6 +175,17 @@ export default function OrderDetailPage() {
 
   const isOwner = user?.id === order?.owner.id;
   const isBorrower = user?.id === order?.borrower.id;
+  const txStage: keyof typeof TX_STAGE_META = useMemo(() => {
+    if (!order) return "pending";
+    if (order.status === "CANCELED") return "canceled";
+    if (order.status === "PENDING_PAYMENT") return "pending";
+    if (order.status === "PENDING_SHIPMENT") return "paid";
+    if (order.shippingOutTrackingNumber) return "shipped";
+    if (["BORROWING", "OVERDUE", "RETURNED", "COMPLETED"].includes(order.status)) {
+      return "shipped";
+    }
+    return "paid";
+  }, [order]);
 
   const handleCancelOrder = async () => {
     if (!user) {
@@ -377,6 +395,13 @@ export default function OrderDetailPage() {
                 )}
               </div>
             )}
+            <div className="pt-2">
+              <span
+                className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ${TX_STAGE_META[txStage].className}`}
+              >
+                Transaction: {TX_STAGE_META[txStage].label}
+              </span>
+            </div>
           </div>
         </Card>
 

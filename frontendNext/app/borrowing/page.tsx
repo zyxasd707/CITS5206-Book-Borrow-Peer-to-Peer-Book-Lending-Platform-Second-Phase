@@ -21,6 +21,20 @@ const STATUS_META: Record<OrderStatus, { label: string; className: string }> = {
   CANCELED: { label: "Canceled", className: "text-gray-400" },
 };
 
+const TX_STAGE_META = {
+  pending: { label: "Pending", className: "bg-amber-100 text-amber-800" },
+  paid: { label: "Paid", className: "bg-blue-100 text-blue-800" },
+  shipped: { label: "Shipped", className: "bg-green-100 text-green-800" },
+  canceled: { label: "Canceled", className: "bg-gray-100 text-gray-700" },
+} as const;
+
+function getTransactionStage(status: OrderStatus): keyof typeof TX_STAGE_META {
+  if (status === "PENDING_PAYMENT") return "pending";
+  if (status === "PENDING_SHIPMENT") return "paid";
+  if (status === "CANCELED") return "canceled";
+  return "shipped";
+}
+
 export default function OrderListPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
@@ -209,6 +223,8 @@ export default function OrderListPage() {
                   const firstBook = order.books[0];
                   const extra = Math.max(0, order.books.length - 1);
                   const meta = STATUS_META[order.status];
+                  const txStage = getTransactionStage(order.status);
+                  const txMeta = TX_STAGE_META[txStage];
                   const isOverdue =
                     order.status === "BORROWING" &&
                     order.due_at &&
@@ -313,7 +329,12 @@ export default function OrderListPage() {
                             </div>
 
                             {/* Status */}
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-2 flex-wrap justify-end">
+                              <span
+                                className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ${txMeta.className}`}
+                              >
+                                Transaction: {txMeta.label}
+                              </span>
                               <span
                                 className={`text-lg font-medium ${meta.className}`}
                               >
