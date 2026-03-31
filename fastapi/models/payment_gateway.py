@@ -134,6 +134,7 @@ class DistributeShippingFeeRequest(BaseModel):
 
 class PaymentRefundRequest(BaseModel):
     reason: Optional[str] = Field(None, description="Reason for the refund")
+    refund_type: Optional[str] = Field("deposit", description="Refund type: deposit | shipping | full")
 
 
 class DisputeCreateRequest(BaseModel):
