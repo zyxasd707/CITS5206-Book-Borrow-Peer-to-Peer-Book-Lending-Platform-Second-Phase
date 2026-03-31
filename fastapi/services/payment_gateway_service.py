@@ -3,12 +3,13 @@ import uuid
 import os
 import logging
 import traceback
-from datetime import datetime
+from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
+from sqlalchemy import func as sa_func
 from models.service_fee import ServiceFee, ServiceFeeUpdate
 from models.payment_gateway import Payment, Refund, Dispute, AuditLog, Donation
 from functools import wraps
-from typing import Callable, List, Dict, Optional 
+from typing import Callable, List, Dict, Optional
 from fastapi import Request, HTTPException
 
 from models.user import User
@@ -17,6 +18,11 @@ from models.order import Order
 from models.payment_split import PaymentSplit
 from models.checkout import CheckoutItem
 from services.order_service import OrderService
+
+
+def to_cents(amount) -> int:
+    """Convert a decimal/float dollar amount to integer cents."""
+    return int(round(float(amount or 0) * 100))
 
 logger = logging.getLogger(__name__)
 
@@ -325,18 +331,41 @@ def refund_payment(payment_id: str, data: dict, *, db: Session):
     2. Save refund record into refunds table
     3. Update payment status if necessary
     4. Return refund details
+
+    Supports refund_type: "deposit" (default) | "shipping" | "full"
     """
     try:
-
         payment = db.query(Payment).filter_by(payment_id=payment_id).first()
-        amountDeposit = payment.deposit
+        if not payment:
+            raise HTTPException(status_code=404, detail="Payment not found")
 
-        # 1. Create refund in Stripe
-        refund = stripe.Refund.create(
-            payment_intent=payment_id,
-            amount=amountDeposit,   # None → full refund
-            reason=data.get("reason")    # optional
-        )
+        refund_type = data.get("refund_type", "deposit")
+
+        if refund_type == "shipping":
+            refund_amount = int(payment.shipping_fee or 0)
+        elif refund_type == "full":
+            refund_amount = int(payment.deposit or 0) + int(payment.shipping_fee or 0)
+        else:  # "deposit"
+            refund_amount = int(payment.deposit or 0)
+
+        if refund_amount <= 0:
+            raise HTTPException(status_code=400, detail=f"No refundable amount for refund_type='{refund_type}'")
+
+        # 1. Create refund in Stripe (handle already-refunded gracefully)
+        try:
+            refund = stripe.Refund.create(
+                payment_intent=payment_id,
+                amount=refund_amount,
+                reason=data.get("reason"),
+            )
+        except stripe.error.InvalidRequestError as e:
+            if "charge_already_refunded" in str(e).lower():
+                return {
+                    "payment_id": payment_id,
+                    "message": "Charge already refunded",
+                    "refund_type": refund_type,
+                }
+            raise
 
         # 2. Save refund record in DB
         refund_record = Refund(
@@ -345,18 +374,21 @@ def refund_payment(payment_id: str, data: dict, *, db: Session):
             amount=refund.amount,
             currency=refund.currency,
             status=refund.status,
-            reason=refund.reason
+            reason=refund.reason,
         )
         db.add(refund_record)
 
         # 3. Update payment status
-        payment = db.query(Payment).filter_by(payment_id=payment_id).first()
-        if payment:
-            # Being able to know wether it be partial refund or entire refund
-            if refund.amount == payment.amount:
-                payment.status = "refunded"
-            else:
-                payment.status = "partially_refunded"
+        sum_refunded = (
+            db.query(sa_func.coalesce(sa_func.sum(Refund.amount), 0))
+            .filter(Refund.payment_id == payment_id)
+            .scalar()
+        ) or 0
+        total_refunded = int(sum_refunded) + refund.amount
+        if total_refunded >= int(payment.amount or 0):
+            payment.status = "refunded"
+        else:
+            payment.status = "partially_refunded"
 
         db.commit()
 
@@ -364,6 +396,7 @@ def refund_payment(payment_id: str, data: dict, *, db: Session):
         return {
             "payment_id": payment_id,
             "refund_id": refund.id,
+            "refund_type": refund_type,
             "status": refund.status,
             "amount_refunded": refund.amount,
             "currency": refund.currency,
@@ -373,7 +406,7 @@ def refund_payment(payment_id: str, data: dict, *, db: Session):
     except stripe.error.StripeError as e:
         db.rollback()
         traceback.print_exc()
-        return {"error": str(e)}, 400
+        raise HTTPException(status_code=400, detail=f"Stripe error: {str(e)}")
 
 
 @audit("compensation_initiated")
@@ -728,6 +761,54 @@ async def stripe_webhook(event: dict, db: Session):
         log_event(db, "refund_completed", reference_id=refund_id, actor="system")
 
     # -------------------------
+    # MVP6: PaymentIntent canceled
+    # -------------------------
+    elif event_type == "payment_intent.canceled":
+        payment_id = obj["id"]
+        orders = db.query(Order).filter(
+            Order.payment_id == payment_id,
+            Order.status.notin_(["CANCELED", "COMPLETED"]),
+        ).all()
+
+        for order in orders:
+            order.status = "CANCELED"
+            order.canceled_at = datetime.utcnow()
+
+        db.commit()
+        log_event(db, "payment_canceled", reference_id=payment_id, actor="system",
+                  message=f"Canceled {len(orders)} orders due to payment_intent.canceled")
+
+    # -------------------------
+    # MVP6: Refund updated (async status sync)
+    # -------------------------
+    elif event_type == "refund.updated":
+        refund_id = obj.get("id")
+        new_status = obj.get("status")  # succeeded, failed, canceled, pending
+
+        db_refund = db.query(Refund).filter_by(refund_id=refund_id).first()
+        if db_refund:
+            db_refund.status = new_status
+            db.commit()
+
+        log_event(db, "refund_updated", reference_id=refund_id, actor="system",
+                  message=f"Refund status updated to {new_status}")
+
+    # -------------------------
+    # MVP6: Refund failed
+    # -------------------------
+    elif event_type == "refund.failed":
+        refund_id = obj.get("id")
+        failure_reason = obj.get("failure_reason", "unknown")
+
+        db_refund = db.query(Refund).filter_by(refund_id=refund_id).first()
+        if db_refund:
+            db_refund.status = "failed"
+            db.commit()
+
+        log_event(db, "refund_failed", reference_id=refund_id, actor="system",
+                  message=f"Refund failed: {failure_reason}")
+
+    # -------------------------
     # Unhandled events
     # -------------------------
     else:
@@ -985,3 +1066,232 @@ def refund_deposit_for_order(db: Session, order_id: str, amount_cents: Optional[
         db.commit()
 
     return {"order_id": order_id, "refund_id": r.id, "amount": refund_amount}
+
+
+# ========== MVP6 B1: Automated Refund Functions ==========
+
+def auto_refund_unshipped_orders(db: Session):
+    """
+    B1-1: Auto refund orders where lender never shipped within 3 days.
+    Trigger: Order status = PENDING_SHIPMENT AND created > 3 days ago AND no tracking number.
+    Action: Full refund (deposit + shipping_fee) via Stripe → Order status → CANCELED.
+    """
+    from models.book import Book
+
+    cutoff = datetime.utcnow() - timedelta(days=3)
+    orders = (
+        db.query(Order)
+        .filter(
+            Order.status == "PENDING_SHIPMENT",
+            Order.created_at < cutoff,
+            (Order.shipping_out_tracking_number == None) | (Order.shipping_out_tracking_number == ""),
+        )
+        .all()
+    )
+
+    refunded_count = 0
+    for order in orders:
+        try:
+            sp = db.query(PaymentSplit).filter(PaymentSplit.order_id == order.id).first()
+            if not sp:
+                logger.warning(f"[auto_refund] No PaymentSplit for order {order.id}, skipping")
+                continue
+
+            refund_amount = int(sp.deposit_cents or 0) + int(sp.shipping_cents or 0)
+            if refund_amount <= 0:
+                logger.info(f"[auto_refund] Order {order.id} has 0 refundable amount, skipping")
+                continue
+
+            # Call Stripe refund
+            r = stripe.Refund.create(payment_intent=sp.payment_id, amount=refund_amount)
+
+            # Save Refund record
+            db_refund = Refund(
+                refund_id=r.id,
+                payment_id=sp.payment_id,
+                amount=refund_amount,
+                currency=r.currency,
+                status=r.status,
+                reason="Lender did not ship within 3 days",
+            )
+            db.add(db_refund)
+
+            # Cancel order and restore books
+            order.status = "CANCELED"
+            order.canceled_at = datetime.utcnow()
+            order.total_refunded_amount = (order.total_refunded_amount or 0) + refund_amount / 100.0
+
+            for ob in order.books:
+                book = db.query(Book).filter(Book.id == ob.book_id).first()
+                if book and book.status in ("lent", "sold", "unlisted"):
+                    book.status = "listed"
+
+            # Audit log
+            log_event(
+                db,
+                event_type="auto_refund_unshipped",
+                reference_id=order.id,
+                actor="system",
+                message=f"Auto refunded {refund_amount} cents for unshipped order. Refund ID: {r.id}",
+            )
+
+            db.commit()
+            refunded_count += 1
+            logger.info(f"[auto_refund] Order {order.id} refunded {refund_amount} cents")
+
+        except stripe.error.StripeError as e:
+            db.rollback()
+            log_event(db, "auto_refund_failed", reference_id=order.id, actor="system", message=str(e))
+            db.commit()
+            logger.error(f"[auto_refund] Stripe error for order {order.id}: {e}")
+        except Exception as e:
+            db.rollback()
+            logger.error(f"[auto_refund] Unexpected error for order {order.id}: {e}")
+
+    return refunded_count
+
+
+def auto_cancel_failed_payments(db: Session):
+    """
+    B1-2: Auto cancel orders with failed/abandoned payments.
+    Trigger: Payment status = 'failed' or 'requires_payment_method' AND Order still PENDING_PAYMENT.
+    Action: Set Order → CANCELED (no Stripe refund needed, money was never captured).
+    """
+    from models.book import Book
+
+    failed_payments = (
+        db.query(Payment)
+        .filter(Payment.status.in_(["failed", "requires_payment_method"]))
+        .all()
+    )
+
+    canceled_count = 0
+    for payment in failed_payments:
+        orders = (
+            db.query(Order)
+            .filter(
+                Order.payment_id == payment.payment_id,
+                Order.status == "PENDING_PAYMENT",
+            )
+            .all()
+        )
+
+        for order in orders:
+            try:
+                order.status = "CANCELED"
+                order.canceled_at = datetime.utcnow()
+
+                # Restore book availability
+                for ob in order.books:
+                    book = db.query(Book).filter(Book.id == ob.book_id).first()
+                    if book and book.status in ("lent", "sold", "unlisted"):
+                        book.status = "listed"
+
+                log_event(
+                    db,
+                    event_type="auto_cancel_failed_payment",
+                    reference_id=order.id,
+                    actor="system",
+                    message=f"Order canceled due to failed payment {payment.payment_id}",
+                )
+
+                db.commit()
+                canceled_count += 1
+                logger.info(f"[auto_cancel] Order {order.id} canceled (payment {payment.payment_id} failed)")
+
+            except Exception as e:
+                db.rollback()
+                logger.error(f"[auto_cancel] Error canceling order {order.id}: {e}")
+
+    return canceled_count
+
+
+def refund_on_cancel(db: Session, order_id: str, actor: str = "system"):
+    """
+    B1-3: Refund when user (or system) cancels an order in PENDING_SHIPMENT stage.
+    Action: Full refund (deposit + shipping) via Stripe → Order → CANCELED.
+    Returns refund details dict.
+    """
+    from models.book import Book
+
+    order = db.query(Order).filter(Order.id == order_id).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+
+    if order.status != "PENDING_SHIPMENT":
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot refund order with status '{order.status}'. Only PENDING_SHIPMENT orders can be refund-cancelled.",
+        )
+
+    sp = db.query(PaymentSplit).filter(PaymentSplit.order_id == order_id).first()
+    if not sp:
+        raise HTTPException(status_code=404, detail="Payment split not found for this order")
+
+    refund_amount = int(sp.deposit_cents or 0) + int(sp.shipping_cents or 0)
+    if refund_amount <= 0:
+        raise HTTPException(status_code=400, detail="No refundable amount for this order")
+
+    try:
+        r = stripe.Refund.create(payment_intent=sp.payment_id, amount=refund_amount)
+    except stripe.error.InvalidRequestError as e:
+        if "charge_already_refunded" in str(e).lower():
+            # Idempotent: already refunded, just update order status
+            order.status = "CANCELED"
+            order.canceled_at = datetime.utcnow()
+            db.commit()
+            return {"order_id": order_id, "message": "Already refunded", "amount": refund_amount}
+        raise HTTPException(status_code=400, detail=f"Stripe error: {str(e)}")
+
+    # Save Refund record
+    db_refund = Refund(
+        refund_id=r.id,
+        payment_id=sp.payment_id,
+        amount=refund_amount,
+        currency=r.currency,
+        status=r.status,
+        reason="Order cancelled by user",
+    )
+    db.add(db_refund)
+
+    # Cancel order and restore books
+    order.status = "CANCELED"
+    order.canceled_at = datetime.utcnow()
+    order.total_refunded_amount = (order.total_refunded_amount or 0) + refund_amount / 100.0
+
+    for ob in order.books:
+        book = db.query(Book).filter(Book.id == ob.book_id).first()
+        if book and book.status in ("lent", "sold", "unlisted"):
+            book.status = "listed"
+
+    # Audit log
+    log_event(
+        db,
+        event_type="refund_on_cancel",
+        reference_id=order_id,
+        actor=actor,
+        message=f"Refund {refund_amount} cents on cancel. Refund ID: {r.id}",
+    )
+
+    # Update Payment status
+    payment = db.query(Payment).filter_by(payment_id=sp.payment_id).first()
+    if payment:
+        sum_refunded = (
+            db.query(sa_func.coalesce(sa_func.sum(Refund.amount), 0))
+            .filter(Refund.payment_id == sp.payment_id)
+            .scalar()
+        ) or 0
+        if int(sum_refunded) >= int(payment.amount or 0):
+            payment.status = "refunded"
+        else:
+            payment.status = "partially_refunded"
+
+    db.commit()
+
+    return {
+        "order_id": order_id,
+        "refund_id": r.id,
+        "amount": refund_amount,
+        "currency": r.currency,
+        "status": r.status,
+    }

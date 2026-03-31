@@ -128,6 +128,62 @@ def refund_payment(payment_id: str, body: PaymentRefundRequest, db: Session = De
         raise HTTPException(status_code=400, detail=str(e))
 
 
+# ---------------------------
+# MVP6: Refund Endpoints
+# ---------------------------
+
+@router.get("/payment/refunds/{order_id}", status_code=status.HTTP_200_OK)
+def get_refunds_for_order(order_id: str, db: Session = Depends(get_db)):
+    """
+    Query all Refund records for an order (for frontend refund status display).
+    Returns list of refunds with amounts, statuses, reasons, and timestamps.
+    """
+    from models.order import Order
+    from models.payment_split import PaymentSplit
+    from models.payment_gateway import Refund
+
+    order = db.query(Order).filter(Order.id == order_id).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+
+    sp = db.query(PaymentSplit).filter(PaymentSplit.order_id == order_id).first()
+    if not sp:
+        return {"order_id": order_id, "refunds": []}
+
+    refunds = (
+        db.query(Refund)
+        .filter(Refund.payment_id == sp.payment_id)
+        .order_by(Refund.created_at.desc())
+        .all()
+    )
+
+    return {
+        "order_id": order_id,
+        "refunds": [
+            {
+                "refund_id": r.refund_id,
+                "amount": r.amount,
+                "currency": r.currency,
+                "status": r.status,
+                "reason": r.reason,
+                "created_at": r.created_at,
+                "updated_at": r.updated_at,
+            }
+            for r in refunds
+        ],
+    }
+
+
+@router.post("/payment/refund/cancel/{order_id}", status_code=status.HTTP_200_OK)
+def cancel_order_with_refund(order_id: str, db: Session = Depends(get_db)):
+    """
+    Cancel an order and trigger automatic full refund (deposit + shipping).
+    Only works for orders in PENDING_SHIPMENT status.
+    """
+    result = payment_gateway_service.refund_on_cancel(db=db, order_id=order_id, actor="user")
+    return result
+
+
 @router.post("/payment/compensate/{payment_id}", status_code=status.HTTP_200_OK)
 def compensate_payment(payment_id: str, destination: str, db: Session = Depends(get_db)):
     """
