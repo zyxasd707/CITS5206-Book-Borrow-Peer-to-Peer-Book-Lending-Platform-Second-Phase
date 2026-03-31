@@ -42,11 +42,11 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="flex-1 bg-gray-100 flex items-center justify-center p-4">
+    <div className="flex-1 bg-gray-100 flex items-center justify-center p-3 sm:p-4">
       {/* Login card */}
       <Card className="w-full max-w-md">
         <div className="text-center mb-6">
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-900 mb-2">
             Welcome Back
           </h1>
           <p className="text-gray-600">Sign in to your BookBorrow account</p>

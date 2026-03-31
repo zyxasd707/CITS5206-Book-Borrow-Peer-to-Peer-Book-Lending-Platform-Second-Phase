@@ -544,7 +544,7 @@ export default function CheckoutPage() {
   ));
 
   return (
-    <div className="max-w-6xl mx-auto p-6 space-y-6">
+    <div className="max-w-6xl mx-auto p-4 sm:p-6 space-y-6">
       <h1 className="text-2xl font-bold">Checkout</h1>
 
       {/* Address */}
@@ -576,7 +576,7 @@ export default function CheckoutPage() {
       {/* Items & Delivery */}
       <Card>
         <div className="p-4 space-y-3">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-2">
             <h2 className="text-lg font-semibold">Items & Delivery</h2>
             <Button variant="outline" onClick={saveDeliveryMethod} className="text-sm">Save Delivery Method</Button>
 
@@ -593,7 +593,7 @@ export default function CheckoutPage() {
                   <div className="divide-y space-y-2">
                     {ownerItems.map((b: CheckoutItem) => (
                       <div key={b.bookId} className="py-3">
-                        <div className="flex items-center justify-between">
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                           <div>
                             <div className="font-medium">
                               《{b.titleOr}》
@@ -604,7 +604,7 @@ export default function CheckoutPage() {
                           </div>
 
                           {/* Post / Pickup select */}
-                          <div className="flex items-center gap-2">
+                          <div className="flex flex-wrap items-center gap-2">
                             <span className="text-sm text-gray-700">Delivery Method:</span>
                             {b.deliveryMethod === "post" && (
                               <span className="px-4 py-1 rounded bg-black text-white text-sm">Post</span>
@@ -650,7 +650,7 @@ export default function CheckoutPage() {
                         <h4 className="text-sm font-semibold mb-2 text-gray-800">
                           AusPost Shipping Quotes
                         </h4>
-                        <div className="flex gap-2">
+                        <div className="flex flex-wrap gap-2">
                           {quotesByOwner[ownerId].map((q) => {
                             const choiceKey = q.serviceLevel === "Standard" ? "standard" : "express";
                             return (
