@@ -7,10 +7,11 @@ const API_URL = getApiUrl();
 
 // -------- check checkout list --------
 export async function getMyCheckouts() {
+  const token = getToken();
   const res = await fetch(`${API_URL}/api/v1/checkouts/list`, {
     method: "GET",
     headers: {
-      Authorization: `Bearer ${localStorage.getItem("access_token")}`,
+      Authorization: `Bearer ${token}`,
     },
     credentials: "include",
   });
@@ -25,10 +26,11 @@ export async function getMyCheckouts() {
 
 // -------- delete checkout --------
 export async function deleteCheckout(checkoutId: string) {
+  const token = getToken();
   const res = await fetch(`${API_URL}/api/v1/checkouts/${checkoutId}`, {
     method: "DELETE",
     headers: {
-      Authorization: `Bearer ${localStorage.getItem("access_token")}`,
+      Authorization: `Bearer ${token}`,
     },
     credentials: "include",
   });
@@ -41,10 +43,11 @@ export async function deleteCheckout(checkoutId: string) {
 
 // -------- create checkout --------
 export async function createCheckout(payload: any) {
+  const token = getToken();
   try {
     const res = await axios.post(`${API_URL}/api/v1/checkouts/create`, payload, {
       headers: {
-        Authorization: `Bearer ${localStorage.getItem("access_token")}`,
+        Authorization: `Bearer ${token}`,
       },
       withCredentials: true,
     });
@@ -114,11 +117,12 @@ export async function rebuildCheckout(
 
   // 3. if checkout exist and pending → update
   if (checkoutId) {
+    const token = getToken();
     try {
       const res = await axios.put(
         `${API_URL}/api/v1/checkouts/${checkoutId}`,
         payload,
-        { headers: { Authorization: `Bearer ${localStorage.getItem("access_token")}` } }
+        { headers: { Authorization: `Bearer ${token}` } }
       );
       console.log("Payload sent to updateCheckout:", payload);
 
