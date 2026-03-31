@@ -37,13 +37,14 @@ class UserCreate(BaseModel):
             raise ValueError("Must agree to terms")
         return v
 
-class UserResponse(BaseModel):
+class UserResponse(BaseModel): #identify logged in user
     id: str
     name: str
     email: str
     location: Optional[str] = None
     avatar: Optional[str] = None
     createdAt: str
+    is_admin: bool
 
 class Token(BaseModel):
     access_token: str
@@ -77,13 +78,14 @@ def register(user_data: UserCreate, db: Session = Depends(get_db)):
     db.refresh(user)
     
     return UserResponse(
-        id=user.user_id,
-        name=user.name,
-        email=user.email,
-        location=user.location,
-        avatar=user.avatar,
-        createdAt=user.created_at.isoformat()
-    )
+    id=user.user_id,
+    name=user.name,
+    email=user.email,
+    location=user.location,
+    avatar=user.avatar,
+    createdAt=user.created_at.isoformat(),
+    is_admin=user.is_admin,  #return is_admin from register
+)
 
 @router.post("/login", response_model=Token)
 def login(login_data: LoginRequest, db: Session = Depends(get_db)):
@@ -116,7 +118,7 @@ def logout(current_user: User = Depends(get_current_user)):
     # Optional: Implement token blacklist here if needed
     return {"message": "Logged out successfully"}
 
-@router.get("/me", response_model=UserResponse)
+@router.get("/me", response_model=UserResponse)  
 def get_current_user_info(current_user: User = Depends(get_current_user)):
     return UserResponse(
         id=current_user.user_id,
@@ -124,5 +126,6 @@ def get_current_user_info(current_user: User = Depends(get_current_user)):
         email=current_user.email,
         location=current_user.location,
         avatar=current_user.avatar,
-        createdAt=current_user.created_at.isoformat()
+        createdAt=current_user.created_at.isoformat(),
+        is_admin=current_user.is_admin, #return is_admin from /auth/me
     )
