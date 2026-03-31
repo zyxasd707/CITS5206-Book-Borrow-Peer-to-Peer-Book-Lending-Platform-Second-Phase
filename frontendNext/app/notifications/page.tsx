@@ -45,7 +45,8 @@ export default function NotificationsPage() {
 
       let orders: any[] = [];
       if (res.ok) {
-        orders = await res.json();
+        const data = await res.json();
+        orders = Array.isArray(data) ? data : (data.value || data.items || []);
       }
 
       // Also fetch COMPLETED orders (deposit refunds)
@@ -53,20 +54,22 @@ export default function NotificationsPage() {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (resCompleted.ok) {
-        const completedOrders = await resCompleted.json();
+        const data = await resCompleted.json();
+        const completedOrders = Array.isArray(data) ? data : (data.value || data.items || []);
         orders = [...orders, ...completedOrders];
       }
 
       // For each order, fetch refund records
       const ordersWithRefunds: OrderWithRefunds[] = [];
       for (const order of orders) {
+        const oid = order.order_id || order.id;
         try {
-          const refundData = await getRefundsForOrder(order.id);
+          const refundData = await getRefundsForOrder(oid);
           if (refundData.refunds && refundData.refunds.length > 0) {
             ordersWithRefunds.push({
-              orderId: order.id,
+              orderId: oid,
               status: order.status,
-              canceledAt: order.canceledAt,
+              canceledAt: order.canceledAt || order.canceled_at,
               refunds: refundData.refunds,
             });
           }

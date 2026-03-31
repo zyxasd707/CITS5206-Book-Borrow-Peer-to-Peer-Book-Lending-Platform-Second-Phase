@@ -632,7 +632,7 @@ export default function OrderDetailPage() {
               </Button>
             )}
 
-          {(isBorrower || isOwner) && order.status === "PENDING_PAYMENT" && (
+          {(isBorrower || isOwner) && (order.status === "PENDING_PAYMENT" || order.status === "PENDING_SHIPMENT") && (
             <Button
               variant="outline"
               className="border-red-600 text-red-600 hover:bg-red-50"
