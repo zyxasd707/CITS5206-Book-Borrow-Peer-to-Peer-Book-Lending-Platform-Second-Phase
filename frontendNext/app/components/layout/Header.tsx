@@ -8,13 +8,16 @@ import Input from "../ui/Input";
 import ProfileIncompleteModal from "../ui/ProfileIncompleteModal";
 import { isProfileComplete } from "@/utils/profileValidation";
 
-import { User as UserIcon, LogOut, Plus, Truck, Mail, LifeBuoy, ShoppingBag } from "lucide-react";
+import { User as UserIcon, LogOut, Plus, Truck, Mail, LifeBuoy, ShoppingBag, ShieldCheck } from "lucide-react";
 import { logoutUser, isAuthenticated, getCurrentUser } from "@/utils/auth";
 
 import Avatar from "@/app/components/ui/Avatar";
 import { useCartStore } from "@/app/store/cartStore";
 import type { User } from "@/app/types/user";
 import type { ChatThread } from "@/app/types/message";
+
+const isAdminLikeUser = (user: User | null) =>
+  Boolean(user?.is_admin) || Boolean(user?.email?.toLowerCase().includes("admin"));
 
 const Header: React.FC = () => {
   const router = useRouter();
@@ -256,6 +259,16 @@ const Header: React.FC = () => {
                       >
                         <LifeBuoy className="w-4 h-4 mr-3" />Support
                       </Link>
+
+                      {isAdminLikeUser(currentUser) && (
+                        <Link
+                          href="/admin/analytics"
+                          className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                          onClick={() => setShowProfileMenu(false)}
+                        >
+                          <ShieldCheck className="w-4 h-4 mr-3" />Admin Dashboard
+                        </Link>
+                      )}
 
                       <hr className="my-1" />
 
