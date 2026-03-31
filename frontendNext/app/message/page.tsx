@@ -8,6 +8,7 @@ import type { ChatThread, Message } from "@/app/types/message";
 import Card from "../components/ui/Card";
 import Input from "../components/ui/Input";
 import Avatar from "@/app/components/ui/Avatar";
+import { EmptyState, ErrorState, LoadingState } from "../components/ui/AsyncState";
 import type { User } from "@/app/types/user";
 import { getConversations, getConversation, sendMessage, markConversationAsRead, sendMessageWithImage, getUserByEmail } from "@/utils/messageApi";
 
@@ -39,6 +40,7 @@ export default function MessagesPage() {
   const [messageInput, setMessageInput] = useState("");
   const [threads, setThreads] = useState<ChatThread[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [mobileView, setMobileView] = useState<"threads" | "chat">("threads");
   const wsRef = useRef<WebSocket | null>(null);
   const selectedThreadRef = useRef<ChatThread | null>(null);
@@ -51,6 +53,7 @@ export default function MessagesPage() {
   // Load initial data
   useEffect(() => {
     const loadData = async () => {
+      setLoadError(null);
       try {
         const user = await getCurrentUser();
         setCurrentUser(user);
@@ -106,7 +109,7 @@ export default function MessagesPage() {
         setLoading(false);
       } catch (error) {
         console.error('Error loading initial data:', error);
-        
+        setLoadError("Failed to load messages. Check API availability and retry.");
         setLoading(false);
       }
     };
@@ -365,7 +368,23 @@ export default function MessagesPage() {
   };
 
   if (loading) {
-    return <div className="flex h-[calc(100vh-4rem)] items-center justify-center">Loading...</div>;
+    return (
+      <div className="p-6">
+        <LoadingState title="Loading messages..." description="Fetching conversations and user profile." />
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div className="p-6">
+        <ErrorState
+          title="Unable to load messages"
+          description={loadError}
+          onRetry={() => window.location.reload()}
+        />
+      </div>
+    );
   }
 
 
@@ -399,51 +418,61 @@ export default function MessagesPage() {
           <h2 className="text-lg font-semibold text-gray-900">Messages</h2>
         </div>
         <div className="overflow-y-auto h-[calc(100vh-5rem)]">
-          {threads.map((thread) => (
-            <Card
-              key={thread.id || `thread-${thread.user.email}`}
-              className={`m-2 cursor-pointer transition-colors ${
-                selectedThread?.user.email === thread.user.email
-                  ? "bg-gray-100 ring-2 ring-gray-300 ring-offset-1"
-                  : "hover:bg-gray-50"
-              }`}
-              onClick={() => handleThreadSelect(thread)}
-            >
-              <div className="p-4 flex items-start gap-3">
-                {/* Avatar */}
-                <Avatar user={thread.user} size={40} />
+          {threads.length === 0 ? (
+            <div className="p-4">
+              <EmptyState
+                title="No conversations yet"
+                description="Start from a book page to send your first message."
+              />
+            </div>
+          ) : (
+            threads.map((thread) => (
+              <Card
+                key={thread.id || `thread-${thread.user.email}`}
+                className={`m-2 cursor-pointer transition-colors ${
+                  selectedThread?.user.email === thread.user.email
+                    ? "bg-gray-100 ring-2 ring-gray-300 ring-offset-1"
+                    : "hover:bg-gray-50"
+                }`}
+                onClick={() => handleThreadSelect(thread)}
+              >
+                <div className="p-4 flex items-start gap-3">
+                  {/* Avatar */}
+                  <Avatar user={thread.user} size={40} />
 
-                {/* Content */}
-                <div className="flex-1 min-w-0">
-                  <div className="flex justify-between items-start mb-1">
-                    <h3 className="font-medium text-gray-900 truncate">
-                      {thread.user.name}
-                    </h3>
-                    <span className="text-xs text-gray-500">
-                      {new Date(thread.lastMessage.timestamp + 'Z').toLocaleDateString('en-AU', {
-                        timeZone: 'Australia/Perth'
-                      })}
-                    </span>
-                  </div>
-                  {thread.lastMessage.bookTitle && (
-                    <p className="text-xs text-blue-600 mb-1">
-                      &lt;&lt; {thread.lastMessage.bookTitle} &gt;&gt;
+                  {/* Content */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex justify-between items-start mb-1">
+                      <h3 className="font-medium text-gray-900 truncate">
+                        {thread.user.name}
+                      </h3>
+                      <span className="text-xs text-gray-500">
+                        {new Date(thread.lastMessage.timestamp + 'Z').toLocaleDateString('en-AU', {
+                          timeZone: 'Australia/Perth'
+                        })}
+                      </span>
+                    </div>
+                    {thread.lastMessage.bookTitle && (
+                      <p className="text-xs text-blue-600 mb-1">
+                        &lt;&lt; {thread.lastMessage.bookTitle} &gt;&gt;
+                      </p>
+                    )}
+                    <p className="text-sm text-gray-600 truncate">
+                      {thread.lastMessage.content}
                     </p>
-                  )}
-                  <p className="text-sm text-gray-600 truncate">
-                    {thread.lastMessage.content}
-                  </p>
-                </div>
-
-                {/* Unread indicator */}
-                {thread.unreadCount > 0 && (
-                  <div className="w-5 h-5 rounded-full bg-blue-600 text-white flex items-center justify-center text-xs">
-                    {thread.unreadCount}
                   </div>
+
+                  {/* Unread indicator */}
+                  {thread.unreadCount > 0 && (
+                    <div className="w-5 h-5 rounded-full bg-blue-600 text-white flex items-center justify-center text-xs">
+                      {thread.unreadCount}
+                    </div>
+                  )}
                 )}
-              </div>
-            </Card>
-          ))}
+                </div>
+              </Card>
+            ))
+          )}
         </div>
       </div>
 

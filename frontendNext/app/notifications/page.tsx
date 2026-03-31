@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getApiUrl, getToken } from "@/utils/auth";
 import { getRefundsForOrder } from "@/utils/payments";
-import Card from "@/app/components/ui/Card";
+import { EmptyState, ErrorState, LoadingState } from "@/app/components/ui/AsyncState";
 
 interface OrderWithRefunds {
   orderId: string;
@@ -28,12 +28,14 @@ export default function NotificationsPage() {
   const [notifications, setNotifications] = useState<OrderWithRefunds[]>([]);
   const [selectedNotification, setSelectedNotification] = useState<OrderWithRefunds | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     loadRefundNotifications();
   }, []);
 
   const loadRefundNotifications = async () => {
+    setLoadError(null);
     try {
       const apiUrl = getApiUrl();
       const token = getToken();
@@ -91,6 +93,7 @@ export default function NotificationsPage() {
       }
     } catch (error) {
       console.error("Failed to load refund notifications:", error);
+      setLoadError("Failed to load notifications from API. Please retry.");
     } finally {
       setLoading(false);
     }
@@ -151,9 +154,20 @@ export default function NotificationsPage() {
   };
 
   if (loading) {
+    return <div className="p-6"><LoadingState title="Loading notifications..." /></div>;
+  }
+
+  if (loadError) {
     return (
-      <div className="flex h-[calc(100vh-4rem)] items-center justify-center">
-        Loading notifications...
+      <div className="p-6">
+        <ErrorState
+          title="Unable to load notifications"
+          description={loadError}
+          onRetry={() => {
+            setLoading(true);
+            loadRefundNotifications();
+          }}
+        />
       </div>
     );
   }
@@ -187,8 +201,11 @@ export default function NotificationsPage() {
         </div>
         <div className="flex-1 overflow-y-auto">
           {notifications.length === 0 ? (
-            <div className="p-8 text-center text-gray-400 text-sm">
-              No refund notifications yet
+            <div className="p-4">
+              <EmptyState
+                title="No refund notifications yet"
+                description="Refund status updates will appear here."
+              />
             </div>
           ) : (
             notifications.map((item) => {

@@ -16,6 +16,7 @@ import { Line, Doughnut } from "react-chartjs-2";
 import { getApiUrl, getToken } from "@/utils/auth";
 import { listBans } from "@/utils/auth";
 import { getBooks } from "@/utils/books";
+import { ErrorState, LoadingState } from "@/app/components/ui/AsyncState";
 
 ChartJS.register(
     LineElement,
@@ -63,16 +64,20 @@ const fallbackRecentTransactions = [
 export default function AdminAnalyticsPage() {
     const [data, setData] = useState<AnalyticsData>(fallbackSummary);
     const [chartData, setChartData] = useState<any>(null);
+    const [loadingSummary, setLoadingSummary] = useState(false);
+    const [loadingTransactions, setLoadingTransactions] = useState(false);
+    const [summaryError, setSummaryError] = useState<string | null>(null);
+    const [transactionsError, setTransactionsError] = useState<string | null>(null);
     const [banCount, setBanCount] = useState<number>(0);
     const [listedBooksCount, setListedBooksCount] = useState<number>(0);
     const [lentBooksCount, setLentBooksCount] = useState<number>(0);
     const [soldBooksCount, setSoldBooksCount] = useState<number>(0);
 
-    useEffect(() => {
-        const token = getToken();
-        const apiUrl = getApiUrl();
-
-        const fetchSummary = async () => {
+    const fetchSummary = async () => {
+            const token = getToken();
+            const apiUrl = getApiUrl();
+            setLoadingSummary(true);
+            setSummaryError(null);
             try {
                 const res = await fetch(`${apiUrl}/api/v1/analytics/summary`, {
                     headers: {
@@ -101,10 +106,17 @@ export default function AdminAnalyticsPage() {
             } catch (error) {
                 console.error("Using fallback summary data:", error);
                 setData(fallbackSummary);
+                setSummaryError("Unable to reach analytics summary API. Showing fallback data.");
+            } finally {
+                setLoadingSummary(false);
             }
         };
 
         const fetchTransactions = async () => {
+            const token = getToken();
+            const apiUrl = getApiUrl();
+            setLoadingTransactions(true);
+            setTransactionsError(null);
             try {
                 const res = await fetch(
                     `${apiUrl}/api/v1/analytics/transactions-over-time`,
@@ -144,6 +156,9 @@ export default function AdminAnalyticsPage() {
                         },
                     ],
                 });
+                setTransactionsError("Transaction timeline API is unavailable. Showing fallback chart.");
+            } finally {
+                setLoadingTransactions(false);
             }
         };
 
@@ -175,6 +190,7 @@ export default function AdminAnalyticsPage() {
             }
         };
 
+    useEffect(() => {
         fetchSummary();
         fetchTransactions();
         fetchUserPanelData();
@@ -225,18 +241,36 @@ export default function AdminAnalyticsPage() {
                 </div>
 
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-                    <Card title="Users" value={data.total_users} />
-                    <Card title="Books" value={data.total_books} />
-                    <Card title="Rentals" value={data.active_rentals} />
-                    <Card title="Revenue" value={`$${data.total_revenue}`} />
+                    {loadingSummary ? (
+                        <div className="sm:col-span-2 xl:col-span-4">
+                            <LoadingState title="Loading summary..." description="Fetching dashboard totals." />
+                        </div>
+                    ) : (
+                        <>
+                            <Card title="Users" value={data.total_users} />
+                            <Card title="Books" value={data.total_books} />
+                            <Card title="Rentals" value={data.active_rentals} />
+                            <Card title="Revenue" value={`$${data.total_revenue}`} />
+                        </>
+                    )}
                 </div>
+                {summaryError && (
+                    <ErrorState
+                        className="mt-4"
+                        title="Summary API unavailable"
+                        description={summaryError}
+                        onRetry={fetchSummary}
+                    />
+                )}
 
                 <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
                     <div className="rounded-2xl bg-white p-6 shadow-sm">
                         <h3 className="font-semibold text-gray-900">Transaction Panel</h3>
                         <p className="text-xs text-gray-500 mt-1">Timeline of order transactions over time</p>
                         <div className="mt-4 min-h-[16rem]">
-                            {chartData ? (
+                            {loadingTransactions ? (
+                                <LoadingState title="Loading transaction chart..." />
+                            ) : chartData ? (
                                 <Line data={chartData} />
                             ) : (
                                 <div className="flex h-64 items-center justify-center rounded-xl border border-dashed border-gray-300 text-gray-500">
@@ -244,6 +278,15 @@ export default function AdminAnalyticsPage() {
                                 </div>
                             )}
                         </div>
+                        {transactionsError && (
+                            <div className="mt-4">
+                                <ErrorState
+                                    title="Transaction API unavailable"
+                                    description={transactionsError}
+                                    onRetry={fetchTransactions}
+                                />
+                            </div>
+                        )}
                     </div>
 
                     <div className="rounded-2xl bg-white p-6 shadow-sm">
