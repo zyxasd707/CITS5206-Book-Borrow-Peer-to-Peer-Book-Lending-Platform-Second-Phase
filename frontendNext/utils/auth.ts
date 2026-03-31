@@ -236,15 +236,14 @@ export const initAuth = () => {
       (response) => response,
       (error) => {
         if (error.response?.status === 401) {
-          console.warn("Session expired, logging out...");
-          // Clear the local login status
-          localStorage.removeItem("access_token");
-          delete axios.defaults.headers.common["Authorization"];
-
-          // Notify the global refresh
-          window.dispatchEvent(new Event("auth-changed"));
-
-          window.location.href = "/auth";
+          const hadToken = !!localStorage.getItem("access_token");
+          if (hadToken) {
+            console.warn("Session expired, logging out...");
+            localStorage.removeItem("access_token");
+            delete axios.defaults.headers.common["Authorization"];
+            window.dispatchEvent(new Event("auth-changed"));
+            window.location.href = "/auth";
+          }
         }
         return Promise.reject(error);
       }
@@ -391,6 +390,49 @@ export const getUserById = async (id: string): Promise<User | null> => {
   } catch (error) {
     console.error(`Failed to get user ${id}:`, error);
     return null;
+  }
+};
+
+// -------- Forgot / Reset Password --------
+
+export const forgotPassword = async (email: string) => {
+  const API_URL = getApiUrl();
+  try {
+    const response = await axios.post(
+      `${API_URL}/api/v1/auth/forgot-password`,
+      { email },
+      { headers: { "Content-Type": "application/json" } }
+    );
+    return { success: true, message: response.data.message };
+  } catch (err) {
+    let errorMessage = "Failed to send reset email";
+    if (axios.isAxiosError(err)) {
+      errorMessage = err.response?.data?.detail || err.message;
+    }
+    throw new Error(errorMessage);
+  }
+};
+
+export const resetPassword = async (
+  email: string,
+  token: string,
+  newPassword: string,
+  confirmPassword: string
+) => {
+  const API_URL = getApiUrl();
+  try {
+    const response = await axios.post(
+      `${API_URL}/api/v1/auth/reset-password`,
+      { email, token, new_password: newPassword, confirm_password: confirmPassword },
+      { headers: { "Content-Type": "application/json" } }
+    );
+    return { success: true, message: response.data.message };
+  } catch (err) {
+    let errorMessage = "Failed to reset password";
+    if (axios.isAxiosError(err)) {
+      errorMessage = err.response?.data?.detail || err.message;
+    }
+    throw new Error(errorMessage);
   }
 };
 
