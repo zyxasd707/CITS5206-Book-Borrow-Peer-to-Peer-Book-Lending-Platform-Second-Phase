@@ -3,8 +3,8 @@
 import Link from "next/link";
 import { useState, useEffect, useRef } from "react";
 import { getCurrentUser, getApiUrl } from "@/utils/auth";
-import { useSearchParams } from 'next/navigation';
-import type { ChatThread, Message, SendMessageData } from "@/app/types/message";
+import { useRouter, useSearchParams } from "next/navigation";
+import type { ChatThread, Message } from "@/app/types/message";
 import Card from "../components/ui/Card";
 import Input from "../components/ui/Input";
 import Avatar from "@/app/components/ui/Avatar";
@@ -29,6 +29,7 @@ const formatPerthTime = (timestamp: string) => {
 };
 
 export default function MessagesPage() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const initialRecipientEmail = searchParams.get('to');
   const initialBookId = searchParams.get('bookId');
@@ -38,6 +39,7 @@ export default function MessagesPage() {
   const [messageInput, setMessageInput] = useState("");
   const [threads, setThreads] = useState<ChatThread[]>([]);
   const [loading, setLoading] = useState(true);
+  const [mobileView, setMobileView] = useState<"threads" | "chat">("threads");
   const wsRef = useRef<WebSocket | null>(null);
   const selectedThreadRef = useRef<ChatThread | null>(null);
 
@@ -89,6 +91,7 @@ export default function MessagesPage() {
               // Add the new thread to the list and select it
               setThreads(prevThreads => [newThread, ...prevThreads]);
               setSelectedThread(newThread);
+              setMobileView("chat");
             } catch (apiError) {
               console.error(`Failed to fetch user details for ${initialRecipientEmail}:`, apiError);
               // Optionally, show an error message to the user
@@ -230,6 +233,7 @@ export default function MessagesPage() {
   // Handle thread selection
   const handleThreadSelect = async (thread: ChatThread) => {
     setSelectedThread(thread);
+    setMobileView("chat");
     try {
       // Fetch the full conversation history for the selected user
       const messageHistory = await getConversation(thread.user.email);
@@ -361,14 +365,14 @@ export default function MessagesPage() {
   };
 
   if (loading) {
-    return <div className="flex h-screen items-center justify-center">Loading...</div>;
+    return <div className="flex h-[calc(100vh-4rem)] items-center justify-center">Loading...</div>;
   }
 
 
   return (
     <div className="flex h-[calc(100vh-4rem)] bg-white">
       {/* Sidebar Navigation */}
-      <aside className="w-56 bg-gray-100 p-5 space-y-5 shrink-0 border-r border-gray-200">
+      <aside className="hidden lg:block w-56 bg-gray-100 p-5 space-y-5 shrink-0 border-r border-gray-200">
         <h2 className="text-2xl font-bold tracking-tight px-2">Inbox</h2>
         <nav className="space-y-1">
           <button className="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-white text-gray-900 shadow-sm font-semibold text-sm whitespace-nowrap">
@@ -376,7 +380,7 @@ export default function MessagesPage() {
             Personal Chats
           </button>
           <button
-            onClick={() => window.location.href = '/notifications'}
+            onClick={() => router.push("/notifications")}
             className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-orange-600 hover:bg-white/50 font-medium text-sm whitespace-nowrap"
           >
             <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
@@ -386,7 +390,11 @@ export default function MessagesPage() {
       </aside>
 
       {/* Chat List */}
-      <div className="w-80 border-r border-gray-200 bg-white shrink-0">
+      <div
+        className={`w-full md:w-80 border-r border-gray-200 bg-white shrink-0 ${
+          mobileView === "chat" ? "hidden md:block" : "block"
+        }`}
+      >
         <div className="p-5.5 border-b border-gray-200">
           <h2 className="text-lg font-semibold text-gray-900">Messages</h2>
         </div>
@@ -440,11 +448,21 @@ export default function MessagesPage() {
       </div>
 
       {/* Chat Area */}
-      <div className="flex-1 flex flex-col bg-white"> 
+      <div
+        className={`flex-1 flex-col bg-white ${
+          mobileView === "threads" ? "hidden md:flex" : "flex"
+        }`}
+      >
         {selectedThread ? (
           <>
             {/* Chat Header */}
             <div className="p-4 border-b border-gray-200 flex items-center gap-3">
+              <button
+                className="md:hidden text-sm px-2 py-1 border rounded-md"
+                onClick={() => setMobileView("threads")}
+              >
+                Back
+              </button>
               <Avatar user={selectedThread.user} size={40} />
               <div>
                 <h3 className="font-medium text-gray-900">
@@ -472,7 +490,7 @@ export default function MessagesPage() {
                     className={`flex ${isOwn ? "justify-end" : "justify-start"}`}
                   >
                     <div
-                      className={`max-w-xs px-4 py-2 rounded-2xl text-sm break-words ${isOwn
+                      className={`max-w-[85%] md:max-w-xs px-4 py-2 rounded-2xl text-sm break-words ${isOwn
                           ? "bg-black text-white rounded-br-none"
                           : "bg-gray-200 text-gray-900 rounded-bl-none"
                       }`}
@@ -548,7 +566,15 @@ export default function MessagesPage() {
           </>
         ) : (
           <div className="flex-1 flex items-center justify-center text-gray-500">
-            Select a conversation to start messaging
+            <div className="text-center space-y-3">
+              <p>Select a conversation to start messaging</p>
+              <button
+                className="md:hidden px-3 py-2 border rounded-md"
+                onClick={() => setMobileView("threads")}
+              >
+                Open conversation list
+              </button>
+            </div>
           </div>
         )}
       </div>
