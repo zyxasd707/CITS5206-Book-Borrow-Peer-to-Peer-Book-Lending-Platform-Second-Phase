@@ -468,7 +468,6 @@ export default function MessagesPage() {
                       {thread.unreadCount}
                     </div>
                   )}
-                )}
                 </div>
               </Card>
             ))
