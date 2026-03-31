@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Card from "@/app/components/ui/Card";
 import Button from "@/app/components/ui/Button";
 import Input from "@/app/components/ui/Input";
+import { LoadingState } from "@/app/components/ui/AsyncState";
 
 import { getCurrentUser, updateUser, getUserById } from "@/utils/auth";
 import type { User } from "@/app/types/user";
@@ -528,9 +529,11 @@ export default function CheckoutPage() {
   // ---------- When Empty ----------
   if (!items.length) {
     return (
-      <div className="p-6 text-center">
-        <h2 className="text-lg font-medium text-gray-900 mb-4">Loading...</h2>
-        {/* <Button variant="outline" onClick={() => router.push("/books")}>Back to Books</Button> */}
+      <div className="p-6">
+        <LoadingState
+          title="Preparing checkout..."
+          description="Loading cart items, shipping options, and pricing."
+        />
       </div>
     );
   }

@@ -3,10 +3,11 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Search, Filter, Package, Clock, AlertTriangle, ArrowDownCircle, ArrowUpCircle, User as UserIcon } from "lucide-react";
+import { Search, Filter, Clock, AlertTriangle, ArrowDownCircle, ArrowUpCircle, User as UserIcon } from "lucide-react";
 import CoverImg from "../components/ui/CoverImg";
 import Card from "../components/ui/Card";
 import Button from "../components/ui/Button";
+import { EmptyState, ErrorState, LoadingState } from "../components/ui/AsyncState";
 import type { OrderStatus } from "@/app/types/order";
 import { getBorrowingOrders, type Order } from "@/utils/borrowingOrders";
 import { getCurrentUser } from "@/utils/auth";
@@ -193,31 +194,24 @@ export default function OrderListPage() {
 
           {/* Error / Loading */}
           {error && (
-            <Card>
-              <div className="p-4 text-red-600">{error}</div>
-            </Card>
+            <ErrorState
+              title="Failed to load orders"
+              description={error}
+              onRetry={() => window.location.reload()}
+            />
           )}
           {loading && (
-            <Card>
-              <div className="p-4 text-gray-600">Loading orders...</div>
-            </Card>
+            <LoadingState title="Loading orders..." description="Fetching your latest transactions." />
           )}
 
           {/* Order list */}
           {!loading && !error && (
             <div className="space-y-4">
               {filteredOrders.length === 0 ? (
-                <Card>
-                  <div className="text-center py-12">
-                    <Package className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-                    <h3 className="text-lg font-medium text-gray-900 mb-2">
-                      No orders found
-                    </h3>
-                    <p className="text-gray-500">
-                      Try adjusting filters or search terms
-                    </p>
-                  </div>
-                </Card>
+                <EmptyState
+                  title="No orders found"
+                  description="Try adjusting filters or search terms."
+                />
               ) : (
                 filteredOrders.map((order) => {
                   const firstBook = order.books[0];
