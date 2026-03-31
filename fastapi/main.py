@@ -19,6 +19,7 @@ from routes.order import router as orders_router
 from routes.bans import router as bans_router
 from routes.blacklists import router as blacklists_router
 from routes.review import router as review_router
+from routes.analytics import router as analytics_router  # Import analytics router
 
 # update order statuses automatically
 from contextlib import asynccontextmanager
@@ -125,6 +126,9 @@ app.include_router(bans_router, prefix="/api/v1")
 
 # blacklists router
 app.include_router(blacklists_router, prefix="/api/v1")
+
+#Register the analytics router
+app.include_router(analytics_router, prefix="/api/v1")
 
 @app.get("/")
 async def root():
