@@ -116,13 +116,16 @@ export const registerUser = async (userData: RegisterData) => {
 };
 
 // Send verification email (OTP)
-export const sendVerificationEmail = async (emailAddress: string) => {
+export const sendVerificationEmail = async (
+  emailAddress: string,
+  username?: string
+) => {
   const API_URL = getApiUrl();
 
   try {
     const response = await axios.post(
       `${API_URL}/email/send_verification`,
-      { emailAddress },
+      { emailAddress, username: username ?? "" },
       {
         headers: { "Content-Type": "application/json" },
         withCredentials: false,
