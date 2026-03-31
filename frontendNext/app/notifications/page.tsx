@@ -161,27 +161,20 @@ export default function NotificationsPage() {
   return (
     <div className="flex h-[calc(100vh-4rem)] bg-gray-50">
       {/* Sidebar */}
-      <aside className="w-64 bg-gray-100 p-6 space-y-6 shrink-0">
-        <h2 className="text-2xl font-bold tracking-tight">Inbox</h2>
+      <aside className="w-56 bg-gray-100 p-5 space-y-5 shrink-0 border-r border-gray-200">
+        <h2 className="text-2xl font-bold tracking-tight px-2">Inbox</h2>
         <nav className="space-y-1">
           <button
             onClick={() => router.push("/message")}
-            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-gray-600 hover:bg-white/50 transition-all font-medium text-sm"
+            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-gray-600 hover:bg-white/50 transition-all font-medium text-sm whitespace-nowrap"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
-            All Messages
-          </button>
-          <button
-            onClick={() => router.push("/message")}
-            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-gray-600 hover:bg-white/50 transition-all font-medium text-sm"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
             Personal Chats
           </button>
           <button
-            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-white text-orange-600 shadow-sm transition-all font-bold text-sm"
+            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-white text-orange-600 shadow-sm transition-all font-bold text-sm whitespace-nowrap"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+            <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
             System Notifications
           </button>
         </nav>
