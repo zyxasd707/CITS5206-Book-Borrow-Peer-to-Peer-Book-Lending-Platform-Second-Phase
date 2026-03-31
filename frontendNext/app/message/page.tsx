@@ -367,8 +367,26 @@ export default function MessagesPage() {
 
   return (
     <div className="flex h-[calc(100vh-4rem)] bg-white">
+      {/* Sidebar Navigation */}
+      <aside className="w-48 bg-gray-100 p-4 space-y-4 shrink-0 border-r border-gray-200">
+        <h2 className="text-xl font-bold tracking-tight px-2">Inbox</h2>
+        <nav className="space-y-1">
+          <button className="w-full flex items-center gap-2 px-3 py-2.5 rounded-xl bg-white text-gray-900 shadow-sm font-semibold text-sm">
+            <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            Personal Chats
+          </button>
+          <button
+            onClick={() => window.location.href = '/notifications'}
+            className="w-full flex items-center gap-2 px-3 py-2.5 rounded-xl text-gray-600 hover:bg-white/50 font-medium text-sm"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+            System Notifications
+          </button>
+        </nav>
+      </aside>
+
       {/* Chat List */}
-      <div className="w-1/3 border-r border-gray-200 bg-white">
+      <div className="w-80 border-r border-gray-200 bg-white shrink-0">
         <div className="p-5.5 border-b border-gray-200">
           <h2 className="text-lg font-semibold text-gray-900">Messages</h2>
         </div>
