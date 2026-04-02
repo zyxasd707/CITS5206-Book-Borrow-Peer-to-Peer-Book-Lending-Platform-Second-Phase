@@ -283,6 +283,21 @@ def donation_history(user_id: str, db: Session = Depends(get_db)):
 
 
 # ---------------------------
+# Confirm order (fallback when webhook doesn't fire)
+# ---------------------------
+
+@router.post("/payment/confirm-order", status_code=status.HTTP_200_OK)
+def confirm_order_after_payment(payment_id: str = Body(..., embed=True), db: Session = Depends(get_db)):
+    """
+    Frontend fallback: after Stripe payment succeeds but webhook didn't fire,
+    the success page calls this to create orders + clear cart.
+    Idempotent: if orders already exist for this payment_id, returns them.
+    """
+    result = payment_gateway_service.confirm_order_after_payment(db, payment_id)
+    return result
+
+
+# ---------------------------
 # Webhooks
 # ---------------------------
 

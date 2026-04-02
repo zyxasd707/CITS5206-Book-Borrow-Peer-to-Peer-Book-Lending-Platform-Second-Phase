@@ -651,6 +651,69 @@ def donation_history(user_id: str, *, db: Session):
 
 
 
+def confirm_order_after_payment(db: Session, payment_id: str):
+    """
+    Fallback for when Stripe webhook doesn't fire (e.g., local Docker).
+    Verifies payment with Stripe, creates orders, clears cart.
+    Idempotent: if orders already exist, returns them without re-creating.
+    """
+    # 1. Check if orders already exist for this payment
+    existing_orders = db.query(Order).filter(Order.payment_id == payment_id).all()
+    if existing_orders:
+        return {
+            "status": "already_created",
+            "order_ids": [o.id for o in existing_orders],
+        }
+
+    # 2. Verify payment with Stripe
+    try:
+        pi = stripe.PaymentIntent.retrieve(payment_id)
+    except stripe.error.StripeError as e:
+        raise HTTPException(status_code=400, detail=f"Stripe error: {str(e)}")
+
+    if pi.status != "succeeded":
+        raise HTTPException(
+            status_code=400,
+            detail=f"Payment not succeeded, current status: {pi.status}",
+        )
+
+    # 3. Find Payment record in DB and update status
+    payments = db.query(Payment).filter_by(payment_id=payment_id).all()
+    if not payments:
+        raise HTTPException(status_code=404, detail="Payment record not found")
+
+    for pay in payments:
+        if pay.status != "succeeded":
+            pay.status = "succeeded"
+    db.commit()
+
+    # 4. Find checkout
+    checkout = db.query(Checkout).filter_by(checkout_id=payments[0].checkout_id).first()
+    if not checkout:
+        raise HTTPException(status_code=404, detail="Checkout not found")
+
+    # 5. Create orders (same logic as webhook)
+    created_orders = OrderService.create_orders_data_with_validation(
+        db, checkout.checkout_id, payments[0].user_id, payment_id
+    )
+
+    # 6. Confirm payment for each order (PENDING_PAYMENT → PENDING_SHIPMENT)
+    for order in created_orders:
+        try:
+            OrderService.confirm_payment(db, order.id)
+        except Exception:
+            pass  # may already be confirmed
+
+    db.commit()
+    log_event(db, "payment_confirmed_fallback", reference_id=payment_id, actor="system",
+              message="Order created via frontend fallback (webhook unavailable)")
+
+    return {
+        "status": "created",
+        "order_ids": [o.id for o in created_orders],
+    }
+
+
 async def stripe_webhook(event: dict, db: Session):
     """
     Handle Stripe webhook events:
