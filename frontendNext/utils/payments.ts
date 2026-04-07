@@ -202,6 +202,45 @@ export async function cancelOrderWithRefund(orderId: string) {
   };
 }
 
+// MVP6: Get all refunds for a user
+export async function getUserRefunds(userId: string) {
+  const res = await axios.get(
+    `${API_URL}/payment_gateway/refunds/user/${userId}`,
+    {
+      headers: {
+        Authorization: `Bearer ${localStorage.getItem("access_token")}`,
+      },
+      withCredentials: true,
+    }
+  );
+  return res.data as {
+    user_id: string;
+    refunds: Array<{
+      refund_id: string;
+      amount: number;
+      currency: string;
+      status: string;
+      reason: string | null;
+      refund_type: string;
+      created_at: string | null;
+      updated_at: string | null;
+      order: {
+        order_id: string;
+        status: string;
+        book_titles: string[];
+        created_at: string | null;
+        canceled_at: string | null;
+      };
+      timeline: Array<{
+        event: string;
+        actor: string;
+        message: string;
+        timestamp: string | null;
+      }>;
+    }>;
+  };
+}
+
 // Execute compensation transfer after dispute resolved
 export async function compensatePayment(
   paymentId: string,

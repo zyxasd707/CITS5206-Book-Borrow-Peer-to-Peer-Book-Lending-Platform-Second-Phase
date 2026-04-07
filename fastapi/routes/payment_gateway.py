@@ -17,6 +17,7 @@ from models.payment_gateway import (
     DonationResponse,
     StripeWebhookEvent
 )
+from typing import Optional
 
 router = APIRouter(prefix="/payment_gateway", tags=["Payment_gateway"])
 
@@ -182,6 +183,97 @@ def cancel_order_with_refund(order_id: str, db: Session = Depends(get_db)):
     """
     result = payment_gateway_service.refund_on_cancel(db=db, order_id=order_id, actor="user")
     return result
+
+
+@router.get("/refunds/user/{user_id}", status_code=status.HTTP_200_OK)
+def get_user_refunds(user_id: str, db: Session = Depends(get_db)):
+    """
+    Get all refund records for a specific user (as borrower).
+    Returns refunds with order info, book titles, amounts, statuses.
+    """
+    from models.order import Order, OrderBook
+    from models.payment_split import PaymentSplit
+    from models.payment_gateway import Refund, Payment, AuditLog
+    from models.book import Book
+
+    # Find all orders where user is the borrower
+    orders = db.query(Order).filter(Order.borrower_id == user_id).all()
+    if not orders:
+        return {"user_id": user_id, "refunds": []}
+
+    result = []
+    for order in orders:
+        sp = db.query(PaymentSplit).filter(PaymentSplit.order_id == order.id).first()
+        if not sp:
+            continue
+
+        refunds = (
+            db.query(Refund)
+            .filter(Refund.payment_id == sp.payment_id)
+            .order_by(Refund.created_at.desc())
+            .all()
+        )
+        if not refunds:
+            continue
+
+        # Get book titles for this order
+        order_books = db.query(OrderBook).filter(OrderBook.order_id == order.id).all()
+        book_titles = []
+        for ob in order_books:
+            book = db.query(Book).filter(Book.id == ob.book_id).first()
+            if book:
+                book_titles.append(book.title_en or book.title_or or "Unknown")
+
+        # Get audit logs for timeline
+        logs = (
+            db.query(AuditLog)
+            .filter(AuditLog.reference_id == order.id)
+            .order_by(AuditLog.created_at.asc())
+            .all()
+        )
+
+        for r in refunds:
+            # Determine refund type by comparing amount
+            total_cents = (sp.deposit_cents or 0) + (sp.shipping_cents or 0)
+            if r.amount >= total_cents:
+                refund_type = "full"
+            elif r.amount == (sp.deposit_cents or 0):
+                refund_type = "deposit"
+            elif r.amount == (sp.shipping_cents or 0):
+                refund_type = "shipping"
+            else:
+                refund_type = "partial"
+
+            result.append({
+                "refund_id": r.refund_id,
+                "amount": r.amount,
+                "currency": r.currency,
+                "status": r.status,
+                "reason": r.reason,
+                "refund_type": refund_type,
+                "created_at": r.created_at.isoformat() if r.created_at else None,
+                "updated_at": r.updated_at.isoformat() if r.updated_at else None,
+                "order": {
+                    "order_id": order.id,
+                    "status": order.status,
+                    "book_titles": book_titles,
+                    "created_at": order.created_at.isoformat() if order.created_at else None,
+                    "canceled_at": order.canceled_at.isoformat() if order.canceled_at else None,
+                },
+                "timeline": [
+                    {
+                        "event": log.event_type,
+                        "actor": log.actor,
+                        "message": log.message,
+                        "timestamp": log.created_at.isoformat() if log.created_at else None,
+                    }
+                    for log in logs
+                ],
+            })
+
+    # Sort by newest first
+    result.sort(key=lambda x: x["created_at"] or "", reverse=True)
+    return {"user_id": user_id, "refunds": result}
 
 
 @router.post("/payment/compensate/{payment_id}", status_code=status.HTTP_200_OK)
