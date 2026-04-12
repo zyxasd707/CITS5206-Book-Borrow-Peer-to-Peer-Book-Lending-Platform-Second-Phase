@@ -680,9 +680,10 @@ export default function OrderDetailPage() {
             <Button
               variant="outline"
               className="border-black text-black hover:bg-black hover:text-white"
-              onClick={() =>
-                handleAuthRequired(`/messages?orderId=${order.id}`)
-              }
+              onClick={() => {
+                const otherEmail = isBorrower ? order.owner.email : order.borrower.email;
+                handleAuthRequired(`/message?to=${encodeURIComponent(otherEmail)}`);
+              }}
             >
               Message
             </Button>

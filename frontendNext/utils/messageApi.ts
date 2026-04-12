@@ -7,7 +7,7 @@ const API_URL = getApiUrl();
 // Get user details by email
 export async function getUserByEmail(email: string) {
   const token = getToken();
-  const res = await fetch(`${API_URL}/api/v1/users/by-email/${email}`, { // NOTE: This endpoint must be created in the backend.
+  const res = await fetch(`${API_URL}/api/v1/messages/users/by-email/${email}`, {
     method: "GET",
     headers: {
       Authorization: `Bearer ${token}`,
