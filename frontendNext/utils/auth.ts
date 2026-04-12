@@ -436,6 +436,27 @@ export const resetPassword = async (
   }
 };
 
+export const changePassword = async (currentPassword: string, newPassword: string) => {
+  const API_URL = getApiUrl();
+  try {
+    const response = await axios.post(
+      `${API_URL}/api/v1/auth/change-password`,
+      { current_password: currentPassword, new_password: newPassword },
+      { headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${localStorage.getItem("access_token")}`,
+      }}
+    );
+    return { success: true, message: response.data.message };
+  } catch (err) {
+    let errorMessage = "Failed to change password";
+    if (axios.isAxiosError(err)) {
+      errorMessage = err.response?.data?.detail || err.message;
+    }
+    throw new Error(errorMessage);
+  }
+};
+
 //-------- Administrator ban users
 const API_URL = getApiUrl();
 
