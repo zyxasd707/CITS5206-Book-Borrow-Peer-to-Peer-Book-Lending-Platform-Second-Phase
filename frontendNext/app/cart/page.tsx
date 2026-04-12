@@ -421,13 +421,39 @@ export default function CartPage() {
                               return;
                             }
 
+                            // Backend checkout requires owner postcode to create shipping quote.
+                            const missingZipOwnerIds = Array.from(
+                              new Set(
+                                selectedItems
+                                  .map((it) => it.ownerId)
+                                  .filter((ownerId) => ownerId && !ownersMap[ownerId]?.zipCode?.trim())
+                              )
+                            );
+                            if (missingZipOwnerIds.length > 0) {
+                              const ownerNames = missingZipOwnerIds
+                                .map((ownerId) => {
+                                  const owner = ownersMap[ownerId];
+                                  return [owner?.firstName, owner?.lastName].filter(Boolean).join(" ") || ownerId;
+                                })
+                                .join(", ");
+                              alert(
+                                `Checkout cannot continue because owner profile postcode is missing: ${ownerNames}. ` +
+                                "Please ask the owner(s) to complete postcode in their profile."
+                              );
+                              return;
+                            }
+
                             // build checkout
                             const checkout = await rebuildCheckout(user, selectedItems);
                             console.log("Proceeding with checkout:", checkout);
                             router.push(`/checkout?checkoutId=${checkout.checkoutId}`);
                           } catch (err) {
                             console.error("Failed to proceed to checkout:", err);
-                            alert("Failed to proceed to checkout. Please try again.");
+                            const message =
+                              err instanceof Error && err.message
+                                ? err.message
+                                : "Failed to proceed to checkout. Please try again.";
+                            alert(message);
                           }
                         }}
                       >

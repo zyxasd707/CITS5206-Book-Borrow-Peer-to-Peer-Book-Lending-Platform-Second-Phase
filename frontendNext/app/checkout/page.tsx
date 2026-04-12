@@ -150,6 +150,7 @@ export default function CheckoutPage() {
   const [ownersMap, setOwnersMap] = useState<
     Record<string, { name: string; zipCode: string; stripeAccountId?: string }>
   >({});
+  const [ownersMissingZip, setOwnersMissingZip] = useState<string[]>([]);
   const [serviceRate, setServiceRate] = useState<number>(0);
   const currentCheckout = checkouts.length > 0 ? checkouts[0] : null;
   const items: CheckoutItem[] = currentCheckout?.items || [];
@@ -197,21 +198,27 @@ export default function CheckoutPage() {
     async function loadOwners() {
       const uniqueOwnerIds = Array.from(new Set(items.map((b) => b.ownerId)));
       const map: Record<string, { name: string; zipCode: string; stripeAccountId?: string }> = {};
+      const missingZipOwnerIds: string[] = [];
 
       for (const id of uniqueOwnerIds) {
         try {
           const u = await getUserById(id);
+          if (!u?.zipCode?.trim()) {
+            missingZipOwnerIds.push(id);
+          }
           map[id] = {
             name: [u?.firstName, u?.lastName].filter(Boolean).join(" ") || "Unknown Owner",
             zipCode: u?.zipCode || "0000",
             stripeAccountId: u?.stripe_account_id,
           };
         } catch {
+          missingZipOwnerIds.push(id);
           map[id] = { name: "Unknown Owner", zipCode: "0000", stripeAccountId: undefined };
         }
       }
 
       setOwnersMap(map);
+      setOwnersMissingZip(missingZipOwnerIds);
     }
 
     if (items.length > 0) loadOwners();
@@ -510,6 +517,16 @@ export default function CheckoutPage() {
     // Check if delivery methods have been saved
     if (!deliveryMethodSaved) {
       alert("Please save your delivery methods by clicking the 'Save Delivery Method' button.");
+      return;
+    }
+
+    // Backend requires owner zipcode for checkout creation/update.
+    if (ownersMissingZip.length > 0) {
+      const ownerNames = ownersMissingZip.map((id) => ownersMap[id]?.name || id).join(", ");
+      alert(
+        `Checkout cannot continue because owner profile postcode is missing: ${ownerNames}. ` +
+        "Please contact the owner(s) to complete their profile postcode."
+      );
       return;
     }
 

@@ -55,7 +55,11 @@ export async function createCheckout(payload: any) {
   } catch (err: any) {
     if (err.response) {
       console.error("Create checkout failed:", err.response.data);
-      throw new Error("Failed to create checkout: " + JSON.stringify(err.response.data));
+      const detail =
+        err.response?.data?.detail ||
+        err.response?.data?.message ||
+        JSON.stringify(err.response?.data);
+      throw new Error(`Failed to create checkout: ${detail}`);
     }
     throw new Error("Failed to create checkout");
   }
