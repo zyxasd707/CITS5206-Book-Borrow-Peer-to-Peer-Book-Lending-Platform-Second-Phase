@@ -10,10 +10,10 @@ import { useCartStore } from "@/app/store/cartStore";
 const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PK!);
 
 export default function CheckoutSuccessPage() {
-  const [status, setStatus] = useState<"succeeded"|"processing"|"canceled"|"unknown">("unknown");
+  const [status, setStatus] = useState<"succeeded" | "processing" | "canceled" | "unknown">("unknown");
   const [pi, setPi] = useState<string | null>(null);
   const [orderIds, setOrderIds] = useState<string[]>([]);
-  const [confirmStatus, setConfirmStatus] = useState<"idle"|"confirming"|"done"|"error">("idle");
+  const [confirmStatus, setConfirmStatus] = useState<"idle" | "confirming" | "done" | "error">("idle");
   const fetchCart = useCartStore((state) => state.fetchCart);
 
   // Confirm order with backend (fallback for when webhook doesn't fire)
@@ -52,6 +52,7 @@ export default function CheckoutSuccessPage() {
     (async () => {
       const p = new URLSearchParams(window.location.search);
       const paymentIntentFromUrl = p.get("payment_intent");
+      const redirectStatus = p.get("redirect_status");
       const csFromUrl = p.get("payment_intent_client_secret");
 
       let clientSecret =
@@ -67,8 +68,12 @@ export default function CheckoutSuccessPage() {
 
       if (!clientSecret) {
         if (piId) {
-          setStatus("processing");
-          // No client_secret but have PI — try to confirm order directly
+          // Stripe redirect can arrive without client secret; honor explicit success.
+          if (redirectStatus === "succeeded") {
+            setStatus("succeeded");
+          } else {
+            setStatus("processing");
+          }
           confirmOrder(piId);
         } else {
           setStatus("unknown");

@@ -297,6 +297,7 @@ export const getCurrentUser = async (): Promise<User | null> => {
       bio: userData.bio || undefined,
       preferredLanguages: userData.preferredLanguages || undefined,
       stripe_account_id: userData.stripe_account_id || undefined,
+      is_admin: Boolean(userData.is_admin ?? userData.isAdmin),
     };
 
     return user;
@@ -383,6 +384,7 @@ export const getUserById = async (id: string): Promise<User | null> => {
       bio: userData.bio || undefined,
       preferredLanguages: userData.preferredLanguages || undefined,
       stripe_account_id: userData.stripe_account_id || undefined,
+      is_admin: Boolean(userData.is_admin ?? userData.isAdmin),
 
     };
 

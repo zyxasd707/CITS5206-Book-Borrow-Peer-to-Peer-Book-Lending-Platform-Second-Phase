@@ -6,7 +6,7 @@ export default function AboutPage() {
   return (
     <div className="flex-1">
       {/* Hero Section */}
-      <div className="relative w-screen h-[60vh] flex items-center justify-center text-center">
+      <div className="relative w-full h-[52vh] sm:h-[60vh] flex items-center justify-center text-center">
         {/* 背景大图 */}
         <img
           src="/images/aboutUs.jpg"
@@ -16,9 +16,9 @@ export default function AboutPage() {
         {/* 黑色半透明遮罩 */}
         <div className="absolute inset-0 bg-black/50"></div>
 
-        <div className="relative z-10 text-white px-6">
-          <h1 className="text-4xl font-bold mb-4">Book Exchange</h1>
-          <p className="text-lg text-gray-200 max-w-2xl mx-auto">
+        <div className="relative z-10 text-white px-4 sm:px-6">
+          <h1 className="text-3xl sm:text-4xl font-bold mb-4">Book Exchange</h1>
+          <p className="text-base sm:text-lg text-gray-200 max-w-2xl mx-auto">
             Like a hive, our community thrives when knowledge is shared.
             Book Exchange connects readers, builds relationships,
             and gives every book a new life.
@@ -27,8 +27,8 @@ export default function AboutPage() {
       </div>
 
       {/* Main Content */}
-      <div className="max-w-5xl mx-auto px-4 py-12 sm:px-6 lg:px-8">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-12 mb-16">
+      <div className="max-w-5xl mx-auto px-4 py-10 sm:py-12 sm:px-6 lg:px-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-12 mb-12 md:mb-16">
           <div className="space-y-6">
             <h2 className="text-2xl font-semibold text-gray-900">Our Mission</h2>
             <p className="text-gray-700 leading-relaxed">
@@ -51,7 +51,7 @@ export default function AboutPage() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-16">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 md:gap-8 mb-12 md:mb-16">
           <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-100">
             <div className="text-3xl mb-4">📚</div>
             <h3 className="text-xl font-semibold mb-2">Share Your Books</h3>
@@ -75,7 +75,7 @@ export default function AboutPage() {
           </div>
         </div>
 
-        <div className="bg-gray-50 p-8 rounded-xl">
+        <div className="bg-gray-50 p-5 sm:p-8 rounded-xl">
           <h2 className="text-2xl font-semibold mb-6 text-center" style={{ color: "#FF6801" }}>
             Join Our Community
           </h2>

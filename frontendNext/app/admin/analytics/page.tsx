@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import {
     Chart as ChartJS,
     LineElement,
@@ -12,6 +13,10 @@ import {
     ArcElement,
 } from "chart.js";
 import { Line, Doughnut } from "react-chartjs-2";
+import { getApiUrl, getToken } from "@/utils/auth";
+import { listBans } from "@/utils/auth";
+import { getBooks } from "@/utils/books";
+import { ErrorState, LoadingState } from "@/app/components/ui/AsyncState";
 
 ChartJS.register(
     LineElement,
@@ -59,13 +64,22 @@ const fallbackRecentTransactions = [
 export default function AdminAnalyticsPage() {
     const [data, setData] = useState<AnalyticsData>(fallbackSummary);
     const [chartData, setChartData] = useState<any>(null);
+    const [loadingSummary, setLoadingSummary] = useState(false);
+    const [loadingTransactions, setLoadingTransactions] = useState(false);
+    const [summaryError, setSummaryError] = useState<string | null>(null);
+    const [transactionsError, setTransactionsError] = useState<string | null>(null);
+    const [banCount, setBanCount] = useState<number>(0);
+    const [listedBooksCount, setListedBooksCount] = useState<number>(0);
+    const [lentBooksCount, setLentBooksCount] = useState<number>(0);
+    const [soldBooksCount, setSoldBooksCount] = useState<number>(0);
 
-    useEffect(() => {
-        const token = localStorage.getItem("access_token");
-
-        const fetchSummary = async () => {
+    const fetchSummary = async () => {
+            const token = getToken();
+            const apiUrl = getApiUrl();
+            setLoadingSummary(true);
+            setSummaryError(null);
             try {
-                const res = await fetch("http://localhost:8000/api/v1/analytics/summary", {
+                const res = await fetch(`${apiUrl}/api/v1/analytics/summary`, {
                     headers: {
                         Authorization: `Bearer ${token}`,
                     },
@@ -92,13 +106,20 @@ export default function AdminAnalyticsPage() {
             } catch (error) {
                 console.error("Using fallback summary data:", error);
                 setData(fallbackSummary);
+                setSummaryError("Unable to reach analytics summary API. Showing fallback data.");
+            } finally {
+                setLoadingSummary(false);
             }
         };
 
         const fetchTransactions = async () => {
+            const token = getToken();
+            const apiUrl = getApiUrl();
+            setLoadingTransactions(true);
+            setTransactionsError(null);
             try {
                 const res = await fetch(
-                    "http://localhost:8000/api/v1/analytics/transactions-over-time",
+                    `${apiUrl}/api/v1/analytics/transactions-over-time`,
                     {
                         headers: {
                             Authorization: `Bearer ${token}`,
@@ -135,11 +156,45 @@ export default function AdminAnalyticsPage() {
                         },
                     ],
                 });
+                setTransactionsError("Transaction timeline API is unavailable. Showing fallback chart.");
+            } finally {
+                setLoadingTransactions(false);
             }
         };
 
+        const fetchUserPanelData = async () => {
+            try {
+                const bans = await listBans();
+                setBanCount(bans.filter((b) => b.is_active).length);
+            } catch (error) {
+                console.error("Failed to load ban stats:", error);
+                setBanCount(0);
+            }
+        };
+
+        const fetchBookPanelData = async () => {
+            try {
+                const [listed, lent, sold] = await Promise.all([
+                    getBooks({ status: "listed", pageSize: 100 }),
+                    getBooks({ status: "lent", pageSize: 100 }),
+                    getBooks({ status: "sold", pageSize: 100 }),
+                ]);
+                setListedBooksCount(listed.length);
+                setLentBooksCount(lent.length);
+                setSoldBooksCount(sold.length);
+            } catch (error) {
+                console.error("Failed to load book panel stats:", error);
+                setListedBooksCount(0);
+                setLentBooksCount(0);
+                setSoldBooksCount(0);
+            }
+        };
+
+    useEffect(() => {
         fetchSummary();
         fetchTransactions();
+        fetchUserPanelData();
+        fetchBookPanelData();
     }, []);
 
     const categoryChartData = {
@@ -186,17 +241,36 @@ export default function AdminAnalyticsPage() {
                 </div>
 
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-                    <Card title="Users" value={data.total_users} />
-                    <Card title="Books" value={data.total_books} />
-                    <Card title="Rentals" value={data.active_rentals} />
-                    <Card title="Revenue" value={`$${data.total_revenue}`} />
+                    {loadingSummary ? (
+                        <div className="sm:col-span-2 xl:col-span-4">
+                            <LoadingState title="Loading summary..." description="Fetching dashboard totals." />
+                        </div>
+                    ) : (
+                        <>
+                            <Card title="Users" value={data.total_users} />
+                            <Card title="Books" value={data.total_books} />
+                            <Card title="Rentals" value={data.active_rentals} />
+                            <Card title="Revenue" value={`$${data.total_revenue}`} />
+                        </>
+                    )}
                 </div>
+                {summaryError && (
+                    <ErrorState
+                        className="mt-4"
+                        title="Summary API unavailable"
+                        description={summaryError}
+                        onRetry={fetchSummary}
+                    />
+                )}
 
                 <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
                     <div className="rounded-2xl bg-white p-6 shadow-sm">
-                        <h3 className="font-semibold text-gray-900">Transactions Over Time</h3>
+                        <h3 className="font-semibold text-gray-900">Transaction Panel</h3>
+                        <p className="text-xs text-gray-500 mt-1">Timeline of order transactions over time</p>
                         <div className="mt-4 min-h-[16rem]">
-                            {chartData ? (
+                            {loadingTransactions ? (
+                                <LoadingState title="Loading transaction chart..." />
+                            ) : chartData ? (
                                 <Line data={chartData} />
                             ) : (
                                 <div className="flex h-64 items-center justify-center rounded-xl border border-dashed border-gray-300 text-gray-500">
@@ -204,12 +278,36 @@ export default function AdminAnalyticsPage() {
                                 </div>
                             )}
                         </div>
+                        {transactionsError && (
+                            <div className="mt-4">
+                                <ErrorState
+                                    title="Transaction API unavailable"
+                                    description={transactionsError}
+                                    onRetry={fetchTransactions}
+                                />
+                            </div>
+                        )}
                     </div>
 
                     <div className="rounded-2xl bg-white p-6 shadow-sm">
-                        <h3 className="font-semibold text-gray-900">Categories</h3>
-                        <div className="mt-4 flex min-h-[16rem] items-center justify-center">
-                            <div className="w-full max-w-sm">
+                        <h3 className="font-semibold text-gray-900">Book Panel</h3>
+                        <p className="text-xs text-gray-500 mt-1">Inventory and category distribution overview</p>
+                        <div className="mt-4 grid grid-cols-3 gap-3">
+                            <div className="rounded-xl border p-3">
+                                <p className="text-xs text-gray-500">Listed</p>
+                                <p className="text-xl font-bold">{listedBooksCount}</p>
+                            </div>
+                            <div className="rounded-xl border p-3">
+                                <p className="text-xs text-gray-500">Lent</p>
+                                <p className="text-xl font-bold">{lentBooksCount}</p>
+                            </div>
+                            <div className="rounded-xl border p-3">
+                                <p className="text-xs text-gray-500">Sold</p>
+                                <p className="text-xl font-bold">{soldBooksCount}</p>
+                            </div>
+                        </div>
+                        <div className="mt-4 flex min-h-[12rem] items-center justify-center">
+                            <div className="w-full max-w-xs">
                                 <Doughnut data={categoryChartData} />
                             </div>
                         </div>
@@ -217,7 +315,35 @@ export default function AdminAnalyticsPage() {
                 </div>
 
                 <div className="rounded-2xl bg-white p-6 shadow-sm">
-                    <h3 className="font-semibold text-gray-900">Recent Transactions</h3>
+                    <div className="flex items-center justify-between">
+                        <h3 className="font-semibold text-gray-900">User Panel</h3>
+                        <Link href="/admin/users" className="text-sm underline text-gray-700">
+                            Manage Users
+                        </Link>
+                    </div>
+                    <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <div className="rounded-xl border p-3">
+                            <p className="text-xs text-gray-500">Total Users</p>
+                            <p className="text-xl font-bold">{data.total_users}</p>
+                        </div>
+                        <div className="rounded-xl border p-3">
+                            <p className="text-xs text-gray-500">Active Bans</p>
+                            <p className="text-xl font-bold">{banCount}</p>
+                        </div>
+                        <div className="rounded-xl border p-3">
+                            <p className="text-xs text-gray-500">Support Cases</p>
+                            <p className="text-xl font-bold">See complaints panel</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="rounded-2xl bg-white p-6 shadow-sm">
+                    <div className="flex items-center justify-between">
+                        <h3 className="font-semibold text-gray-900">Recent Transactions</h3>
+                        <Link href="/admin/complaints" className="text-sm underline text-gray-700">
+                            Review Complaints
+                        </Link>
+                    </div>
 
                     <table className="mt-4 w-full text-sm">
                         <thead>
