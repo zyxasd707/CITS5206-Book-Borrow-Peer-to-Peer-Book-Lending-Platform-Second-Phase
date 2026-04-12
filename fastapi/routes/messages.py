@@ -202,20 +202,22 @@ def get_conversations(
         unread_count = service.get_unread_count_by_sender(current_user.user_id, partner.user_id)
         
         if last_message:
+            sender = db.query(User).filter(User.user_id == last_message.sender_id).first()
+            receiver = db.query(User).filter(User.user_id == last_message.receiver_id).first()
             threads.append({
                 "user": {
                     "id": partner.user_id,
-                    "first_name": partner.first_name,
-                    "last_name": partner.last_name,
+                    "firstName": partner.first_name,
+                    "lastName": partner.last_name,
                     "name": partner.name,
                     "email": partner.email,
-                    "profile_image": partner.avatar  # Assuming you have this field
+                    "avatar": partner.avatar
                 },
                 "lastMessage": {
                     "id": last_message.message_id,
                     "content": last_message.content,
-                    "senderId": last_message.sender_id,
-                    "receiverId": last_message.receiver_id,
+                    "sender_email": sender.email if sender else None,
+                    "receiver_email": receiver.email if receiver else None,
                     "timestamp": last_message.timestamp.isoformat(),
                     "read": last_message.is_read,
                     "imageUrl": last_message.image_path

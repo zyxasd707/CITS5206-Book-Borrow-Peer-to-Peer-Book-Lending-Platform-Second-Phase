@@ -7,7 +7,7 @@ const API_URL = getApiUrl();
 // Get user details by email
 export async function getUserByEmail(email: string) {
   const token = getToken();
-  const res = await fetch(`${API_URL}/api/v1/users/by-email/${email}`, { // NOTE: This endpoint must be created in the backend.
+  const res = await fetch(`${API_URL}/api/v1/messages/users/by-email/${email}`, {
     method: "GET",
     headers: {
       Authorization: `Bearer ${token}`,
@@ -54,7 +54,17 @@ export async function getConversation(otherUserEmail: string) {
   if (!res.ok) {
     throw new Error("Failed to fetch conversation");
   }
-  return res.json();
+  const data = await res.json();
+  // Map backend field names (snake_case) to frontend Message type (camelCase)
+  return data.map((m: any) => ({
+    id: m.message_id,
+    sender_email: m.sender_email,
+    receiver_email: m.receiver_email,
+    content: m.content,
+    timestamp: m.timestamp,
+    read: m.is_read,
+    imageUrl: m.image_url,
+  }));
 }
 
 // Send a text message

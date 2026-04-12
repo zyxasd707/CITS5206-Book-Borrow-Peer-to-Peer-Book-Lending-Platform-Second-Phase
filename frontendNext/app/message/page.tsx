@@ -81,6 +81,7 @@ export default function MessagesPage() {
   const [loading, setLoading] = useState(true);
   const wsRef = useRef<WebSocket | null>(null);
   const selectedThreadRef = useRef<ChatThread | null>(null);
+  const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
   // ── System Notifications state ──
   const [notifications, setNotifications] = useState<OrderWithRefunds[]>([]);
@@ -98,6 +99,11 @@ export default function MessagesPage() {
   useEffect(() => {
     selectedThreadRef.current = selectedThread;
   }, [selectedThread]);
+
+  // Auto-scroll to bottom when messages change
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [selectedThread?.messages]);
 
   // ── Load personal chat data ──
   useEffect(() => {
@@ -683,6 +689,7 @@ export default function MessagesPage() {
                       </div>
                     );
                   })}
+                  <div ref={messagesEndRef} />
                 </div>
 
                 <div className="p-4 border-t border-gray-200">
