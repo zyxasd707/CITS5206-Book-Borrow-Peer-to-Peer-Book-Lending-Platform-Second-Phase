@@ -10,7 +10,6 @@ import { isProfileComplete } from "@/utils/profileValidation";
 
 import { User as UserIcon, LogOut, Plus, Truck, Mail, LifeBuoy, ShoppingBag, ShieldCheck } from "lucide-react";
 import { logoutUser, isAuthenticated, getCurrentUser, getApiUrl, getToken } from "@/utils/auth";
-import { getRefundsForOrder } from "@/utils/payments";
 
 import Avatar from "@/app/components/ui/Avatar";
 import { useCartStore } from "@/app/store/cartStore";
@@ -118,38 +117,17 @@ const Header: React.FC = () => {
     router.push("/register");
   };
 
-  // Fetch system notification count (new refunds since last viewed)
+  // Fetch system notification count from notifications API
   const fetchSystemNotifCount = async () => {
     try {
       const apiUrl = getApiUrl();
       const token = getToken();
-      const lastSeen = localStorage.getItem("notif_last_seen") || "0";
-
-      const res = await fetch(`${apiUrl}/api/v1/orders/?status=CANCELED`, {
+      const res = await fetch(`${apiUrl}/api/v1/notifications/unread-count`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) return;
-
       const data = await res.json();
-      const orders = Array.isArray(data) ? data : (data.value || data.items || []);
-
-      let count = 0;
-      for (const order of orders) {
-        const oid = order.order_id || order.id;
-        try {
-          const refundData = await getRefundsForOrder(oid);
-          if (refundData.refunds) {
-            for (const r of refundData.refunds) {
-              if (new Date(r.created_at).getTime() > Number(lastSeen)) {
-                count++;
-              }
-            }
-          }
-        } catch {
-          // skip
-        }
-      }
-      setSystemNotifCount(count);
+      setSystemNotifCount(data.unread_count || 0);
     } catch {
       // silent fail
     }

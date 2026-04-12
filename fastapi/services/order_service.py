@@ -13,6 +13,7 @@ from services.cart_service import remove_cart_items_by_book_ids
 from models.complaint import Complaint
 from sqlalchemy import or_
 from services.complaint_service import ComplaintService
+from services.notification_service import NotificationService
 from typing import Set
 
 class OrderService:
@@ -365,7 +366,23 @@ class OrderService:
         # Update order status to CANCELED
         order.status = "CANCELED"
         order.canceled_at = datetime.now(timezone.utc)
-        
+
+        # Notify both parties
+        NotificationService.create(
+            db, user_id=order.borrower_id, order_id=order.id,
+            type="CANCELED",
+            title="Order Cancelled",
+            message=f"Your order has been cancelled. If payment was made, a refund will be processed.",
+            commit=False,
+        )
+        NotificationService.create(
+            db, user_id=order.owner_id, order_id=order.id,
+            type="CANCELED",
+            title="Order Cancelled",
+            message=f"An order for your book has been cancelled by the borrower.",
+            commit=False,
+        )
+
         # Restore book availability - set books back to 'listed' status
         for order_book in order.books:
             if order_book.book:
@@ -445,6 +462,24 @@ class OrderService:
             )
         
         order.status = "PENDING_SHIPMENT"
+
+        # Notify borrower: payment confirmed
+        NotificationService.create(
+            db, user_id=order.borrower_id, order_id=order.id,
+            type="PAYMENT_CONFIRMED",
+            title="Payment Confirmed",
+            message=f"Your payment of ${float(order.total_paid_amount):.2f} has been confirmed. Waiting for the lender to ship.",
+            commit=False,
+        )
+        # Notify owner: new order received
+        NotificationService.create(
+            db, user_id=order.owner_id, order_id=order.id,
+            type="PAYMENT_CONFIRMED",
+            title="New Order Received",
+            message=f"A borrower has paid for your book. Please ship within 3 days.",
+            commit=False,
+        )
+
         db.commit()
         db.refresh(order)
         return True
@@ -500,6 +535,15 @@ class OrderService:
             )
             order.due_at = order.start_at + timedelta(days=max_lending_days)
 
+            # Notify borrower: book shipped
+            NotificationService.create(
+                db, user_id=order.borrower_id, order_id=order.id,
+                type="SHIPMENT_SENT",
+                title="Book Shipped",
+                message=f"The lender has shipped your book. Tracking: {tracking_number} ({carrier_upper}).",
+                commit=False,
+            )
+
             # implement distribute shipping fee function
             try:
                 payment_id = order.payment_id
@@ -523,6 +567,23 @@ class OrderService:
             # Update status to RETURNED
             order.status = "RETURNED"
             order.returned_at = datetime.now(timezone.utc)
+
+            # Notify owner: book returned
+            NotificationService.create(
+                db, user_id=order.owner_id, order_id=order.id,
+                type="RETURNED",
+                title="Book Returned",
+                message=f"The borrower has shipped your book back. Tracking: {tracking_number} ({carrier_upper}).",
+                commit=False,
+            )
+            # Notify borrower: return confirmed
+            NotificationService.create(
+                db, user_id=order.borrower_id, order_id=order.id,
+                type="RETURNED",
+                title="Return Shipment Confirmed",
+                message=f"Your return shipment has been recorded. Waiting for the lender to confirm receipt.",
+                commit=False,
+            )
                 
         else:
             raise HTTPException(
@@ -555,8 +616,22 @@ class OrderService:
         count = 0
         for order in orders:
             order.status = "BORROWING"
+            NotificationService.create(
+                db, user_id=order.borrower_id, order_id=order.id,
+                type="BORROWING",
+                title="Borrowing Started",
+                message=f"Your book has been delivered. The borrowing period has started. Due date: {order.due_at.strftime('%d/%m/%Y') if order.due_at else 'N/A'}.",
+                commit=False,
+            )
+            NotificationService.create(
+                db, user_id=order.owner_id, order_id=order.id,
+                type="BORROWING",
+                title="Book Delivered",
+                message=f"Your book has been delivered to the borrower. Borrowing period started.",
+                commit=False,
+            )
             count += 1
-        
+
         db.commit()
         return count
 
@@ -613,6 +688,20 @@ class OrderService:
                     )
                     
                 order.status = "OVERDUE"
+                NotificationService.create(
+                    db, user_id=order.borrower_id, order_id=order.id,
+                    type="OVERDUE",
+                    title="Order Overdue",
+                    message=f"Your borrowing order is overdue (due: {order.due_at.strftime('%d/%m/%Y') if order.due_at else 'N/A'}). Please return the book as soon as possible.",
+                    commit=False,
+                )
+                NotificationService.create(
+                    db, user_id=order.owner_id, order_id=order.id,
+                    type="OVERDUE",
+                    title="Order Overdue",
+                    message=f"A borrower has not returned your book on time. A complaint has been filed automatically.",
+                    commit=False,
+                )
                 count += 1
                 
             db.commit()
@@ -648,8 +737,6 @@ class OrderService:
                 order.completed_at = now
 
                 # Restore book availability for borrowed books
-                # For borrow orders: set books back to 'listed'
-                # For purchase orders: books stay as 'sold'
                 if order.action_type == "borrow":
                     for order_book in order.books:
                         if order_book.book:
@@ -657,6 +744,20 @@ class OrderService:
                             if book and book.status == "lent":
                                 book.status = "listed"
 
+                NotificationService.create(
+                    db, user_id=order.borrower_id, order_id=order.id,
+                    type="COMPLETED",
+                    title="Order Completed",
+                    message=f"Your order has been completed. The deposit refund will be processed.",
+                    commit=False,
+                )
+                NotificationService.create(
+                    db, user_id=order.owner_id, order_id=order.id,
+                    type="COMPLETED",
+                    title="Order Completed",
+                    message=f"The borrowing order has been completed. The book has been returned.",
+                    commit=False,
+                )
                 count += 1
 
         db.commit()
@@ -690,6 +791,21 @@ class OrderService:
                     book = db.query(Book).filter(Book.id == order_book.book_id).first()
                     if book and book.status == "lent":
                         book.status = "listed"
+
+        NotificationService.create(
+            db, user_id=order.borrower_id, order_id=order.id,
+            type="COMPLETED",
+            title="Order Completed",
+            message=f"The lender has confirmed receipt of the returned book. Your deposit refund will be processed.",
+            commit=False,
+        )
+        NotificationService.create(
+            db, user_id=order.owner_id, order_id=order.id,
+            type="COMPLETED",
+            title="Order Completed",
+            message=f"You have confirmed receipt of the returned book. Order is now complete.",
+            commit=False,
+        )
 
         db.commit()
         db.refresh(order)
