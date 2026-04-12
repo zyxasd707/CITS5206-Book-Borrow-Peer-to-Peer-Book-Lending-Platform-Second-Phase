@@ -7,6 +7,7 @@ import { Search, Filter, Package, Clock, AlertTriangle, ArrowDownCircle, ArrowUp
 import CoverImg from "../components/ui/CoverImg";
 import Card from "../components/ui/Card";
 import Button from "../components/ui/Button";
+import { EmptyState, ErrorState, LoadingState } from "../components/ui/AsyncState";
 import type { OrderStatus } from "@/app/types/order";
 import { getBorrowingOrders, type Order } from "@/utils/borrowingOrders";
 import { getCurrentUser } from "@/utils/auth";
@@ -20,6 +21,20 @@ const STATUS_META: Record<OrderStatus, { label: string; className: string }> = {
   COMPLETED: { label: "Completed", className: "text-gray-500" },
   CANCELED: { label: "Canceled", className: "text-gray-400" },
 };
+
+const TX_STAGE_META = {
+  pending: { label: "Pending", className: "bg-amber-100 text-amber-800" },
+  paid: { label: "Paid", className: "bg-blue-100 text-blue-800" },
+  shipped: { label: "Shipped", className: "bg-green-100 text-green-800" },
+  canceled: { label: "Canceled", className: "bg-gray-100 text-gray-700" },
+} as const;
+
+function getTransactionStage(status: OrderStatus): keyof typeof TX_STAGE_META {
+  if (status === "PENDING_PAYMENT") return "pending";
+  if (status === "PENDING_SHIPMENT") return "paid";
+  if (status === "CANCELED") return "canceled";
+  return "shipped";
+}
 
 export default function OrderListPage() {
   const [orders, setOrders] = useState<Order[]>([]);
@@ -187,36 +202,31 @@ export default function OrderListPage() {
 
           {/* Error / Loading */}
           {error && (
-            <Card>
-              <div className="p-4 text-red-600">{error}</div>
-            </Card>
+            <ErrorState
+              title="Failed to load orders"
+              description={error}
+              onRetry={() => window.location.reload()}
+            />
           )}
           {loading && (
-            <Card>
-              <div className="p-4 text-gray-600">Loading orders...</div>
-            </Card>
+            <LoadingState title="Loading orders..." description="Fetching your latest transactions." />
           )}
 
           {/* Order list */}
           {!loading && !error && (
             <div className="space-y-4">
               {filteredOrders.length === 0 ? (
-                <Card>
-                  <div className="text-center py-12">
-                    <Package className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-                    <h3 className="text-lg font-medium text-gray-900 mb-2">
-                      No orders found
-                    </h3>
-                    <p className="text-gray-500">
-                      Try adjusting filters or search terms
-                    </p>
-                  </div>
-                </Card>
+                <EmptyState
+                  title="No orders found"
+                  description="Try adjusting filters or search terms."
+                />
               ) : (
                 filteredOrders.map((order) => {
                   const firstBook = order.books[0];
                   const extra = Math.max(0, order.books.length - 1);
                   const meta = STATUS_META[order.status];
+                  const txStage = getTransactionStage(order.status);
+                  const txMeta = TX_STAGE_META[txStage];
                   const isOverdue =
                     order.status === "BORROWING" &&
                     order.due_at &&
@@ -321,7 +331,12 @@ export default function OrderListPage() {
                             </div>
 
                             {/* Status */}
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-2 flex-wrap justify-end">
+                              <span
+                                className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ${txMeta.className}`}
+                              >
+                                Transaction: {txMeta.label}
+                              </span>
                               <span
                                 className={`text-lg font-medium ${meta.className}`}
                               >
