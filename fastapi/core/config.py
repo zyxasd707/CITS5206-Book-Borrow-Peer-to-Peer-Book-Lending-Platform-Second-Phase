@@ -15,6 +15,7 @@ class Settings:
         # App (non-sensitive defaults)
         self.APP_NAME = "BookHive API"
         self.VERSION = "1.0.0"
+        self.APP_BASE_URL = os.getenv("APP_BASE_URL", "http://localhost").rstrip("/")
         
         # Database components (required; construct URL)
         db_user = os.getenv('DB_USER')

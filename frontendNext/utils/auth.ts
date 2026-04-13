@@ -4,9 +4,11 @@ import type { User } from "@/app/types/user";
 
 // API Configuration
 export const getApiUrl = () => {
-  if (process.env.NODE_ENV === "production") {
-    return process.env.NEXT_PUBLIC_API_URL || "https://api.bookborrow.org/";
+  const configuredUrl = process.env.NEXT_PUBLIC_API_URL;
+  if (configuredUrl) {
+    return configuredUrl.replace(/\/$/, "");
   }
+<<<<<<< HEAD
 <<<<<<< Updated upstream
   return process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 =======
@@ -25,6 +27,15 @@ export const getApiUrl = () => {
 
   return "";
 >>>>>>> Stashed changes
+=======
+
+  // Default to same-origin so nginx can proxy /api requests to FastAPI.
+  if (typeof window !== "undefined") {
+    return window.location.origin;
+  }
+
+  return "";
+>>>>>>> Alice_email
 };
 
 
@@ -44,6 +55,57 @@ interface RegisterData {
 
 type UpdateUserPayload = Omit<User, "dateOfBirth"> & {
   dateOfBirth?: string | null;
+};
+
+const splitUserName = (name?: string | null) => {
+  const safeName = (name || "").trim();
+  if (!safeName) {
+    return { firstName: "", lastName: "" };
+  }
+
+  const parts = safeName.split(/\s+/);
+  return {
+    firstName: parts[0] || "",
+    lastName: parts.slice(1).join(" "),
+  };
+};
+
+const mapApiUserToUser = (userData: any): User => {
+  const derivedName = splitUserName(userData.name);
+  const firstName = userData.firstName || derivedName.firstName;
+  const lastName = userData.lastName || derivedName.lastName;
+
+  return {
+    id: userData.id,
+    firstName,
+    lastName,
+    name: userData.name,
+    email: userData.email,
+    phoneNumber: userData.phoneNumber || undefined,
+    dateOfBirth: userData.dateOfBirth || undefined,
+
+    country: userData.country,
+    streetAddress: userData.streetAddress,
+    city: userData.city,
+    state: userData.state,
+    zipCode: userData.zipCode,
+    coordinates: userData.coordinates || undefined,
+    maxDistance: userData.maxDistance || undefined,
+
+    avatar:
+      userData.avatar ||
+      `https://ui-avatars.com/api/?name=${encodeURIComponent(
+        userData.name
+      )}&background=f97316&color=fff`,
+    profilePicture: userData.profilePicture || undefined,
+
+    createdAt: new Date(userData.createdAt),
+
+    bio: userData.bio || undefined,
+    preferredLanguages: userData.preferredLanguages || undefined,
+    stripe_account_id: userData.stripe_account_id || undefined,
+    is_admin: userData.is_admin,
+  };
 };
 
 // User login function
@@ -252,6 +314,7 @@ export const initAuth = () => {
     axios.interceptors.response.use(
       (response) => response,
       (error) => {
+<<<<<<< HEAD
         if (error.response?.status === 401) {
           const hadToken = !!localStorage.getItem("access_token");
           if (hadToken) {
@@ -261,6 +324,18 @@ export const initAuth = () => {
             window.dispatchEvent(new Event("auth-changed"));
             window.location.href = "/auth";
           }
+=======
+        const hasToken = !!localStorage.getItem("access_token");
+
+        if (error.response?.status === 401 && hasToken) {
+            console.warn("Session expired, logging out...");
+            // Clear the local login status
+          localStorage.removeItem("access_token");
+          delete axios.defaults.headers.common["Authorization"];
+
+          // Notify the global refresh
+          window.dispatchEvent(new Event("auth-changed"));
+>>>>>>> Alice_email
         }
         return Promise.reject(error);
       }
@@ -285,6 +360,7 @@ export const getCurrentUser = async (): Promise<User | null> => {
 
     const userData = response.data;
 
+<<<<<<< HEAD
     const user: User = {
       id: userData.id,
       firstName: userData.firstName,
@@ -318,6 +394,9 @@ export const getCurrentUser = async (): Promise<User | null> => {
     };
 
     return user;
+=======
+    return mapApiUserToUser(userData);
+>>>>>>> Alice_email
   } catch (error) {
     console.error("Failed to get user info:", error);
     localStorage.removeItem("access_token");
@@ -372,6 +451,7 @@ export const getUserById = async (id: string): Promise<User | null> => {
 
     const userData = response.data;
 
+<<<<<<< HEAD
     const user: User = {
       id: userData.id,
       firstName: userData.firstName,
@@ -406,6 +486,9 @@ export const getUserById = async (id: string): Promise<User | null> => {
     };
 
     return user;
+=======
+    return mapApiUserToUser(userData);
+>>>>>>> Alice_email
   } catch (error) {
     console.error(`Failed to get user ${id}:`, error);
     return null;

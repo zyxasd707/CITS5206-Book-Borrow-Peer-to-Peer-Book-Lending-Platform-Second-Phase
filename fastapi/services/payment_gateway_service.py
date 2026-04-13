@@ -18,6 +18,7 @@ from models.order import Order
 from models.payment_split import PaymentSplit
 from models.checkout import CheckoutItem
 from services.order_service import OrderService
+from core.config import settings
 
 
 def to_cents(amount) -> int:
@@ -113,8 +114,8 @@ def create_express_account(email: str, *, db: Session):
         
         link = stripe.AccountLink.create(
             account=account.id,
-            refresh_url="https://www.bookborrow.org/reauth",
-            return_url="https://www.bookborrow.org/",
+            refresh_url=f"{settings.APP_BASE_URL}/reauth",
+            return_url=f"{settings.APP_BASE_URL}/",
             type="account_onboarding",
         )
 
@@ -157,64 +158,92 @@ def initiate_payment(data: dict, db: Session):
 
 
     try:
-        # 1. Create Stripe PaymentIntent
-        intent = stripe.PaymentIntent.create(
-            amount=amount,
-            currency=currency,
-            capture_method="automatic",
-            automatic_payment_methods={"enabled": True},
-            transfer_data={"destination": lender_account_id},
-            metadata={
+        payment_intent_payload = {
+            "amount": amount,
+            "currency": currency,
+            "capture_method": "automatic",
+            "automatic_payment_methods": {"enabled": True},
+            "metadata": {
                 "user_id": user_id,
                 "purchase": purchase,
                 "deposit": deposit,
                 "shipping_fee": shipping_fee,
                 "service_fee": service_fee,
             },
-        )
+        }
+
+        # 1. Create Stripe PaymentIntent
+        if lender_account_id:
+            payment_intent_payload["transfer_data"] = {"destination": lender_account_id}
+
+        try:
+            intent = stripe.PaymentIntent.create(**payment_intent_payload)
+        except stripe.error.StripeError as e:
+            can_retry_without_destination = (
+                lender_account_id
+                and "stripe_balance.stripe_transfers" in str(e)
+            )
+            if not can_retry_without_destination:
+                raise
+
+            logger.warning(
+                "Falling back to platform payment because destination account %s "
+                "does not have transfers capability yet.",
+                lender_account_id,
+            )
+            payment_intent_payload.pop("transfer_data", None)
+            intent = stripe.PaymentIntent.create(**payment_intent_payload)
 
         # 2. Extract client_secret
         client_secret = intent.client_secret
 
-        checkoutItem = db.query(CheckoutItem).filter_by(checkout_id=checkout_id).all()
+        checkout_items = db.query(CheckoutItem).filter_by(checkout_id=checkout_id).all()
+        if not checkout_items:
+            db.rollback()
+            raise HTTPException(status_code=400, detail="No checkout items found for this checkout")
 
-        payment = None
+        purchase_total = 0
+        deposit_total = 0
+        action_types = set()
+        for item in checkout_items:
+            action_types.add(item.action_type)
+            if item.action_type == "BORROW":
+                deposit_total += int((item.deposit or 0) * 100)
+            elif item.action_type == "PURCHASE":
+                purchase_total += int((item.price or 0) * 100)
 
-        for owner in checkoutItem:
-            
-            if owner.action_type == "BORROW":
-                deposit = owner.deposit*100
-                purchase = 0
-            elif owner.action_type == "PURCHASE":
-                purchase = owner.price*100
-                deposit = 0
-
-            # 3. Save payment record in DB
+        payment = db.query(Payment).filter_by(checkout_id=checkout_id).first()
+        if payment is None:
             payment = Payment(
                 payment_id=intent.id,
-                checkout_id=owner.checkout_id,
+                checkout_id=checkout_id,
                 user_id=user_id,
                 amount=amount,
                 currency=currency,
                 status=intent.status,
-                purchase=purchase,
-                deposit=deposit,
+                purchase=purchase_total,
+                deposit=deposit_total,
                 shipping_fee=shipping_fee,
                 service_fee=service_fee,
-
                 created_at=datetime.utcnow(),
                 updated_at=datetime.utcnow(),
-
-                destination= owner.destination,
-                action_type = owner.action_type
+                destination=lender_account_id or checkout_items[0].destination,
+                action_type=action_types.pop() if len(action_types) == 1 else "MIXED",
             )
-
             db.add(payment)
-        
-        # Only refresh if we actually created one
-        if payment is None:
-            db.rollback()
-            raise HTTPException(status_code=400, detail=f"No checkout items to create a payment {payment}")
+        else:
+            payment.payment_id = intent.id
+            payment.user_id = user_id
+            payment.amount = amount
+            payment.currency = currency
+            payment.status = intent.status
+            payment.purchase = purchase_total
+            payment.deposit = deposit_total
+            payment.shipping_fee = shipping_fee
+            payment.service_fee = service_fee
+            payment.updated_at = datetime.utcnow()
+            payment.destination = lender_account_id or checkout_items[0].destination
+            payment.action_type = action_types.pop() if len(action_types) == 1 else "MIXED"
 
         db.commit()
         db.refresh(payment)
@@ -231,7 +260,8 @@ def initiate_payment(data: dict, db: Session):
 
     except stripe.error.StripeError as e:
         db.rollback()
-        return {"error": str(e)}, 400
+        traceback.print_exc()
+        raise HTTPException(status_code=400, detail=f"Stripe error: {str(e)}")
 
 
 def get_payment_status_service(payment_id: str):
@@ -280,7 +310,7 @@ def capture_payment(payment_id: str, *, db: Session):
     except stripe.error.StripeError as e:
         db.rollback()
         traceback.print_exc()
-        return {"error": str(e)}, 400
+        raise HTTPException(status_code=400, detail=f"Stripe error: {str(e)}")
 
 
 @audit("distribution_initiated")
@@ -623,7 +653,7 @@ def initiate_donation(data: dict, *, db: Session):
     except stripe.error.StripeError as e:
         db.rollback()
         traceback.print_exc()
-        return {"error": str(e)}, 400
+        raise HTTPException(status_code=400, detail=f"Stripe error: {str(e)}")
 
 
 def donation_history(user_id: str, *, db: Session):
@@ -1129,6 +1159,7 @@ def refund_deposit_for_order(db: Session, order_id: str, amount_cents: Optional[
         db.commit()
 
     return {"order_id": order_id, "refund_id": r.id, "amount": refund_amount}
+<<<<<<< HEAD
 
 
 # ========== MVP6 B1: Automated Refund Functions ==========
@@ -1358,3 +1389,5 @@ def refund_on_cancel(db: Session, order_id: str, actor: str = "system"):
         "currency": r.currency,
         "status": r.status,
     }
+=======
+>>>>>>> Alice_email

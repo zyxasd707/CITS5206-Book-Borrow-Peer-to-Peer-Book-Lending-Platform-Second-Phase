@@ -7,14 +7,43 @@ from typing import Optional, List, Literal, Dict, Any
 from services.book_service import BookService
 from core.dependencies import get_db, get_current_user
 from models.book import Book
+from models.user import User
 
 router = APIRouter(prefix="/api/v1/books", tags=["books"])
 
 # -------- Helper: Convert to frontend format --------
-def _to_read(b: Book) -> dict:
+def _owner_summary(db: Session, owner_id: str) -> Optional[dict]:
+    owner = db.query(User).filter(User.user_id == owner_id).first()
+    if not owner:
+        return None
+
+    full_name = (getattr(owner, "name", "") or "").strip()
+    first_name = getattr(owner, "first_name", None)
+    last_name = getattr(owner, "last_name", None)
+    if full_name and (not first_name or not last_name):
+        parts = full_name.split()
+        if parts:
+            first_name = first_name or parts[0]
+            last_name = last_name or (" ".join(parts[1:]) if len(parts) > 1 else "")
+
+    return {
+        "id": owner.user_id,
+        "name": full_name,
+        "firstName": first_name,
+        "lastName": last_name,
+        "avatar": owner.avatar,
+        "profilePicture": owner.profile_picture,
+        "city": owner.city,
+        "state": owner.state,
+        "zipCode": owner.zip_code,
+    }
+
+
+def _to_read(db: Session, b: Book) -> dict:
     return {
         "id": b.id,
         "ownerId": b.owner_id,
+        "owner": _owner_summary(db, b.owner_id),
         "titleOr": b.title_or,
         "titleEn": b.title_en,
         "originalLanguage": b.original_language,
@@ -111,7 +140,7 @@ def create_book(
         "deposit": payload.deposit,
     }
     book = BookService.create(db, owner_id=user.user_id, payload=p)
-    return _to_read(book)
+    return _to_read(db, book)
 
 
 # -------- List --------
@@ -127,7 +156,7 @@ def list_books(
     db: Session = Depends(get_db),
 ):
     items, total = BookService.list(db, page, page_size, q, author, category, owner_id, status)
-    return {"items": [_to_read(b) for b in items], "total": total, "page": page, "page_size": page_size}
+    return {"items": [_to_read(db, b) for b in items], "total": total, "page": page, "page_size": page_size}
 
 
 # -------- Get Filter Options --------
@@ -165,7 +194,7 @@ def search_books(
 # -------- Get by ID --------
 @router.get("/{book_id}", response_model=dict)
 def get_book(book_id: str, db: Session = Depends(get_db)):
-    return _to_read(BookService.get(db, book_id))
+    return _to_read(db, BookService.get(db, book_id))
 
 # -------- Update --------
 @router.put("/{book_id}", response_model=dict)
@@ -184,7 +213,7 @@ def update_book(
     }
     data = {mapping.get(k, k): v for k, v in payload.dict(exclude_unset=True).items()}
     book = BookService.update(db, book_id, user.user_id, data)
-    return _to_read(book)
+    return _to_read(db, book)
 
 
 # -------- Delete --------

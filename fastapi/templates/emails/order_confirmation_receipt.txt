@@ -1,0 +1,21 @@
+Hello, {username},
+
+Your payment was successful and your order has been confirmed.
+This email also serves as your receipt.
+
+Payment ID: {payment_id}
+Order Date: {order_created_at}
+Payment Method: {payment_method}
+Total paid: {total_amount}
+
+Borrower:
+{contact_name}
+{street}
+{city} {postcode}
+{country}
+{phone_line}
+
+Orders:
+{orders_text_rows}
+
+You can view your order details in BookBorrow at any time.
