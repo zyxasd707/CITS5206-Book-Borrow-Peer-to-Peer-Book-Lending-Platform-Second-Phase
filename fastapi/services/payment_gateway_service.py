@@ -420,6 +420,23 @@ def refund_payment(payment_id: str, data: dict, *, db: Session):
         else:
             payment.status = "partially_refunded"
 
+        # 3.5 Send refund notification to the borrower
+        try:
+            from models.order import Order
+            from services.notification_service import NotificationService
+            order = db.query(Order).filter(Order.payment_id == payment_id).first()
+            if order:
+                amount_display = refund.amount / 100
+                NotificationService.create(
+                    db, user_id=order.borrower_id, order_id=order.id,
+                    type="REFUND",
+                    title="Refund Completed" if refund.status in ("succeeded", "refunded") else "Refund Processing",
+                    message=f"Refund of ${amount_display:.2f} {refund.currency.upper()} has been {'completed' if refund.status in ('succeeded', 'refunded') else 'initiated'}.",
+                    commit=False,
+                )
+        except Exception as e:
+            print(f"[WARN] Failed to create refund notification: {e}")
+
         db.commit()
 
         # 4. Return refund details

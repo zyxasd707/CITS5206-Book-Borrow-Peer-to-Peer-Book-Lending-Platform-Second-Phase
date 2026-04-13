@@ -20,6 +20,7 @@ from routes.bans import router as bans_router
 from routes.blacklists import router as blacklists_router
 from routes.review import router as review_router
 from routes.analytics import router as analytics_router  # Import analytics router
+from routes.notifications import router as notifications_router
 
 # update order statuses automatically
 from contextlib import asynccontextmanager
@@ -32,6 +33,7 @@ from seed import seed as seed_sample_data
 import models.user, models.book, models.order, models.cart, models.message
 import models.complaint, models.ban, models.blacklist, models.review
 import models.payment_gateway, models.payment_split, models.mail
+import models.system_notification
 from models.base import Base
 from models.checkout import Base as CheckoutBase
 from models.service_fee import Base as ServiceFeeBase
@@ -129,6 +131,7 @@ app.include_router(blacklists_router, prefix="/api/v1")
 
 #Register the analytics router
 app.include_router(analytics_router, prefix="/api/v1")
+app.include_router(notifications_router, prefix="/api/v1")
 
 @app.get("/")
 async def root():
