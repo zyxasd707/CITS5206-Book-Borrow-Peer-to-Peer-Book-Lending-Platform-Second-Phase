@@ -7,7 +7,24 @@ export const getApiUrl = () => {
   if (process.env.NODE_ENV === "production") {
     return process.env.NEXT_PUBLIC_API_URL || "https://api.bookborrow.org/";
   }
+<<<<<<< Updated upstream
   return process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+=======
+
+  if (typeof window !== "undefined") {
+    const { hostname, origin } = window.location;
+
+    // Local frontend development often runs without nginx, so use the
+    // FastAPI host directly unless NEXT_PUBLIC_API_URL is explicitly set.
+    if (hostname === "localhost" || hostname === "127.0.0.1") {
+      return "http://localhost:8000";
+    }
+
+    return origin;
+  }
+
+  return "";
+>>>>>>> Stashed changes
 };
 
 
