@@ -11,7 +11,8 @@ class BookSummary(BaseModel):
 
 class UserSummary(BaseModel):
     id: str
-    name: str   
+    name: str
+    email: Optional[str] = None
 
 class OrderSummary(BaseModel):
     order_id: str
