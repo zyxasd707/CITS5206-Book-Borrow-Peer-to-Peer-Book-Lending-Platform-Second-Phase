@@ -1,5 +1,5 @@
 """
-Seed script — populates the database with demo users and books.
+Seed script — populates the database with demo users, books, and orders.
 
 For local Docker development, run this inside the backend container:
     docker exec -it fastapi-backend python seed.py
@@ -11,26 +11,25 @@ Why this matters:
 
 import os
 import uuid
+from datetime import datetime, timedelta
 from dotenv import load_dotenv
 
-load_dotenv(os.path.join(os.path.dirname(os.path.dirname(__file__)), '.env'))
+load_dotenv(os.path.join(os.path.dirname(os.path.dirname(__file__)), ".env"))
 
 from database.connection import SessionLocal
-from models.base import Base
 from models.user import User
 from models.book import Book
-from database.connection import engine
+from models.order import Order, OrderBook
 from core.security import get_password_hash
 
-# ── helpers ──────────────────────────────────────────────────────────────────
 
 def uid():
     return str(uuid.uuid4())
 
+
 def short_uid():
     return "U" + str(uuid.uuid4()).replace("-", "")[:24]
 
-# ── seed data ─────────────────────────────────────────────────────────────────
 
 USERS = [
     {
@@ -122,7 +121,7 @@ BOOKS = [
         "original_language": "English",
         "author": "George Orwell",
         "category": "Dystopian Fiction",
-        "description": "A chilling dystopia about totalitarian surveillance and thought control. One of the most influential novels of the 20th century.",
+        "description": "A chilling dystopia about totalitarian surveillance and thought control.",
         "condition": "like-new",
         "status": "listed",
         "can_rent": True,
@@ -142,7 +141,7 @@ BOOKS = [
         "original_language": "English",
         "author": "Harper Lee",
         "category": "Classic Fiction",
-        "description": "The story of young Scout Finch, her brother Jem, and their father Atticus, a lawyer who defends a Black man accused of rape in the American South.",
+        "description": "The story of young Scout Finch and Atticus Finch.",
         "condition": "good",
         "status": "listed",
         "can_rent": True,
@@ -162,7 +161,7 @@ BOOKS = [
         "original_language": "English",
         "author": "Douglas Adams",
         "category": "Science Fiction",
-        "description": "Seconds before the Earth is demolished to make way for a hyperspace bypass, Arthur Dent is swept off the planet by his friend Ford Prefect.",
+        "description": "Arthur Dent is swept off Earth before its destruction.",
         "condition": "fair",
         "status": "listed",
         "can_rent": True,
@@ -182,7 +181,7 @@ BOOKS = [
         "original_language": "English",
         "author": "Jane Austen",
         "category": "Classic Romance",
-        "description": "The story follows Elizabeth Bennet as she deals with issues of manners, upbringing, morality, education, and marriage in the society of the landed gentry.",
+        "description": "Elizabeth Bennet navigates manners, morality, and marriage.",
         "condition": "new",
         "status": "listed",
         "can_rent": True,
@@ -202,7 +201,7 @@ BOOKS = [
         "original_language": "English",
         "author": "Frank Herbert",
         "category": "Science Fiction",
-        "description": "Set in the distant future, Dune tells the story of young Paul Atreides, whose family accepts the stewardship of the desert planet Arrakis.",
+        "description": "Paul Atreides and the desert planet Arrakis.",
         "condition": "good",
         "status": "listed",
         "can_rent": True,
@@ -222,7 +221,7 @@ BOOKS = [
         "original_language": "Portuguese",
         "author": "Paulo Coelho",
         "category": "Inspirational Fiction",
-        "description": "A young Andalusian shepherd named Santiago travels from his homeland in Spain to the Egyptian desert in search of a treasure buried near the Pyramids.",
+        "description": "Santiago travels to the Egyptian desert in search of treasure.",
         "condition": "like-new",
         "status": "listed",
         "can_rent": True,
@@ -242,7 +241,7 @@ BOOKS = [
         "original_language": "English",
         "author": "J.K. Rowling",
         "category": "Fantasy",
-        "description": "An orphan boy discovers he is a wizard and begins his education at Hogwarts School of Witchcraft and Wizardry.",
+        "description": "An orphan boy discovers he is a wizard.",
         "condition": "good",
         "status": "listed",
         "can_rent": True,
@@ -258,10 +257,84 @@ BOOKS = [
     },
 ]
 
-# ── main ──────────────────────────────────────────────────────────────────────
+ORDERS = [
+    {
+        "owner_index": 0,
+        "borrower_index": 1,
+        "book_indices": [0],
+        "status": "BORROWING",
+        "action_type": "borrow",
+        "shipping_method": "post",
+        "deposit_or_sale_amount": "20.00",
+        "service_fee_amount": "2.00",
+        "shipping_out_fee_amount": "5.00",
+        "total_paid_amount": "27.00",
+        "estimated_delivery_time": 3,
+        "contact_name": "Bob Smith",
+        "phone": "0412345678",
+        "street": "12 Hay Street",
+        "city": "Perth",
+        "postcode": "6000",
+        "country": "Australia",
+        "notes": "Handle with care",
+        "created_days_ago": 5,
+        "start_days_ago": 4,
+        "due_days_after_start": 14,
+    },
+    {
+        "owner_index": 1,
+        "borrower_index": 2,
+        "book_indices": [2],
+        "status": "COMPLETED",
+        "action_type": "purchase",
+        "shipping_method": "pickup",
+        "deposit_or_sale_amount": "12.00",
+        "service_fee_amount": "1.50",
+        "shipping_out_fee_amount": None,
+        "total_paid_amount": "13.50",
+        "estimated_delivery_time": 1,
+        "contact_name": "Carol Wang",
+        "phone": "0422334455",
+        "street": "45 George Street",
+        "city": "Sydney",
+        "postcode": "2000",
+        "country": "Australia",
+        "notes": "Completed pickup order",
+        "created_days_ago": 10,
+        "completed_days_ago": 8,
+    },
+    {
+        "owner_index": 2,
+        "borrower_index": 0,
+        "book_indices": [4],
+        "status": "OVERDUE",
+        "action_type": "borrow",
+        "shipping_method": "post",
+        "deposit_or_sale_amount": "18.00",
+        "service_fee_amount": "2.00",
+        "shipping_out_fee_amount": "4.00",
+        "total_paid_amount": "24.00",
+        "estimated_delivery_time": 4,
+        "contact_name": "Alice Chen",
+        "phone": "0433556677",
+        "street": "89 Murray Street",
+        "city": "Perth",
+        "postcode": "6000",
+        "country": "Australia",
+        "notes": "Overdue return sample",
+        "created_days_ago": 20,
+        "start_days_ago": 18,
+        "due_days_after_start": 7,
+    },
+]
+
 
 def is_database_empty(db) -> bool:
-    return db.query(User).count() == 0 and db.query(Book).count() == 0
+    return (
+        db.query(User).count() == 0
+        and db.query(Book).count() == 0
+        and db.query(Order).count() == 0
+    )
 
 
 def seed(*, force: bool = False):
@@ -279,6 +352,7 @@ def seed(*, force: bool = False):
                 print(f"  Skipping existing user: {u['email']}")
                 created_users.append(existing_user)
                 continue
+
             user = User(
                 user_id=u["user_id"],
                 name=u["name"],
@@ -301,6 +375,7 @@ def seed(*, force: bool = False):
             print(f"  Created user: {u['email']}")
 
         print("Seeding books...")
+        created_books = []
         for b in BOOKS:
             owner = created_users[b["owner_index"]]
             book = Book(
@@ -325,7 +400,64 @@ def seed(*, force: bool = False):
                 tags=b["tags"],
             )
             db.add(book)
+            db.flush()
+            created_books.append(book)
             print(f"  Created book: {b['title_en']}")
+
+        print("Seeding orders...")
+        for o in ORDERS:
+            owner = created_users[o["owner_index"]]
+            borrower = created_users[o["borrower_index"]]
+
+            created_at = datetime.utcnow() - timedelta(days=o["created_days_ago"])
+            start_at = None
+            due_at = None
+            completed_at = None
+
+            if "start_days_ago" in o:
+                start_at = datetime.utcnow() - timedelta(days=o["start_days_ago"])
+
+            if start_at and "due_days_after_start" in o:
+                due_at = start_at + timedelta(days=o["due_days_after_start"])
+
+            if "completed_days_ago" in o:
+                completed_at = datetime.utcnow() - timedelta(days=o["completed_days_ago"])
+
+            order = Order(
+                id=uid(),
+                owner_id=owner.user_id,
+                borrower_id=borrower.user_id,
+                status=o["status"],
+                action_type=o["action_type"],
+                start_at=start_at,
+                due_at=due_at,
+                completed_at=completed_at,
+                created_at=created_at,
+                shipping_method=o["shipping_method"],
+                deposit_or_sale_amount=o["deposit_or_sale_amount"],
+                service_fee_amount=o["service_fee_amount"],
+                shipping_out_fee_amount=o["shipping_out_fee_amount"],
+                total_paid_amount=o["total_paid_amount"],
+                estimated_delivery_time=o["estimated_delivery_time"],
+                contact_name=o["contact_name"],
+                phone=o["phone"],
+                street=o["street"],
+                city=o["city"],
+                postcode=o["postcode"],
+                country=o["country"],
+                notes=o["notes"],
+            )
+            db.add(order)
+            db.flush()
+
+            for book_index in o["book_indices"]:
+                order_book = OrderBook(
+                    order_id=order.id,
+                    book_id=created_books[book_index].id,
+                )
+                db.add(order_book)
+
+            print(f"  Created order: {order.id} ({o['status']})")
 
         db.commit()
         print("\nSeed complete!")

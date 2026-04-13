@@ -156,6 +156,52 @@ export async function handlePaymentDispute(
 }
 
 
+// MVP6: Get refund records for an order
+export async function getRefundsForOrder(orderId: string) {
+  const res = await axios.get(
+    `${API_URL}/payment_gateway/payment/refunds/${orderId}`,
+    {
+      headers: {
+        Authorization: `Bearer ${localStorage.getItem("access_token")}`,
+      },
+      withCredentials: true,
+    }
+  );
+  return res.data as {
+    order_id: string;
+    refunds: Array<{
+      refund_id: string;
+      amount: number;
+      currency: string;
+      status: string;
+      reason: string | null;
+      created_at: string;
+      updated_at: string;
+    }>;
+  };
+}
+
+// MVP6: Cancel order with automatic refund
+export async function cancelOrderWithRefund(orderId: string) {
+  const res = await axios.post(
+    `${API_URL}/payment_gateway/payment/refund/cancel/${orderId}`,
+    {},
+    {
+      headers: {
+        Authorization: `Bearer ${localStorage.getItem("access_token")}`,
+      },
+      withCredentials: true,
+    }
+  );
+  return res.data as {
+    order_id: string;
+    refund_id: string;
+    amount: number;
+    currency: string;
+    status: string;
+  };
+}
+
 // Execute compensation transfer after dispute resolved
 export async function compensatePayment(
   paymentId: string,

@@ -143,3 +143,7 @@ node_modules/
 **/node_modules/
 # Sensitive key files
 *SECRET_KEY*
+
+# Screenshot folders (Chinese)
+订单详情 - 退款状态展示/
+通知中心 - 系统退款消息/

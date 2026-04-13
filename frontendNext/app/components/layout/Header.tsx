@@ -8,13 +8,17 @@ import Input from "../ui/Input";
 import ProfileIncompleteModal from "../ui/ProfileIncompleteModal";
 import { isProfileComplete } from "@/utils/profileValidation";
 
-import { User as UserIcon, LogOut, Plus, Truck, Mail, LifeBuoy, ShoppingBag } from "lucide-react";
-import { logoutUser, isAuthenticated, getCurrentUser } from "@/utils/auth";
+import { User as UserIcon, LogOut, Plus, Truck, Mail, LifeBuoy, ShoppingBag, ShieldCheck } from "lucide-react";
+import { logoutUser, isAuthenticated, getCurrentUser, getApiUrl, getToken } from "@/utils/auth";
+import { getRefundsForOrder } from "@/utils/payments";
 
 import Avatar from "@/app/components/ui/Avatar";
 import { useCartStore } from "@/app/store/cartStore";
 import type { User } from "@/app/types/user";
 import type { ChatThread } from "@/app/types/message";
+
+const isAdminLikeUser = (user: User | null) =>
+  Boolean(user?.is_admin) || Boolean(user?.email?.toLowerCase().includes("admin"));
 
 const Header: React.FC = () => {
   const router = useRouter();
@@ -23,6 +27,7 @@ const Header: React.FC = () => {
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [threads, setThreads] = useState<ChatThread[]>([]);
+  const [systemNotifCount, setSystemNotifCount] = useState(0);
 
   const cartCount = useCartStore((state) => state.cart.length);
   const fetchCart = useCartStore((state) => state.fetchCart);
@@ -56,6 +61,7 @@ const Header: React.FC = () => {
 
         setCurrentUser(user);
         fetchCart();// shipping bag
+        fetchSystemNotifCount();
       } else {
         setCurrentUser(null);
       }
@@ -72,9 +78,16 @@ const Header: React.FC = () => {
     window.addEventListener("auth-changed", handleAuthChange);
     window.addEventListener("storage", checkAuthStatus);
 
+    // Listen for notification-read event from message page
+    const handleNotifRead = () => {
+      setSystemNotifCount(0);
+    };
+    window.addEventListener("notif-read", handleNotifRead);
+
     return () => {
       window.removeEventListener("auth-changed", handleAuthChange);
       window.removeEventListener("storage", checkAuthStatus);
+      window.removeEventListener("notif-read", handleNotifRead);
     };
   }, [fetchCart]);
 
@@ -103,6 +116,43 @@ const Header: React.FC = () => {
   // Navigate to signup page
   const handleSignUp = () => {
     router.push("/register");
+  };
+
+  // Fetch system notification count (new refunds since last viewed)
+  const fetchSystemNotifCount = async () => {
+    try {
+      const apiUrl = getApiUrl();
+      const token = getToken();
+      const lastSeen = localStorage.getItem("notif_last_seen") || "0";
+
+      const res = await fetch(`${apiUrl}/api/v1/orders/?status=CANCELED`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) return;
+
+      const data = await res.json();
+      const orders = Array.isArray(data) ? data : (data.value || data.items || []);
+
+      let count = 0;
+      for (const order of orders) {
+        const oid = order.order_id || order.id;
+        try {
+          const refundData = await getRefundsForOrder(oid);
+          if (refundData.refunds) {
+            for (const r of refundData.refunds) {
+              if (new Date(r.created_at).getTime() > Number(lastSeen)) {
+                count++;
+              }
+            }
+          }
+        } catch {
+          // skip
+        }
+      }
+      setSystemNotifCount(count);
+    } catch {
+      // silent fail
+    }
   };
 
   // Update the search handler to clear query after navigation
@@ -177,7 +227,7 @@ const Header: React.FC = () => {
                 </Button>
               )}
 
-              {/* message button - count items */}
+              {/* message button - combined badge (chat + system notifications) */}
               {isLoggedIn && (
                 <Link href="/message">
                   <div className="relative flex items-center justify-center w-9 h-9 rounded-full">
@@ -185,10 +235,10 @@ const Header: React.FC = () => {
                       <Mail className="w-5 h-5" />
                     </Button>
 
-                    {/* Badge */}
-                    {threads.some(thread => thread.unreadCount > 0) && (
+                    {/* Badge: unread chats + unseen system notifications */}
+                    {(threads.reduce((total, thread) => total + thread.unreadCount, 0) + systemNotifCount) > 0 && (
                       <span className="absolute -top-1.5 -right-1.5 bg-red-600 text-white text-xs font-bold px-1.5 py-0.5 rounded-full">
-                        {threads.reduce((total, thread) => total + thread.unreadCount, 0)}
+                        {threads.reduce((total, thread) => total + thread.unreadCount, 0) + systemNotifCount}
                       </span>
                     )}
                   </div>
@@ -256,6 +306,16 @@ const Header: React.FC = () => {
                       >
                         <LifeBuoy className="w-4 h-4 mr-3" />Support
                       </Link>
+
+                      {isAdminLikeUser(currentUser) && (
+                        <Link
+                          href="/admin/analytics"
+                          className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                          onClick={() => setShowProfileMenu(false)}
+                        >
+                          <ShieldCheck className="w-4 h-4 mr-3" />Admin Dashboard
+                        </Link>
+                      )}
 
                       <hr className="my-1" />
 

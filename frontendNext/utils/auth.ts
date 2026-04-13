@@ -383,9 +383,86 @@ export const getUserById = async (id: string): Promise<User | null> => {
     const userData = response.data;
 
     return mapApiUserToUser(userData);
+    const user: User = {
+      id: userData.id,
+      firstName: userData.firstName,
+      lastName: userData.lastName,
+      name: userData.name,
+      email: userData.email,
+      phoneNumber: userData.phoneNumber || undefined,
+      dateOfBirth: userData.dateOfBirth || undefined,
+
+      country: userData.country,
+      streetAddress: userData.streetAddress,
+      city: userData.city,
+      state: userData.state,
+      zipCode: userData.zipCode,
+      coordinates: userData.coordinates || undefined,
+      maxDistance: userData.maxDistance || undefined,
+
+      avatar:
+        userData.avatar ||
+        `https://ui-avatars.com/api/?name=${encodeURIComponent(
+          userData.name
+        )}&background=f97316&color=fff`,
+      profilePicture: userData.profilePicture || undefined,
+
+      createdAt: new Date(userData.createdAt),
+
+      bio: userData.bio || undefined,
+      preferredLanguages: userData.preferredLanguages || undefined,
+      stripe_account_id: userData.stripe_account_id || undefined,
+      is_admin: Boolean(userData.is_admin ?? userData.isAdmin),
+
+    };
+
+    return user;
   } catch (error) {
     console.error(`Failed to get user ${id}:`, error);
     return null;
+  }
+};
+
+// -------- Forgot / Reset Password --------
+
+export const forgotPassword = async (email: string) => {
+  const API_URL = getApiUrl();
+  try {
+    const response = await axios.post(
+      `${API_URL}/api/v1/auth/forgot-password`,
+      { email },
+      { headers: { "Content-Type": "application/json" } }
+    );
+    return { success: true, message: response.data.message };
+  } catch (err) {
+    let errorMessage = "Failed to send reset email";
+    if (axios.isAxiosError(err)) {
+      errorMessage = err.response?.data?.detail || err.message;
+    }
+    throw new Error(errorMessage);
+  }
+};
+
+export const resetPassword = async (
+  email: string,
+  token: string,
+  newPassword: string,
+  confirmPassword: string
+) => {
+  const API_URL = getApiUrl();
+  try {
+    const response = await axios.post(
+      `${API_URL}/api/v1/auth/reset-password`,
+      { email, token, new_password: newPassword, confirm_password: confirmPassword },
+      { headers: { "Content-Type": "application/json" } }
+    );
+    return { success: true, message: response.data.message };
+  } catch (err) {
+    let errorMessage = "Failed to reset password";
+    if (axios.isAxiosError(err)) {
+      errorMessage = err.response?.data?.detail || err.message;
+    }
+    throw new Error(errorMessage);
   }
 };
 

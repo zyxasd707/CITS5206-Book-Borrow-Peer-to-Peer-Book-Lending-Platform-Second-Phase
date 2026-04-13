@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Card from "@/app/components/ui/Card";
 import Button from "@/app/components/ui/Button";
 import Input from "@/app/components/ui/Input";
+import { LoadingState } from "@/app/components/ui/AsyncState";
 
 import { getCurrentUser, updateUser, getUserById } from "@/utils/auth";
 import type { User } from "@/app/types/user";
@@ -123,6 +124,10 @@ export default function CheckoutPage() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [checkouts, setCheckouts] = useState<any[]>([]);
   const [ownersMap, setOwnersMap] = useState<Record<string, { name: string; zipCode: string; stripeAccountId?: string | null }>>({});
+  const [ownersMap, setOwnersMap] = useState<
+    Record<string, { name: string; zipCode: string; stripeAccountId?: string }>
+  >({});
+  const [ownersMissingZip, setOwnersMissingZip] = useState<string[]>([]);
   const [serviceRate, setServiceRate] = useState<number>(0);
   const currentCheckout = checkouts.length > 0 ? checkouts[0] : null;
   const items: CheckoutItem[] = currentCheckout?.items || [];
@@ -170,10 +175,15 @@ export default function CheckoutPage() {
     async function loadOwners() {
       const uniqueOwnerIds = Array.from(new Set(items.map((b) => b.ownerId)));
       const map: Record<string, { name: string; zipCode: string; stripeAccountId?: string | null }> = {};
+      const map: Record<string, { name: string; zipCode: string; stripeAccountId?: string }> = {};
+      const missingZipOwnerIds: string[] = [];
 
       for (const id of uniqueOwnerIds) {
         try {
           const u = await getUserById(id);
+          if (!u?.zipCode?.trim()) {
+            missingZipOwnerIds.push(id);
+          }
           map[id] = {
             name: [u?.firstName, u?.lastName].filter(Boolean).join(" ") || "Unknown Owner",
             zipCode: u?.zipCode || "0000",
@@ -181,10 +191,16 @@ export default function CheckoutPage() {
           };
         } catch {
           map[id] = { name: "Unknown Owner", zipCode: "0000", stripeAccountId: null };
+            stripeAccountId: u?.stripe_account_id,
+          };
+        } catch {
+          missingZipOwnerIds.push(id);
+          map[id] = { name: "Unknown Owner", zipCode: "0000", stripeAccountId: undefined };
         }
       }
 
       setOwnersMap(map);
+      setOwnersMissingZip(missingZipOwnerIds);
     }
 
     if (items.length > 0) loadOwners();
@@ -402,10 +418,22 @@ export default function CheckoutPage() {
     const co = checkouts[0];
     if (!co || !currentUser) return;
 
-    const ownerIds = Array.from(new Set(items.map((item) => item.ownerId).filter(Boolean)));
+    const ownerIds = Array.from(new Set(items.map((it) => it.ownerId))).filter(Boolean);
     const lenderAccountId =
-      ownerIds.map((ownerId) => ownersMap[ownerId]?.stripeAccountId).find(Boolean) ||
-      TEST_DESTINATION_ACCOUNT_ID;
+      ownerIds.length > 0 ? ownersMap[ownerIds[0]]?.stripeAccountId : undefined;
+
+    if (!lenderAccountId) {
+      alert("Owner payout account is not set. Please contact the book owner and try again.");
+      return;
+    }
+
+    const toCents = (n: number | undefined | null) =>
+      Math.max(0, Math.round((n || 0) * 100));
+    console.log("[startPayment] lenderAccountId =", lenderAccountId);
+    console.log("[startPayment] checkout[0] =", co);
+    console.log("[startPayment] donation =", donation);
+
+    const totalAmount = co.totalDue + donation;
 
     try {
       setPaying(true);
@@ -483,6 +511,16 @@ export default function CheckoutPage() {
       return;
     }
 
+    // Backend requires owner zipcode for checkout creation/update.
+    if (ownersMissingZip.length > 0) {
+      const ownerNames = ownersMissingZip.map((id) => ownersMap[id]?.name || id).join(", ");
+      alert(
+        `Checkout cannot continue because owner profile postcode is missing: ${ownerNames}. ` +
+        "Please contact the owner(s) to complete their profile postcode."
+      );
+      return;
+    }
+
     setShowDonationModal(true);
   };
 
@@ -499,9 +537,11 @@ export default function CheckoutPage() {
   // ---------- When Empty ----------
   if (!items.length) {
     return (
-      <div className="p-6 text-center">
-        <h2 className="text-lg font-medium text-gray-900 mb-4">Loading...</h2>
-        {/* <Button variant="outline" onClick={() => router.push("/books")}>Back to Books</Button> */}
+      <div className="p-6">
+        <LoadingState
+          title="Preparing checkout..."
+          description="Loading cart items, shipping options, and pricing."
+        />
       </div>
     );
   }
@@ -515,7 +555,7 @@ export default function CheckoutPage() {
   ));
 
   return (
-    <div className="max-w-6xl mx-auto p-6 space-y-6">
+    <div className="max-w-6xl mx-auto p-4 sm:p-6 space-y-6">
       <h1 className="text-2xl font-bold">Checkout</h1>
 
       {/* Address */}
@@ -547,7 +587,7 @@ export default function CheckoutPage() {
       {/* Items & Delivery */}
       <Card>
         <div className="p-4 space-y-3">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-2">
             <h2 className="text-lg font-semibold">Items & Delivery</h2>
             <Button variant="outline" onClick={saveDeliveryMethod} className="text-sm">Save Delivery Method</Button>
 
@@ -564,7 +604,7 @@ export default function CheckoutPage() {
                   <div className="divide-y space-y-2">
                     {ownerItems.map((b: CheckoutItem) => (
                       <div key={b.bookId} className="py-3">
-                        <div className="flex items-center justify-between">
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                           <div>
                             <div className="font-medium">
                               《{b.titleOr}》
@@ -575,7 +615,7 @@ export default function CheckoutPage() {
                           </div>
 
                           {/* Post / Pickup select */}
-                          <div className="flex items-center gap-2">
+                          <div className="flex flex-wrap items-center gap-2">
                             <span className="text-sm text-gray-700">Delivery Method:</span>
                             {b.deliveryMethod === "post" && (
                               <span className="px-4 py-1 rounded bg-black text-white text-sm">Post</span>
@@ -621,7 +661,7 @@ export default function CheckoutPage() {
                         <h4 className="text-sm font-semibold mb-2 text-gray-800">
                           AusPost Shipping Quotes
                         </h4>
-                        <div className="flex gap-2">
+                        <div className="flex flex-wrap gap-2">
                           {quotesByOwner[ownerId].map((q) => {
                             const choiceKey = q.serviceLevel === "Standard" ? "standard" : "express";
                             return (

@@ -68,5 +68,12 @@ class Settings:
         allowed_origins_str = os.getenv('ALLOWED_ORIGINS', '*')
         self.ALLOWED_ORIGINS = [origin.strip() for origin in allowed_origins_str.split(',')]
 
+        # Frontend URL (used for password reset links)
+        self.FRONTEND_URL = os.getenv('FRONTEND_URL', 'http://localhost')
+
+        # Email sender info
+        self.BREVO_SENDER_EMAIL = os.getenv('BREVO_SENDER_EMAIL', '')
+        self.BREVO_SENDER_NAME = os.getenv('BREVO_SENDER_NAME', 'BookHive')
+
 # Instantiate settings (will raise errors if required vars are missing)
 settings = Settings()

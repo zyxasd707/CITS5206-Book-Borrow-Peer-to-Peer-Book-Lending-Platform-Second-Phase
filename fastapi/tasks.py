@@ -1,9 +1,10 @@
 """
-tasks.py - Background tasks for order status updates
+tasks.py - Background tasks for order status updates and automated refunds
 
-This module defines a scheduled job to automatically update order statuses 
-in the database, such as transitioning orders from PENDING_SHIPMENT to BORROWING
-and marking overdue orders.
+This module defines scheduled jobs to:
+- Update order statuses (PENDING_SHIPMENT → BORROWING, BORROWING → OVERDUE, etc.)
+- Auto refund orders where lender never shipped (every hour)
+- Auto cancel orders with failed payments (every 24 hours)
 
 Usage:
     from task import start_scheduler, stop_scheduler
@@ -32,13 +33,49 @@ def update_order_statuses():
     finally:
         db.close()
 
+
+def refund_unshipped_orders():
+    """Hourly: auto refund orders where lender did not ship within 3 days."""
+    from services.payment_gateway_service import auto_refund_unshipped_orders
+
+    db = next(get_db())
+    try:
+        count = auto_refund_unshipped_orders(db)
+        if count:
+            print(f"[scheduler] Auto refunded {count} unshipped orders")
+    finally:
+        db.close()
+
+
+def cancel_failed_payments():
+    """Daily: auto cancel orders whose payments failed or were abandoned."""
+    from services.payment_gateway_service import auto_cancel_failed_payments
+
+    db = next(get_db())
+    try:
+        count = auto_cancel_failed_payments(db)
+        if count:
+            print(f"[scheduler] Auto canceled {count} orders with failed payments")
+    finally:
+        db.close()
+
+
 def start_scheduler():
     """Start the scheduled task scheduler"""
-    # update when app starts
+    # Run once on startup
     update_order_statuses()
+
+    # Existing: order status transitions (every hour)
     scheduler.add_job(update_order_statuses, 'interval', hours=1, id="order_status_job")
+
+    # MVP6: auto refund unshipped orders (every hour)
+    scheduler.add_job(refund_unshipped_orders, 'interval', hours=1, id="refund_unshipped_job")
+
+    # MVP6: auto cancel failed payments (every 24 hours)
+    scheduler.add_job(cancel_failed_payments, 'interval', hours=24, id="cancel_failed_payments_job")
+
     scheduler.start()
-    print("Order status scheduler started")
+    print("Order status scheduler started (with MVP6 refund jobs)")
 
 def stop_scheduler():
     """Stop the scheduled task scheduler"""

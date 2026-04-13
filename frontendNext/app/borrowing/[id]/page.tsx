@@ -11,6 +11,7 @@ import Modal from "@/app/components/ui/Modal";
 import { toast } from "sonner";
 import { getApiUrl, getToken, getCurrentUser } from "@/utils/auth";
 import { getReviewsByOrder } from "@/utils/review";
+import { getRefundsForOrder, cancelOrderWithRefund } from "@/utils/payments";
 
 import type { OrderStatus, ApiOrder } from "@/app/types/order";
 import type { User } from "@/app/types/user";
@@ -29,6 +30,13 @@ const fmtAUD = (amount?: number) =>
   typeof amount === "number" ? `A$ ${amount.toFixed(2)}` : "—";
 
 const fmtDate = (v?: string | null) => (v ? new Date(v).toLocaleString() : "—");
+
+const TX_STAGE_META = {
+  pending: { label: "Pending", className: "bg-amber-100 text-amber-800" },
+  paid: { label: "Paid", className: "bg-blue-100 text-blue-800" },
+  shipped: { label: "Shipped", className: "bg-green-100 text-green-800" },
+  canceled: { label: "Canceled", className: "bg-gray-100 text-gray-700" },
+} as const;
 
 const fetchOrderDetails = async (orderId: string): Promise<ApiOrder | null> => {
   try {
@@ -65,6 +73,17 @@ export default function OrderDetailPage() {
   const [carrier, setCarrier] = useState("AUSPOST"); // default carrier="AUSPOST"
   const [confirmReceiveModalOpen, setConfirmReceiveModalOpen] = useState(false);
 
+  // MVP6: refund state
+  const [refunds, setRefunds] = useState<Array<{
+    refund_id: string;
+    amount: number;
+    currency: string;
+    status: string;
+    reason: string | null;
+    created_at: string;
+    updated_at: string;
+  }>>([]);
+
   useEffect(() => {
     const loadData = async () => {
       if (!id) return;
@@ -80,6 +99,14 @@ export default function OrderDetailPage() {
 
         if (orderData) {
           setOrder(orderData);
+
+          // MVP6: fetch refund records for this order
+          try {
+            const refundData = await getRefundsForOrder(id);
+            setRefunds(refundData.refunds || []);
+          } catch (err) {
+            console.error("Failed to fetch refunds:", err);
+          }
 
           // Check if current user has already reviewed the other party in this order
           if (userData) {
@@ -148,6 +175,17 @@ export default function OrderDetailPage() {
 
   const isOwner = user?.id === order?.owner.id;
   const isBorrower = user?.id === order?.borrower.id;
+  const txStage: keyof typeof TX_STAGE_META = useMemo(() => {
+    if (!order) return "pending";
+    if (order.status === "CANCELED") return "canceled";
+    if (order.status === "PENDING_PAYMENT") return "pending";
+    if (order.status === "PENDING_SHIPMENT") return "paid";
+    if (order.shippingOutTrackingNumber) return "shipped";
+    if (["BORROWING", "OVERDUE", "RETURNED", "COMPLETED"].includes(order.status)) {
+      return "shipped";
+    }
+    return "paid";
+  }, [order]);
 
   const handleCancelOrder = async () => {
     if (!user) {
@@ -167,6 +205,22 @@ export default function OrderDetailPage() {
         toast.error("Authentication required. Please log in again.");
         router.push("/auth");
         return;
+      }
+
+      // MVP6: If order is PENDING_SHIPMENT, use refund-cancel endpoint
+      if (order?.status === "PENDING_SHIPMENT") {
+        try {
+          const result = await cancelOrderWithRefund(order.id);
+          toast.success(`Order cancelled. Refund of ${(result.amount / 100).toFixed(2)} ${result.currency} initiated.`);
+          const updatedOrder = await fetchOrderDetails(id);
+          if (updatedOrder) setOrder(updatedOrder);
+          // Refresh refund data
+          const refundData = await getRefundsForOrder(id);
+          setRefunds(refundData.refunds || []);
+          return;
+        } catch (refundErr) {
+          console.error("Refund-cancel failed, falling back:", refundErr);
+        }
       }
 
       const res = await fetch(
@@ -341,6 +395,13 @@ export default function OrderDetailPage() {
                 )}
               </div>
             )}
+            <div className="pt-2">
+              <span
+                className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ${TX_STAGE_META[txStage].className}`}
+              >
+                Transaction: {TX_STAGE_META[txStage].label}
+              </span>
+            </div>
           </div>
         </Card>
 
@@ -501,6 +562,83 @@ export default function OrderDetailPage() {
         </Card>
       </div>
 
+      {/* Section: Refund Status (MVP6 F1) */}
+      {refunds.length > 0 && (
+        <Card className="p-0 overflow-hidden">
+          <div className="p-4 flex items-center justify-between">
+            <h3 className="text-base font-semibold flex items-center gap-2">
+              <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5 text-green-700" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/><path d="M18 12a2 2 0 0 0 0 4h4v-4Z"/></svg>
+              Refund Status
+            </h3>
+            {(() => {
+              const latestStatus = refunds[0]?.status;
+              if (latestStatus === "succeeded" || latestStatus === "refunded") {
+                return (
+                  <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-green-100 text-green-800 text-xs font-bold">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                    Refund Completed
+                  </span>
+                );
+              }
+              if (latestStatus === "failed") {
+                return (
+                  <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-red-100 text-red-800 text-xs font-bold">
+                    Refund Failed
+                  </span>
+                );
+              }
+              return (
+                <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-amber-100 text-amber-800 text-xs font-bold">
+                  <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+                  Processing...
+                </span>
+              );
+            })()}
+          </div>
+
+          <div className="border-t" />
+
+          <div className="p-4 space-y-4">
+            {refunds.map((r) => (
+              <div key={r.refund_id} className="flex items-start justify-between gap-4 p-3 bg-gray-50 rounded-lg">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className={`w-2 h-2 rounded-full ${
+                      r.status === "succeeded" || r.status === "refunded"
+                        ? "bg-green-500"
+                        : r.status === "failed"
+                        ? "bg-red-500"
+                        : "bg-amber-500 animate-pulse"
+                    }`} />
+                    <span className="text-sm font-semibold capitalize">{r.status}</span>
+                  </div>
+                  {r.reason && (
+                    <p className="text-xs text-gray-500 mt-1">{r.reason}</p>
+                  )}
+                  <p className="text-xs text-gray-400 mt-1">
+                    {new Date(r.created_at).toLocaleString()}
+                  </p>
+                </div>
+                <div className="text-right shrink-0">
+                  <p className="text-lg font-bold">
+                    {(r.amount / 100).toFixed(2)}
+                  </p>
+                  <p className="text-xs text-gray-400 uppercase">{r.currency}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {refunds[0]?.status === "failed" && (
+            <div className="border-t p-4 bg-red-50">
+              <p className="text-sm text-red-700">
+                Your refund could not be processed. Please contact support for assistance.
+              </p>
+            </div>
+          )}
+        </Card>
+      )}
+
       {/* Section 4 — Actions */}
       <Card className="p-4">
         <h3 className="text-base font-semibold mb-3">Actions</h3>
@@ -519,7 +657,7 @@ export default function OrderDetailPage() {
               </Button>
             )}
 
-          {(isBorrower || isOwner) && order.status === "PENDING_PAYMENT" && (
+          {(isBorrower || isOwner) && (order.status === "PENDING_PAYMENT" || order.status === "PENDING_SHIPMENT") && (
             <Button
               variant="outline"
               className="border-red-600 text-red-600 hover:bg-red-50"
