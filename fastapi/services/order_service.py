@@ -14,6 +14,10 @@ from models.complaint import Complaint
 from sqlalchemy import or_
 from services.complaint_service import ComplaintService
 from typing import Set
+import logging
+from services.email_service import send_order_confirmation_receipt_email
+
+logger = logging.getLogger(__name__)
 
 class OrderService:
     """
@@ -105,6 +109,11 @@ class OrderService:
         if not fee_rule:
             return 0.0
 
+    @staticmethod
+    def _is_post_shipping(shipping_method: Optional[str]) -> bool:
+        method = (shipping_method or "").strip().lower()
+        return method in {"post", "delivery"}
+
         if fee_rule.fee_type.upper() == "FIXED":
             return float(fee_rule.value)
         elif fee_rule.fee_type.upper() == "PERCENT":
@@ -168,7 +177,7 @@ class OrderService:
                     deposit_or_sale_amount += float(item.deposit or 0)
 
             # Calculate shipping fee
-            post_items = [item for item in order_items if item.shipping_method.lower() == "delivery"]
+            post_items = [item for item in order_items if OrderService._is_post_shipping(item.shipping_method)]
             if post_items:
                 # Multiple items only post once
                 # if pickup, shipping_out_fee_amount = 0
@@ -209,7 +218,7 @@ class OrderService:
                 owner_id = first_item.owner_id,
                 borrower_id = checkout.user_id,
                 action_type = first_item.action_type.lower(),
-                shipping_method = "post" if first_item.shipping_method.lower() == "delivery" else "pickup",
+                shipping_method = "post" if OrderService._is_post_shipping(first_item.shipping_method) else "pickup",
                 deposit_or_sale_amount = order_info["deposit_or_sale_amount"],
                 service_fee_amount = order_info["service_fee_amount"],
                 shipping_out_fee_amount = order_info["shipping_out_fee_amount"],
@@ -259,6 +268,38 @@ class OrderService:
             remove_cart_items_by_book_ids(db, book_ids=list(all_book_ids), current_user=current_user)
         except Exception as e:
             print(f"Failed to clear cart items after checkout: {e}")
+
+        if current_user and current_user.email:
+            try:
+                send_order_confirmation_receipt_email(
+                    email=current_user.email,
+                    username=current_user.name or "there",
+                    payment_id=payment_id,
+                    total_amount=sum(float(order.total_paid_amount or 0) for order in created_orders),
+                    order_created_at=created_orders[0].created_at.strftime("%d/%m/%Y %H:%M") if created_orders and created_orders[0].created_at else "",
+                    payment_method="Card via Stripe",
+                    contact_name=checkout.contact_name,
+                    phone=checkout.phone,
+                    street=checkout.street,
+                    city=checkout.city,
+                    postcode=checkout.postcode,
+                    country=checkout.country,
+                    orders=[
+                        {
+                            "order_id": order.id,
+                            "action_type": order.action_type,
+                            "shipping_method": order.shipping_method,
+                            "deposit_or_sale_amount": float(order.deposit_or_sale_amount or 0),
+                            "shipping_fee_amount": float(order.shipping_out_fee_amount or 0),
+                            "service_fee_amount": float(order.service_fee_amount or 0),
+                            "total_paid_amount": float(order.total_paid_amount or 0),
+                            "books": [ob.book.title_or for ob in order.books if ob.book],
+                        }
+                        for order in created_orders
+                    ],
+                )
+            except Exception as e:
+                logger.exception("Failed to send confirmation/receipt email for checkout %s: %s", checkout_id, e)
         return created_orders
     
 

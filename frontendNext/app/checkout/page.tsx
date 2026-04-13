@@ -14,10 +14,8 @@ import { getBookById } from "@/utils/books";
 import { getMyCheckouts, rebuildCheckout } from "@/utils/checkout";
 import { listServiceFees } from "@/utils/serviceFee";
 import { getShippingQuotes } from "@/utils/shipping";
-//import { createOrder } from "@/utils/borrowingOrders";
-
-import { loadStripe } from "@stripe/stripe-js";
 import { Elements, PaymentElement, useElements, useStripe } from "@stripe/react-stripe-js";
+import { hasStripePublishableKey, stripePromise } from "@/utils/stripe";
 import { initiatePayment } from "@/utils/payments";
 
 // When the page loads → Check if checkout exists, create a new one if not
@@ -53,14 +51,14 @@ interface CheckoutItem {
   shippingQuote?: number;
 }
 
-const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PK!);
-
 type PaymentConfirmFormProps = {
   clientSecret: string;
   onSuccess?: () => void;
 };
 
-// Payment Confirm
+const TEST_DESTINATION_ACCOUNT_ID =
+  process.env.NEXT_PUBLIC_STRIPE_TEST_DESTINATION_ACCOUNT_ID || "acct_1TGXxXQvCdOoVRC6";
+
 function PaymentConfirmForm({ clientSecret, onSuccess }: PaymentConfirmFormProps) {
   const stripe = useStripe();
   const elements = useElements();
@@ -70,83 +68,62 @@ function PaymentConfirmForm({ clientSecret, onSuccess }: PaymentConfirmFormProps
 
   const handleConfirm = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!stripe || !elements || !ready) {
-      console.log("[confirm] blocked:", { hasStripe: !!stripe, hasElements: !!elements, ready });
-      return;
-    }
+    if (!stripe || !elements || !ready) return;
 
     setSubmitting(true);
     setErr(null);
 
-    console.log("[confirm] calling elements.submit()");
     const { error: submitError } = await elements.submit();
-    console.log("[confirm] elements.submit result:", submitError);
     if (submitError) {
       setSubmitting(false);
       setErr(submitError.message || "Please check your details.");
       return;
     }
 
-    console.log("[confirm] calling stripe.confirmPayment()");
     const result = await stripe.confirmPayment({
       elements,
-      // return_url 
       confirmParams: {
-        return_url: typeof window !== "undefined"
-          ? `${window.location.origin}/checkout/success`
-          : undefined,
+        return_url:
+          typeof window !== "undefined"
+            ? `${window.location.origin}/checkout/success`
+            : undefined,
       },
       redirect: "if_required",
     });
 
     setSubmitting(false);
 
-    console.log("[confirm] result:", result);
-
     if (result.error) {
-      console.error("[confirm] error:", result.error);
       setErr(result.error.message || "Payment failed");
       return;
     }
 
-    const pi = result.paymentIntent;
-    if (pi?.client_secret) {
-      localStorage.setItem("last_pi_client_secret", pi.client_secret);
-    }
-    if (pi?.id) {
-      localStorage.setItem("last_pi_id", pi.id);
-    }
     onSuccess?.();
-
-    console.log("[confirm] success, PI:", { id: pi?.id, status: pi?.status });
   };
-
 
   return (
     <form onSubmit={handleConfirm} className="space-y-3">
       <PaymentElement
-        onReady={() => { setReady(true); console.log("[PaymentElement] ready"); }}
-        onChange={(ev) => { setReady(true); console.log("[PaymentElement] change", ev.complete); }}
+        onReady={() => setReady(true)}
+        onChange={() => setReady(true)}
       />
       <button
         className="px-4 py-2 rounded-md bg-black text-white w-full"
         disabled={!stripe || !elements || !ready || submitting}
       >
         {submitting ? "Processing..." : "Confirm Payment"}
-
       </button>
       {err && <p className="text-red-600 text-sm">{err}</p>}
     </form>
   );
 }
 
-
-
 export default function CheckoutPage() {
   const router = useRouter();
   const [globalShippingChoice, setGlobalShippingChoice] = useState<"standard" | "express" | null>("standard");
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [checkouts, setCheckouts] = useState<any[]>([]);
+  const [ownersMap, setOwnersMap] = useState<Record<string, { name: string; zipCode: string; stripeAccountId?: string | null }>>({});
   const [ownersMap, setOwnersMap] = useState<
     Record<string, { name: string; zipCode: string; stripeAccountId?: string }>
   >({});
@@ -197,6 +174,7 @@ export default function CheckoutPage() {
   useEffect(() => {
     async function loadOwners() {
       const uniqueOwnerIds = Array.from(new Set(items.map((b) => b.ownerId)));
+      const map: Record<string, { name: string; zipCode: string; stripeAccountId?: string | null }> = {};
       const map: Record<string, { name: string; zipCode: string; stripeAccountId?: string }> = {};
       const missingZipOwnerIds: string[] = [];
 
@@ -209,6 +187,10 @@ export default function CheckoutPage() {
           map[id] = {
             name: [u?.firstName, u?.lastName].filter(Boolean).join(" ") || "Unknown Owner",
             zipCode: u?.zipCode || "0000",
+            stripeAccountId: u?.stripe_account_id || null,
+          };
+        } catch {
+          map[id] = { name: "Unknown Owner", zipCode: "0000", stripeAccountId: null };
             stripeAccountId: u?.stripe_account_id,
           };
         } catch {
@@ -455,6 +437,10 @@ export default function CheckoutPage() {
 
     try {
       setPaying(true);
+      const toCents = (n: number | undefined | null) =>
+        Math.max(0, Math.round((n || 0) * 100));
+      const totalAmount = co.totalDue + donation;
+
       const res = await initiatePayment({
         user_id: currentUser.id,
         amount: toCents(totalAmount),
@@ -467,7 +453,12 @@ export default function CheckoutPage() {
         checkout_id: co.checkoutId,
         lender_account_id: lenderAccountId,
       });
-      console.log("[initiatePayment] toCall:", res)
+
+      if (typeof window !== "undefined") {
+        localStorage.setItem("last_pi_id", res.payment_id);
+        localStorage.setItem("last_pi_client_secret", res.client_secret);
+        localStorage.setItem("last_checkout_id", co.checkoutId);
+      }
 
       setClientSecret(res.client_secret);
       setShowDonationModal(false);
@@ -770,6 +761,12 @@ export default function CheckoutPage() {
             {paying ? "Preparing..." : "Checkout"}
           </Button>
         </div>
+      ) : !hasStripePublishableKey ? (
+        <Card>
+          <div className="p-4 rounded-md bg-red-50 border border-red-200 text-red-700">
+            Stripe is not configured. Set `NEXT_PUBLIC_STRIPE_PK` in your environment and rebuild the frontend.
+          </div>
+        </Card>
       ) : (
         <Elements
           key={clientSecret}

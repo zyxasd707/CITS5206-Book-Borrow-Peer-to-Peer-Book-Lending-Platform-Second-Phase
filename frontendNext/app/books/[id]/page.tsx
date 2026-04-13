@@ -64,6 +64,22 @@ const [ownerRating, setOwnerRating] = useState<RatingStats>({
   ratingDistribution: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 },
 });
 
+  const ownerDisplayName =
+    [owner?.firstName, owner?.lastName].filter(Boolean).join(" ").trim() ||
+    owner?.name ||
+    [book?.owner?.firstName, book?.owner?.lastName].filter(Boolean).join(" ").trim() ||
+    book?.owner?.name ||
+    "Unknown owner";
+
+  const ownerLocation =
+    [
+      owner?.city ?? book?.owner?.city,
+      owner?.state ?? book?.owner?.state,
+      owner?.zipCode ?? book?.owner?.zipCode,
+    ]
+      .filter(Boolean)
+      .join(", ");
+
 
   // pull cart first
   useEffect(() => {
@@ -445,30 +461,47 @@ const [ownerRating, setOwnerRating] = useState<RatingStats>({
               </Card>
 
               {/* owner info */}
-              {owner && (
+              {(owner || book.owner) && (
                 <Card>
                   <h3 className="text-lg font-semibold text-gray-900 mb-4">Book Owner</h3>
                   <div className="flex items-center space-x-4">
-                    <Avatar user={owner} size={64} />
+                    <Avatar
+                      user={
+                        owner || {
+                          id: book.owner?.id || book.ownerId,
+                          firstName: book.owner?.firstName || "",
+                          lastName: book.owner?.lastName || "",
+                          name: book.owner?.name || ownerDisplayName,
+                          email: "",
+                          country: "",
+                          streetAddress: "",
+                          city: book.owner?.city || "",
+                          state: book.owner?.state || "",
+                          zipCode: book.owner?.zipCode || "",
+                          createdAt: new Date(),
+                          avatar: book.owner?.avatar,
+                          profilePicture: book.owner?.profilePicture,
+                        }
+                      }
+                      size={64}
+                    />
 
                     <div className="flex-1">
                       <h4 className="font-semibold text-gray-900">
-                        <Link
-                          href={`/profile/${owner.id}`}
-                          className="hover:underline hover:text-black transition"
-                        >
-                          {owner.firstName} {owner.lastName}
-                        </Link>
+                        {owner ? (
+                          <Link
+                            href={`/profile/${owner.id}`}
+                            className="hover:underline hover:text-black transition"
+                          >
+                            {ownerDisplayName}
+                          </Link>
+                        ) : (
+                          ownerDisplayName
+                        )}
                       </h4>
                       <div className="flex items-center text-gray-600 text-sm mt-1">
                         <MapPin className="w-4 h-4 mr-1" />
-                        <p>
-                          {[
-                            owner.city,
-                            owner.state,
-                            owner.zipCode,
-                          ].filter(Boolean).join(", ")}
-                        </p>
+                        <p>{ownerLocation}</p>
                         <div>
                           {distance > 0 ? ` • ${formatKm(distance)} away from you` : ""}
                         </div>
@@ -490,6 +523,7 @@ const [ownerRating, setOwnerRating] = useState<RatingStats>({
                       onClick={() => {
                         setIsRequestModalOpen(true);
                       }}
+                      disabled={!owner}
                     >
                       <MessageCircle className="w-4 h-4" />
                       Message

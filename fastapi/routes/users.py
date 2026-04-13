@@ -65,6 +65,15 @@ class UserUpdate(BaseModel):
 
 # ------------Helper: Covert ORM to UserResponse--------------------
 def _to_user_response(u: User) -> UserResponse:
+    full_name = (getattr(u, "name", "") or "").strip()
+    first_name = getattr(u, "first_name", None)
+    last_name = getattr(u, "last_name", None)
+    if full_name and (not first_name or not last_name):
+        parts = full_name.split()
+        if parts:
+            first_name = first_name or parts[0]
+            last_name = last_name or (" ".join(parts[1:]) if len(parts) > 1 else "")
+
     dob = getattr(u, "date_of_birth", None)
     if isinstance(dob, (date, datetime)):
         dob_out = dob.isoformat()
@@ -84,8 +93,8 @@ def _to_user_response(u: User) -> UserResponse:
         avatar=getattr(u, "avatar", None),
         profilePicture=getattr(u, "profile_picture", None),
 
-        firstName=getattr(u, "first_name", None),
-        lastName=getattr(u, "last_name", None),
+        firstName=first_name,
+        lastName=last_name,
         phoneNumber=getattr(u, "phone_number", None),
         dateOfBirth=dob_out,
 

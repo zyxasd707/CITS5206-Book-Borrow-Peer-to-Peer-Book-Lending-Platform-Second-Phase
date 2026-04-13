@@ -7,13 +7,6 @@ class VerificationEmailRequest(BaseModel):
     otp: str = ""
 
 
-class ReceiptEmailRequest(BaseModel):
-    email: EmailStr
-    username: str
-    total_amount: float
-    order_id: str
-
-
 class ShipmentConfirmationRequest(BaseModel):
     email: EmailStr
     username: str
