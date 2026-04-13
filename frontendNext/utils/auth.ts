@@ -8,26 +8,6 @@ export const getApiUrl = () => {
   if (configuredUrl) {
     return configuredUrl.replace(/\/$/, "");
   }
-<<<<<<< HEAD
-<<<<<<< Updated upstream
-  return process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-=======
-
-  if (typeof window !== "undefined") {
-    const { hostname, origin } = window.location;
-
-    // Local frontend development often runs without nginx, so use the
-    // FastAPI host directly unless NEXT_PUBLIC_API_URL is explicitly set.
-    if (hostname === "localhost" || hostname === "127.0.0.1") {
-      return "http://localhost:8000";
-    }
-
-    return origin;
-  }
-
-  return "";
->>>>>>> Stashed changes
-=======
 
   // Default to same-origin so nginx can proxy /api requests to FastAPI.
   if (typeof window !== "undefined") {
@@ -35,7 +15,6 @@ export const getApiUrl = () => {
   }
 
   return "";
->>>>>>> Alice_email
 };
 
 
@@ -314,17 +293,6 @@ export const initAuth = () => {
     axios.interceptors.response.use(
       (response) => response,
       (error) => {
-<<<<<<< HEAD
-        if (error.response?.status === 401) {
-          const hadToken = !!localStorage.getItem("access_token");
-          if (hadToken) {
-            console.warn("Session expired, logging out...");
-            localStorage.removeItem("access_token");
-            delete axios.defaults.headers.common["Authorization"];
-            window.dispatchEvent(new Event("auth-changed"));
-            window.location.href = "/auth";
-          }
-=======
         const hasToken = !!localStorage.getItem("access_token");
 
         if (error.response?.status === 401 && hasToken) {
@@ -335,7 +303,6 @@ export const initAuth = () => {
 
           // Notify the global refresh
           window.dispatchEvent(new Event("auth-changed"));
->>>>>>> Alice_email
         }
         return Promise.reject(error);
       }
@@ -360,43 +327,7 @@ export const getCurrentUser = async (): Promise<User | null> => {
 
     const userData = response.data;
 
-<<<<<<< HEAD
-    const user: User = {
-      id: userData.id,
-      firstName: userData.firstName,
-      lastName: userData.lastName,
-      name: userData.name,
-      email: userData.email,
-      phoneNumber: userData.phoneNumber || undefined,
-      dateOfBirth: userData.dateOfBirth || undefined,
-
-      country: userData.country,
-      streetAddress: userData.streetAddress,
-      city: userData.city,
-      state: userData.state,
-      zipCode: userData.zipCode,
-      coordinates: userData.coordinates || undefined,
-      maxDistance: userData.maxDistance || undefined,
-
-      avatar:
-        userData.avatar ||
-        `https://ui-avatars.com/api/?name=${encodeURIComponent(
-          userData.name
-        )}&background=f97316&color=fff`,
-      profilePicture: userData.profilePicture || undefined,
-
-      createdAt: new Date(userData.createdAt),
-
-      bio: userData.bio || undefined,
-      preferredLanguages: userData.preferredLanguages || undefined,
-      stripe_account_id: userData.stripe_account_id || undefined,
-      is_admin: Boolean(userData.is_admin ?? userData.isAdmin),
-    };
-
-    return user;
-=======
     return mapApiUserToUser(userData);
->>>>>>> Alice_email
   } catch (error) {
     console.error("Failed to get user info:", error);
     localStorage.removeItem("access_token");
@@ -451,7 +382,7 @@ export const getUserById = async (id: string): Promise<User | null> => {
 
     const userData = response.data;
 
-<<<<<<< HEAD
+    return mapApiUserToUser(userData);
     const user: User = {
       id: userData.id,
       firstName: userData.firstName,
@@ -486,9 +417,6 @@ export const getUserById = async (id: string): Promise<User | null> => {
     };
 
     return user;
-=======
-    return mapApiUserToUser(userData);
->>>>>>> Alice_email
   } catch (error) {
     console.error(`Failed to get user ${id}:`, error);
     return null;
@@ -531,6 +459,27 @@ export const resetPassword = async (
     return { success: true, message: response.data.message };
   } catch (err) {
     let errorMessage = "Failed to reset password";
+    if (axios.isAxiosError(err)) {
+      errorMessage = err.response?.data?.detail || err.message;
+    }
+    throw new Error(errorMessage);
+  }
+};
+
+export const changePassword = async (currentPassword: string, newPassword: string) => {
+  const API_URL = getApiUrl();
+  try {
+    const response = await axios.post(
+      `${API_URL}/api/v1/auth/change-password`,
+      { current_password: currentPassword, new_password: newPassword },
+      { headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${localStorage.getItem("access_token")}`,
+      }}
+    );
+    return { success: true, message: response.data.message };
+  } catch (err) {
+    let errorMessage = "Failed to change password";
     if (axios.isAxiosError(err)) {
       errorMessage = err.response?.data?.detail || err.message;
     }

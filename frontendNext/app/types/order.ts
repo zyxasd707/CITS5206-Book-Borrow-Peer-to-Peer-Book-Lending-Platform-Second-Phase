@@ -73,10 +73,12 @@ export interface ApiOrder {
   owner: {
     id: string;
     name: string;
+    email: string;
   };
   borrower: {
     id: string;
     name: string;
+    email: string;
   };
   status: OrderStatus;
   actionType: string;

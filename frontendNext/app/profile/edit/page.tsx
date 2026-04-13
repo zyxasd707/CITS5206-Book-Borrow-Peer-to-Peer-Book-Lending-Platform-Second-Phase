@@ -10,7 +10,7 @@ import Select from "@/app/components/ui/Select";
 import type { User } from "@/app/types/user";
 import Avatar from "@/app/components/ui/Avatar";
 import { toast } from "sonner";
-import { updateUser } from "@/utils/auth";
+import { updateUser, changePassword } from "@/utils/auth";
 import { uploadFile } from "@/utils/books";
 import PaymentAccountPromptModal from "@/app/components/ui/PaymentAccountCompleteModal";
 import { createExpressAccount } from "@/utils/payments";
@@ -53,6 +53,25 @@ const UpdateProfilePage: React.FC = () => {
   const [lastSavedUser, setLastSavedUser] = useState<User | null>(null);
   const [dobForm, setDobForm] = useState({ year: "", month: "", day: "" });
 const [uploadingAvatar, setUploadingAvatar] = useState(false);
+const [changingPassword, setChangingPassword] = useState(false);
+const [passwordForm, setPasswordForm] = useState({ currentPassword: "", newPassword: "" });
+
+const handleChangePassword = async () => {
+  if (!passwordForm.currentPassword || !passwordForm.newPassword) {
+    toast.error("Please fill in both password fields");
+    return;
+  }
+  try {
+    setChangingPassword(true);
+    await changePassword(passwordForm.currentPassword, passwordForm.newPassword);
+    toast.success("Password updated successfully!");
+    setPasswordForm({ currentPassword: "", newPassword: "" });
+  } catch (err: any) {
+    toast.error(err.message || "Failed to change password");
+  } finally {
+    setChangingPassword(false);
+  }
+};
 
 useEffect(() => {
   const loadUserData = async () => {
@@ -377,6 +396,34 @@ const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
                     setProfileData({ ...profileData, zipCode: e.target.value })
                   }
                 />
+              </div>
+            </div>
+
+            {/* Change Password */}
+            <div className="mt-8 border-t pt-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Change Password</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Current Password</label>
+                  <Input
+                    type="password"
+                    value={passwordForm.currentPassword}
+                    onChange={(e) => setPasswordForm({ ...passwordForm, currentPassword: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">New Password</label>
+                  <Input
+                    type="password"
+                    value={passwordForm.newPassword}
+                    onChange={(e) => setPasswordForm({ ...passwordForm, newPassword: e.target.value })}
+                  />
+                </div>
+              </div>
+              <div className="mt-4 flex justify-end">
+                <Button type="button" variant="outline" className="border-black text-black" onClick={handleChangePassword} disabled={changingPassword}>
+                  {changingPassword ? "Updating..." : "Update Password"}
+                </Button>
               </div>
             </div>
 
