@@ -3,7 +3,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Search, Filter, Clock, AlertTriangle, ArrowDownCircle, ArrowUpCircle, User as UserIcon } from "lucide-react";
+import { Search, Filter, Package, Clock, AlertTriangle, ArrowDownCircle, ArrowUpCircle, User as UserIcon, RefreshCw } from "lucide-react";
 import CoverImg from "../components/ui/CoverImg";
 import Card from "../components/ui/Card";
 import Button from "../components/ui/Button";
@@ -151,6 +151,14 @@ export default function OrderListPage() {
                 View and manage your borrowing orders
               </p>
             </div>
+            <Button
+              variant="outline"
+              className="flex items-center gap-2 border-black text-black hover:bg-black hover:text-white"
+              onClick={() => router.push("/refunds")}
+            >
+              <RefreshCw className="w-4 h-4" />
+              My Refunds
+            </Button>
           </div>
 
           {/* Search & Filters */}

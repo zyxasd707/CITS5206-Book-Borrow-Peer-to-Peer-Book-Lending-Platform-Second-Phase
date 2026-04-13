@@ -3,7 +3,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { Clock, Truck, ArrowLeft, AlertTriangle } from "lucide-react";
+import { Clock, Truck, ArrowLeft, AlertTriangle, ExternalLink } from "lucide-react";
 import CoverImg from "@/app/components/ui/CoverImg";
 import Card from "@/app/components/ui/Card";
 import Button from "@/app/components/ui/Button";
@@ -636,6 +636,18 @@ export default function OrderDetailPage() {
               </p>
             </div>
           )}
+
+          <div className="border-t p-4">
+            <Button
+              variant="outline"
+              size="sm"
+              className="flex items-center gap-2 border-black text-black hover:bg-black hover:text-white"
+              onClick={() => router.push(`/refunds/${id}`)}
+            >
+              <ExternalLink className="w-4 h-4" />
+              View Refund Details
+            </Button>
+          </div>
         </Card>
       )}
 
