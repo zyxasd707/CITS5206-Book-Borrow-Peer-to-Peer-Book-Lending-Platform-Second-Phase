@@ -96,7 +96,7 @@ MEDIA_ROOT = Path(__file__).parent / "media"
 MEDIA_ROOT.mkdir(parents=True, exist_ok=True)
 app.mount("/media", StaticFiles(directory=str(MEDIA_ROOT)), name="media")
 
-app.include_router(upload_router)
+app.include_router(upload_router, prefix="/api/v1")
 
 # Include auth router
 app.include_router(auth_router, prefix="/api/v1")
