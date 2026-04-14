@@ -137,6 +137,7 @@ export default function MessagesPage() {
   const [messageInput, setMessageInput] = useState("");
   const [threads, setThreads] = useState<ChatThread[]>([]);
   const [loading, setLoading] = useState(true);
+  const [personalMobileView, setPersonalMobileView] = useState<"threads" | "chat">("threads");
   const wsRef = useRef<WebSocket | null>(null);
   const selectedThreadRef = useRef<ChatThread | null>(null);
 
@@ -145,6 +146,7 @@ export default function MessagesPage() {
   const [selectedNotification, setSelectedNotification] = useState<SystemNotification | null>(null);
   const [notifLoading, setNotifLoading] = useState(false);
   const [systemNotifCount, setSystemNotifCount] = useState(0);
+  const [systemMobileView, setSystemMobileView] = useState<"list" | "detail">("list");
 
   // Sync tab with URL param
   useEffect(() => {
@@ -378,6 +380,7 @@ export default function MessagesPage() {
   // ── Chat handlers ──
   const handleThreadSelect = async (thread: ChatThread) => {
     setSelectedThread(thread);
+    setPersonalMobileView("chat");
     try {
       const messageHistory = await getConversation(thread.user.email);
       setSelectedThread({ ...thread, messages: messageHistory });
@@ -479,6 +482,11 @@ export default function MessagesPage() {
   // ── Tab switch handler ──
   const switchTab = (tab: ViewTab) => {
     setActiveTab(tab);
+    if (tab === "personal") {
+      setPersonalMobileView("threads");
+    } else {
+      setSystemMobileView("list");
+    }
     const url = tab === "system" ? "/message?tab=system" : "/message";
     window.history.replaceState(null, "", url);
   };
@@ -494,9 +502,38 @@ export default function MessagesPage() {
   // RENDER
   // ══════════════════════════════════════════════════════════════
   return (
-    <div className="flex h-[calc(100vh-4rem)] bg-white">
+    <div className="flex h-[calc(100vh-4rem)] flex-col md:flex-row bg-white">
+      {/* Mobile top navigation */}
+      <div className="md:hidden border-b border-gray-200 p-2 bg-gray-50">
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            onClick={() => switchTab("personal")}
+            className={`rounded-lg px-3 py-2 text-sm font-semibold ${
+              activeTab === "personal" ? "bg-white text-gray-900 border border-gray-200" : "text-gray-600"
+            }`}
+          >
+            Personal
+          </button>
+          <button
+            onClick={() => switchTab("system")}
+            className={`rounded-lg px-3 py-2 text-sm font-semibold ${
+              activeTab === "system"
+                ? "bg-white text-orange-600 border border-orange-200"
+                : "text-orange-600"
+            }`}
+          >
+            System
+            {systemNotifCount > 0 && (
+              <span className="ml-2 inline-flex rounded-full bg-red-600 px-1.5 py-0.5 text-[10px] text-white">
+                {systemNotifCount}
+              </span>
+            )}
+          </button>
+        </div>
+      </div>
+
       {/* ── Sidebar ── */}
-      <aside className="w-56 bg-gray-100 p-5 space-y-5 shrink-0 border-r border-gray-200">
+      <aside className="hidden md:block w-56 bg-gray-100 p-5 space-y-5 shrink-0 border-r border-gray-200">
         <h2 className="text-2xl font-bold tracking-tight px-2">Inbox</h2>
         <nav className="space-y-1">
           {/* Personal Chats */}
@@ -536,11 +573,15 @@ export default function MessagesPage() {
       {activeTab === "personal" && (
         <>
           {/* Chat List */}
-          <div className="w-80 border-r border-gray-200 bg-white shrink-0">
-            <div className="p-5.5 border-b border-gray-200">
+          <div
+            className={`w-full md:w-80 border-r border-gray-200 bg-white shrink-0 ${
+              personalMobileView === "threads" ? "block" : "hidden md:block"
+            }`}
+          >
+            <div className="p-5 border-b border-gray-200">
               <h2 className="text-lg font-semibold text-gray-900">Messages</h2>
             </div>
-            <div className="overflow-y-auto h-[calc(100vh-5rem)]">
+            <div className="overflow-y-auto h-[calc(100vh-9rem)] md:h-[calc(100vh-5rem)]">
               {threads.map((thread) => (
                 <Card
                   key={thread.id || `thread-${thread.user.email}`}
@@ -585,10 +626,21 @@ export default function MessagesPage() {
           </div>
 
           {/* Chat Area */}
-          <div className="flex-1 flex flex-col bg-white">
+          <div
+            className={`flex-1 flex-col bg-white ${
+              personalMobileView === "chat" ? "flex" : "hidden md:flex"
+            }`}
+          >
             {selectedThread ? (
               <>
                 <div className="p-4 border-b border-gray-200 flex items-center gap-3">
+                  <button
+                    type="button"
+                    className="md:hidden rounded border border-gray-200 px-2 py-1 text-sm"
+                    onClick={() => setPersonalMobileView("threads")}
+                  >
+                    Back
+                  </button>
                   <Avatar user={selectedThread.user} size={40} />
                   <div>
                     <h3 className="font-medium text-gray-900">
@@ -700,7 +752,11 @@ export default function MessagesPage() {
       {activeTab === "system" && (
         <>
           {/* Notification List */}
-          <section className="w-96 bg-white border-r border-gray-200 flex flex-col shrink-0">
+          <section
+            className={`w-full md:w-96 bg-white border-r border-gray-200 flex-col shrink-0 ${
+              systemMobileView === "list" ? "flex" : "hidden md:flex"
+            }`}
+          >
             <div className="p-6 border-b border-gray-100">
               <span className="text-xs font-bold text-gray-400 uppercase tracking-widest">
                 Recent Activity
@@ -721,8 +777,11 @@ export default function MessagesPage() {
                   return (
                     <div
                       key={item.id}
-                      onClick={() => setSelectedNotification(item)}
-                      className={`p-5 border-b border-gray-100 cursor-pointer transition-colors ${
+                      onClick={() => {
+                        setSelectedNotification(item);
+                        setSystemMobileView("detail");
+                      }}
+                      className={`relative p-5 border-b border-gray-100 cursor-pointer transition-colors ${
                         isSelected ? "bg-gray-50" : "hover:bg-gray-50"
                       } ${!item.is_read ? "bg-white" : "opacity-80"}`}
                     >
@@ -756,10 +815,21 @@ export default function MessagesPage() {
           </section>
 
           {/* Detail View */}
-          <section className="flex-1 bg-gray-100 overflow-y-auto">
+          <section
+            className={`flex-1 bg-gray-100 overflow-y-auto ${
+              systemMobileView === "detail" ? "block" : "hidden md:block"
+            }`}
+          >
             {selectedNotification ? (
               <div className="p-12 max-w-2xl mx-auto w-full">
                 <div className="bg-white p-10 rounded-2xl shadow-sm">
+                  <button
+                    type="button"
+                    className="md:hidden mb-4 rounded border border-gray-200 px-3 py-1 text-sm"
+                    onClick={() => setSystemMobileView("list")}
+                  >
+                    Back to notifications
+                  </button>
                   <div className="flex items-center justify-between mb-8">
                     <div className="flex items-center gap-4">
                       <div className="w-12 h-12 rounded-xl bg-black text-white flex items-center justify-center">
