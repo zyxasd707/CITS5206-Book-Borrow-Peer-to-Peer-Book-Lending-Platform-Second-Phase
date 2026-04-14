@@ -38,6 +38,13 @@ const TX_STAGE_META = {
   canceled: { label: "Canceled", className: "bg-gray-100 text-gray-700" },
 } as const;
 
+const getDisplayedStatusMeta = (order: ApiOrder) => {
+  if (order.status === "PENDING_SHIPMENT" && order.shippingOutTrackingNumber) {
+    return { label: "Shipped", className: "text-green-600" };
+  }
+  return STATUS_META[order.status];
+};
+
 const fetchOrderDetails = async (orderId: string): Promise<ApiOrder | null> => {
   try {
     const apiUrl = getApiUrl();
@@ -138,7 +145,7 @@ export default function OrderDetailPage() {
   }, [id]);
 
   const statusMeta = useMemo(
-    () => (order ? STATUS_META[order.status] : null),
+    () => (order ? getDisplayedStatusMeta(order) : null),
     [order]
   );
 
@@ -179,8 +186,8 @@ export default function OrderDetailPage() {
     if (!order) return "pending";
     if (order.status === "CANCELED") return "canceled";
     if (order.status === "PENDING_PAYMENT") return "pending";
-    if (order.status === "PENDING_SHIPMENT") return "paid";
     if (order.shippingOutTrackingNumber) return "shipped";
+    if (order.status === "PENDING_SHIPMENT") return "paid";
     if (["BORROWING", "OVERDUE", "RETURNED", "COMPLETED"].includes(order.status)) {
       return "shipped";
     }
@@ -754,7 +761,7 @@ export default function OrderDetailPage() {
           <div>
             Status:{" "}
             <span className="font-medium">
-              {STATUS_META[order.status].label}
+              {getDisplayedStatusMeta(order).label}
             </span>
           </div>
           <div>

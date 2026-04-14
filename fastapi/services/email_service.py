@@ -68,6 +68,62 @@ def send_shipment_confirmation_email(
     )
 
 
+def send_shipment_status_email(
+    *,
+    email: str,
+    username: str,
+    order_id: str,
+    tracking_number: str,
+    courier_name: str,
+    estimated_delivery_date: str,
+    recipient_role: str,
+):
+    configuration = get_brevo_config()
+    api_instance = Brevo(**configuration).transactional_emails
+    sender = get_brevo_sender()
+
+    if recipient_role == "owner":
+        subject = "BookBorrow Shipment Recorded"
+        html_content = (
+            f"<p>Hello, {username},</p>"
+            f"<p>Your shipment for order <strong>{order_id}</strong> has been recorded.</p>"
+            f"<p>Carrier: <strong>{courier_name}</strong><br/>"
+            f"Tracking number: <strong>{tracking_number}</strong><br/>"
+            f"Estimated delivery date: <strong>{estimated_delivery_date}</strong></p>"
+        )
+        text_content = (
+            f"Hello, {username}. "
+            f"Your shipment for order {order_id} has been recorded. "
+            f"Carrier: {courier_name}. "
+            f"Tracking number: {tracking_number}. "
+            f"Estimated delivery date: {estimated_delivery_date}."
+        )
+    else:
+        subject = "BookBorrow Shipment Update"
+        html_content = (
+            f"<p>Hello, {username},</p>"
+            f"<p>Your order <strong>{order_id}</strong> has been shipped.</p>"
+            f"<p>Carrier: <strong>{courier_name}</strong><br/>"
+            f"Tracking number: <strong>{tracking_number}</strong><br/>"
+            f"Estimated delivery date: <strong>{estimated_delivery_date}</strong></p>"
+        )
+        text_content = (
+            f"Hello, {username}. "
+            f"Your order {order_id} has been shipped. "
+            f"Carrier: {courier_name}. "
+            f"Tracking number: {tracking_number}. "
+            f"Estimated delivery date: {estimated_delivery_date}."
+        )
+
+    api_instance.send_transac_email(
+        sender=sender,
+        to=[{"email": email}],
+        subject=subject,
+        html_content=html_content,
+        text_content=text_content,
+    )
+
+
 def send_order_confirmation_receipt_email(
     *,
     email: str,

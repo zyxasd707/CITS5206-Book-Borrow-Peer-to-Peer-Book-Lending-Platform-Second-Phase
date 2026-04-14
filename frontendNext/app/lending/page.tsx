@@ -9,11 +9,14 @@ import CoverImg from "../components/ui/CoverImg";
 import type { Book } from "@/app/types/book";
 import { getCurrentUser } from "@/utils/auth";
 import { getBooks, updateBook, deleteBook } from "@/utils/books";
+import { getOrderById } from "@/utils/borrowingOrders";
+import type { ApiOrder } from "@/app/types/order";
 import { useRouter } from "next/navigation";
 
 
 export default function LendingListPage() {
   const [items, setItems] = useState<Book[]>([]);
+  const [orderMap, setOrderMap] = useState<Record<string, ApiOrder>>({});
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [search, setSearch] = useState("");
@@ -55,6 +58,47 @@ export default function LendingListPage() {
     if (openId) document.addEventListener("click", onDocClick);
     return () => document.removeEventListener("click", onDocClick);
   }, [openId]);
+
+  useEffect(() => {
+    let alive = true;
+
+    (async () => {
+      const lentBooks = items.filter(
+        (book) => book.status === "lent" && !!book.currentOrderId
+      );
+
+      if (lentBooks.length === 0) {
+        if (alive) {
+          setOrderMap({});
+        }
+        return;
+      }
+
+      const entries = await Promise.all(
+        lentBooks.map(async (book) => {
+          try {
+            const order = await getOrderById(book.currentOrderId!);
+            return [book.currentOrderId!, order] as const;
+          } catch (error) {
+            console.error("Failed to load order for lending item:", error);
+            return null;
+          }
+        })
+      );
+
+      if (!alive) {
+        return;
+      }
+
+      setOrderMap(
+        Object.fromEntries(entries.filter(Boolean) as Array<readonly [string, ApiOrder]>)
+      );
+    })();
+
+    return () => {
+      alive = false;
+    };
+  }, [items]);
 
   const toggleMenu = (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
@@ -162,8 +206,14 @@ export default function LendingListPage() {
                 </div>
               </Card>
             ) : (
-              filteredBooks.map((book) => (
+              filteredBooks.map((book) => {
+                const currentOrder = book.currentOrderId
+                  ? orderMap[book.currentOrderId]
+                  : undefined;
+                const canShip = currentOrder?.status === "PENDING_SHIPMENT";
+                const canMessageBorrower = !!currentOrder?.borrower?.email;
 
+                return (
                 <Card key={book.id} className="relative overflow-visible flex gap-4 p-4 border border-gray-200 rounded-xl hover:shadow-md transition">
 
                   {/* ⋯ more */}
@@ -293,9 +343,34 @@ export default function LendingListPage() {
                             </Button>
                           )}
 
+                          {book.currentOrderId && canShip && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="border-black text-black hover:bg-black hover:text-white"
+                              onClick={() => router.push(`/borrowing/${book.currentOrderId}`)}
+                            >
+                              {currentOrder?.shippingOutTrackingNumber ? "Update Shipment" : "Ship"}
+                            </Button>
+                          )}
+
                           <Button
                             size="sm"
                             className="bg-black text-white hover:bg-gray-800"
+                            disabled={!canMessageBorrower}
+                            onClick={() => {
+                              if (!currentOrder?.borrower?.email) {
+                                alert("Borrower contact is not available yet.");
+                                return;
+                              }
+
+                              const params = new URLSearchParams({
+                                to: currentOrder.borrower.email,
+                                bookId: book.id,
+                                bookTitle: book.titleOr,
+                              });
+                              router.push(`/message?${params.toString()}`);
+                            }}
                           >
                             Message Borrower
                           </Button>
@@ -307,7 +382,8 @@ export default function LendingListPage() {
                     </div>
                   </div>
                 </Card>
-              ))
+                );
+              })
             )}
           </div>
         </div>

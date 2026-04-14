@@ -51,8 +51,9 @@ export async function listMyOrders(params?: {
 }
 
 export async function getOrderById(orderId: string) {
+  const token = getToken();
   const res = await axios.get(`${API_URL}/api/v1/orders/${orderId}`, {
-    withCredentials: true,
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
   });
   return res.data;
 }

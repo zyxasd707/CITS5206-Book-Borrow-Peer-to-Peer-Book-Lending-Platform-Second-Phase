@@ -16,7 +16,10 @@ from services.complaint_service import ComplaintService
 from services.notification_service import NotificationService
 from typing import Set
 import logging
-from services.email_service import send_order_confirmation_receipt_email
+from services.email_service import (
+    send_order_confirmation_receipt_email,
+    send_shipment_status_email,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -576,6 +579,8 @@ class OrderService:
             )
             order.due_at = order.start_at + timedelta(days=max_lending_days)
 
+            estimated_delivery_date = order.start_at.strftime("%d/%m/%Y") if order.start_at else "TBD"
+
             # Notify borrower: book shipped
             NotificationService.create(
                 db, user_id=order.borrower_id, order_id=order.id,
@@ -584,6 +589,34 @@ class OrderService:
                 message=f"The lender has shipped your book. Tracking: {tracking_number} ({carrier_upper}).",
                 commit=False,
             )
+
+            try:
+                borrower_name = (order.borrower.name if order.borrower and order.borrower.name else "there")
+                owner_name = (order.owner.name if order.owner and order.owner.name else "there")
+
+                if order.borrower and order.borrower.email:
+                    send_shipment_status_email(
+                        email=order.borrower.email,
+                        username=borrower_name,
+                        order_id=order.id,
+                        tracking_number=tracking_number,
+                        courier_name=carrier_upper,
+                        estimated_delivery_date=estimated_delivery_date,
+                        recipient_role="borrower",
+                    )
+
+                if order.owner and order.owner.email:
+                    send_shipment_status_email(
+                        email=order.owner.email,
+                        username=owner_name,
+                        order_id=order.id,
+                        tracking_number=tracking_number,
+                        courier_name=carrier_upper,
+                        estimated_delivery_date=estimated_delivery_date,
+                        recipient_role="owner",
+                    )
+            except Exception as e:
+                logger.warning("Failed to send shipment status emails: %s", e)
 
             # implement distribute shipping fee function
             try:
