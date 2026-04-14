@@ -204,7 +204,7 @@ export default function AddBook() {
       author: form.author,
       category: form.category,
       description: form.description,
-      coverImgUrl: form.coverFile?.url || "https://via.placeholder.com/300x400?text=No+Cover",
+      coverImgUrl: form.coverImgUrl || "",
 
       ownerId: user.id,
 

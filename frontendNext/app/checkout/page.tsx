@@ -124,9 +124,6 @@ export default function CheckoutPage() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [checkouts, setCheckouts] = useState<any[]>([]);
   const [ownersMap, setOwnersMap] = useState<Record<string, { name: string; zipCode: string; stripeAccountId?: string | null }>>({});
-  const [ownersMap, setOwnersMap] = useState<
-    Record<string, { name: string; zipCode: string; stripeAccountId?: string }>
-  >({});
   const [ownersMissingZip, setOwnersMissingZip] = useState<string[]>([]);
   const [serviceRate, setServiceRate] = useState<number>(0);
   const currentCheckout = checkouts.length > 0 ? checkouts[0] : null;
@@ -175,7 +172,6 @@ export default function CheckoutPage() {
     async function loadOwners() {
       const uniqueOwnerIds = Array.from(new Set(items.map((b) => b.ownerId)));
       const map: Record<string, { name: string; zipCode: string; stripeAccountId?: string | null }> = {};
-      const map: Record<string, { name: string; zipCode: string; stripeAccountId?: string }> = {};
       const missingZipOwnerIds: string[] = [];
 
       for (const id of uniqueOwnerIds) {
@@ -191,11 +187,7 @@ export default function CheckoutPage() {
           };
         } catch {
           map[id] = { name: "Unknown Owner", zipCode: "0000", stripeAccountId: null };
-            stripeAccountId: u?.stripe_account_id,
-          };
-        } catch {
           missingZipOwnerIds.push(id);
-          map[id] = { name: "Unknown Owner", zipCode: "0000", stripeAccountId: undefined };
         }
       }
 
