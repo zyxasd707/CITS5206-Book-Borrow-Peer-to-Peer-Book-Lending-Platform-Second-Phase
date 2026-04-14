@@ -404,6 +404,19 @@ class OrderService:
                 detail=f"Cannot cancel order with status '{order.status}'. Only orders with status {cancellable_statuses} can be cancelled."
             )
         
+        # MVP6: If order is PENDING_SHIPMENT with payment, trigger refund first
+        # refund_on_cancel() handles: CANCELED status, book restore, CANCELED + REFUND notifications, commit
+        if order.status == "PENDING_SHIPMENT":
+            try:
+                from services.payment_gateway_service import refund_on_cancel
+                refund_on_cancel(db=db, order_id=order_id, actor=current_user.user_id)
+                return True
+            except Exception as e:
+                logger.warning(f"Refund on cancel failed for order {order_id}, proceeding with plain cancel: {e}")
+                db.refresh(order)
+                if order.status == "CANCELED":
+                    return True  # refund_on_cancel already cancelled it
+
         # Update order status to CANCELED
         order.status = "CANCELED"
         order.canceled_at = datetime.now(timezone.utc)
@@ -431,7 +444,7 @@ class OrderService:
                 # Restore to listed if it was unlisted, lent, or sold due to this order
                 if book.status in ["unlisted", "lent", "sold"]:
                     book.status = "listed"
-        
+
         db.commit()
         return True
 

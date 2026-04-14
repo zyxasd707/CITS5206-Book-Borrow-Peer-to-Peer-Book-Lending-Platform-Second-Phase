@@ -67,7 +67,7 @@ export default function RefundsPage() {
         const data = await getUserRefunds(user.id);
         setRefunds(data.refunds);
       } catch (err) {
-        console.error("Failed to load refunds:", err);
+        console.error("[Refunds] Failed to load refunds:", err);
         setError("Failed to load refunds. Please try again.");
       } finally {
         setLoading(false);

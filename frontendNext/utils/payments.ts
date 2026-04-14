@@ -159,7 +159,7 @@ export async function handlePaymentDispute(
 // MVP6: Get refund records for an order
 export async function getRefundsForOrder(orderId: string) {
   const res = await axios.get(
-    `${API_URL}/payment_gateway/payment/refunds/${orderId}`,
+    `${API_URL}/api/v1/payment_gateway/payment/refunds/${orderId}`,
     {
       headers: {
         Authorization: `Bearer ${localStorage.getItem("access_token")}`,
@@ -184,7 +184,7 @@ export async function getRefundsForOrder(orderId: string) {
 // MVP6: Cancel order with automatic refund
 export async function cancelOrderWithRefund(orderId: string) {
   const res = await axios.post(
-    `${API_URL}/payment_gateway/payment/refund/cancel/${orderId}`,
+    `${API_URL}/api/v1/payment_gateway/payment/refund/cancel/${orderId}`,
     {},
     {
       headers: {
@@ -205,7 +205,7 @@ export async function cancelOrderWithRefund(orderId: string) {
 // MVP6: Get all refunds for a user
 export async function getUserRefunds(userId: string) {
   const res = await axios.get(
-    `${API_URL}/payment_gateway/refunds/user/${userId}`,
+    `${API_URL}/api/v1/payment_gateway/refunds/user/${userId}`,
     {
       headers: {
         Authorization: `Bearer ${localStorage.getItem("access_token")}`,

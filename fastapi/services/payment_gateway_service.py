@@ -744,12 +744,32 @@ def confirm_order_after_payment(db: Session, payment_id: str):
         db, checkout.checkout_id, payments[0].user_id, payment_id
     )
 
-    # 6. Confirm payment for each order (PENDING_PAYMENT → PENDING_SHIPMENT)
+    # 6. Orders are already PENDING_SHIPMENT (default status). Send PAYMENT_CONFIRMED notifications.
+    from services.notification_service import NotificationService
     for order in created_orders:
         try:
-            OrderService.confirm_payment(db, order.id)
-        except Exception:
-            pass  # may already be confirmed
+            NotificationService.create(
+                db, user_id=order.borrower_id, order_id=order.id,
+                type="PAYMENT_CONFIRMED",
+                title="Payment Confirmed",
+                message=f"Your payment of ${float(order.total_paid_amount or 0):.2f} has been confirmed. Waiting for the lender to ship.",
+                commit=False,
+            )
+            NotificationService.create(
+                db, user_id=order.owner_id, order_id=order.id,
+                type="PAYMENT_CONFIRMED",
+                title="New Order Received",
+                message=f"A borrower has paid for your book. Please ship within 3 days.",
+                commit=False,
+            )
+        except Exception as e:
+            print(f"[WARN] Failed to create payment confirmed notification: {e}")
+
+    # 7. Create PaymentSplits for refund support
+    try:
+        build_payment_splits_for_orders(db, payment_id, created_orders, currency=pi.currency or "aud")
+    except Exception as e:
+        logger.warning(f"Failed to build payment splits for {payment_id}: {e}")
 
     db.commit()
     log_event(db, "payment_confirmed_fallback", reference_id=payment_id, actor="system",
@@ -807,11 +827,35 @@ async def stripe_webhook(event: dict, db: Session):
                     db.commit()   
 
                 orderID = OrderService.create_orders_data_with_validation(db, checkout.checkout_id, payment[0].user_id, payment_id)
-                order = db.query(Order).filter_by(id=orderID[-1].id).first()
-                OrderService.confirm_payment(db, order.id)
 
-            
-            db.commit()            
+                # Orders are already PENDING_SHIPMENT (default). Send PAYMENT_CONFIRMED notifications.
+                from services.notification_service import NotificationService
+                for created_order in orderID:
+                    try:
+                        NotificationService.create(
+                            db, user_id=created_order.borrower_id, order_id=created_order.id,
+                            type="PAYMENT_CONFIRMED",
+                            title="Payment Confirmed",
+                            message=f"Your payment of ${float(created_order.total_paid_amount or 0):.2f} has been confirmed. Waiting for the lender to ship.",
+                            commit=False,
+                        )
+                        NotificationService.create(
+                            db, user_id=created_order.owner_id, order_id=created_order.id,
+                            type="PAYMENT_CONFIRMED",
+                            title="New Order Received",
+                            message=f"A borrower has paid for your book. Please ship within 3 days.",
+                            commit=False,
+                        )
+                    except Exception as e:
+                        print(f"[webhook] Failed to create payment notification: {e}")
+
+                # Create PaymentSplits for refund support
+                try:
+                    build_payment_splits_for_orders(db, payment_id, orderID, currency=obj.get("currency", "aud"))
+                except Exception as e:
+                    print(f"[webhook] Failed to build payment splits: {e}")
+
+            db.commit()
             log_event(db, "payment_succeeded", reference_id=payment_id, actor="system")
             
 
@@ -1382,6 +1426,36 @@ def refund_on_cancel(db: Session, order_id: str, actor: str = "system"):
         actor=actor,
         message=f"Refund {refund_amount} cents on cancel. Refund ID: {r.id}",
     )
+
+    # Send cancel + refund notifications
+    try:
+        from services.notification_service import NotificationService
+        amount_display = refund_amount / 100
+        # CANCELED notifications for both parties
+        NotificationService.create(
+            db, user_id=order.borrower_id, order_id=order.id,
+            type="CANCELED",
+            title="Order Cancelled",
+            message=f"Your order has been cancelled. A refund of ${amount_display:.2f} {r.currency.upper()} has been processed.",
+            commit=False,
+        )
+        NotificationService.create(
+            db, user_id=order.owner_id, order_id=order.id,
+            type="CANCELED",
+            title="Order Cancelled",
+            message=f"An order for your book has been cancelled by the borrower.",
+            commit=False,
+        )
+        # REFUND notification for borrower
+        NotificationService.create(
+            db, user_id=order.borrower_id, order_id=order.id,
+            type="REFUND",
+            title="Refund Completed" if r.status in ("succeeded", "refunded") else "Refund Processing",
+            message=f"Refund of ${amount_display:.2f} {r.currency.upper()} has been {'completed' if r.status in ('succeeded', 'refunded') else 'initiated'}. Your original payment will be returned.",
+            commit=False,
+        )
+    except Exception as e:
+        print(f"[WARN] Failed to create cancel/refund notifications: {e}")
 
     # Update Payment status
     payment = db.query(Payment).filter_by(payment_id=sp.payment_id).first()

@@ -4,58 +4,12 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { hasStripePublishableKey, stripePromise } from "@/utils/stripe";
-import { createOrder } from "@/utils/borrowingOrders";
-import { loadStripe } from "@stripe/stripe-js";
 import { getApiUrl } from "@/utils/auth";
 import { useCartStore } from "@/app/store/cartStore";
-
-const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PK!);
 
 export default function CheckoutSuccessPage() {
   const [status, setStatus] = useState<"succeeded" | "processing" | "canceled" | "unknown">("unknown");
   const [pi, setPi] = useState<string | null>(null);
-  const [logs, setLogs] = useState<string[]>([]);
-  const [orderCreated, setOrderCreated] = useState(false);
-
-  const log = (msg: string, extra?: any) => {
-    console.log(msg, extra ?? "");
-    setLogs(prev => [...prev, `${msg} ${extra ? JSON.stringify(extra) : ""}`]);
-  };
-
-  useEffect(() => {
-  (async () => {
-    const p = new URLSearchParams(window.location.search);
-    const paymentIntentFromUrl = p.get("payment_intent");
-    const redirectStatus = p.get("redirect_status");
-    const csFromUrl = p.get("payment_intent_client_secret");
-
-    log("[success] params ->", {
-      paymentIntentId: paymentIntentFromUrl,
-      redirectStatus,
-      clientSecret: csFromUrl,
-    });
-
-    // 先从 URL，再从 localStorage 兜底
-    let clientSecret =
-      csFromUrl || localStorage.getItem("last_pi_client_secret") || "";
-
-    let piId =
-      paymentIntentFromUrl || localStorage.getItem("last_pi_id") || null;
-    const checkoutId = localStorage.getItem("last_checkout_id") || "";
-
-    setPi(piId);
-
-    // 读完就清理，避免下次误读
-    localStorage.removeItem("last_pi_client_secret");
-    localStorage.removeItem("last_pi_id");
-    localStorage.removeItem("last_checkout_id");
-
-    // 没有 client_secret：多数是 no-redirect 的成功场景
-    // 先展示 processing，等 webhook 创建订单
-    if (!clientSecret) {
-      if (piId) {
-        log("[success] no client_secret, but have PI -> processing");
-        setStatus("processing");
   const [orderIds, setOrderIds] = useState<string[]>([]);
   const [confirmStatus, setConfirmStatus] = useState<"idle" | "confirming" | "done" | "error">("idle");
   const fetchCart = useCartStore((state) => state.fetchCart);
@@ -66,7 +20,7 @@ export default function CheckoutSuccessPage() {
     try {
       const apiUrl = getApiUrl();
       const token = localStorage.getItem("access_token");
-      const res = await fetch(`${apiUrl}/payment_gateway/payment/confirm-order`, {
+      const res = await fetch(`${apiUrl}/api/v1/payment_gateway/payment/confirm-order`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -81,6 +35,8 @@ export default function CheckoutSuccessPage() {
         setConfirmStatus("done");
         // Refresh cart (items should be cleared by backend)
         fetchCart();
+        // Trigger notification badge refresh in Header
+        window.dispatchEvent(new Event("notif-update"));
       } else {
         const err = await res.json().catch(() => ({}));
         console.error("Confirm order failed:", err);
@@ -134,33 +90,6 @@ export default function CheckoutSuccessPage() {
       const { paymentIntent: piObj, error } =
         await stripe.retrievePaymentIntent(clientSecret);
 
-    setPi(piObj?.id || piId);
-
-    switch (piObj?.status) {
-      case "succeeded":
-        setStatus("succeeded");
-        if (piObj?.id && checkoutId) {
-          try {
-            const createdKey = `order_created_for_${checkoutId}`;
-            if (!sessionStorage.getItem(createdKey)) {
-              await createOrder(checkoutId, piObj.id);
-              sessionStorage.setItem(createdKey, "1");
-            }
-            setOrderCreated(true);
-          } catch (orderError: any) {
-            log("[success] createOrder failed ->", orderError?.response?.data || orderError);
-          }
-        }
-        break;
-      case "processing":
-      case "requires_action":
-        setStatus("processing");
-        break;
-      case "requires_payment_method":
-      case "canceled":
-        setStatus("canceled");
-        break;
-      default:
       if (error) {
         setStatus("unknown");
         return;
@@ -199,9 +128,6 @@ export default function CheckoutSuccessPage() {
         <div className="p-4 rounded-md bg-green-50 border border-green-200">
           <p className="font-medium text-green-700">Payment succeeded!</p>
           <p className="text-sm text-green-700">Payment Intent: {pi}</p>
-          <p className="text-sm text-green-700">
-            {orderCreated ? "Order created successfully." : "Payment succeeded. Finalizing your order..."}
-          </p>
           {confirmStatus === "done" && orderIds.length > 0 && (
             <p className="text-sm text-green-700 mt-1">
               Order created successfully. You can view it in your borrowing orders.
