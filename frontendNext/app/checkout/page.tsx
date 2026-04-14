@@ -186,8 +186,8 @@ export default function CheckoutPage() {
             stripeAccountId: u?.stripe_account_id || null,
           };
         } catch {
-          missingZipOwnerIds.push(id);
           map[id] = { name: "Unknown Owner", zipCode: "0000", stripeAccountId: null };
+          missingZipOwnerIds.push(id);
         }
       }
 

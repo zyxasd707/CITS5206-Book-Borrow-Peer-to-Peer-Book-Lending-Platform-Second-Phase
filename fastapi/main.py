@@ -96,7 +96,7 @@ MEDIA_ROOT = Path(__file__).parent / "media"
 MEDIA_ROOT.mkdir(parents=True, exist_ok=True)
 app.mount("/media", StaticFiles(directory=str(MEDIA_ROOT)), name="media")
 
-app.include_router(upload_router)
+app.include_router(upload_router, prefix="/api/v1")
 
 # Include auth router
 app.include_router(auth_router, prefix="/api/v1")
@@ -115,7 +115,7 @@ app.include_router(cart_router, prefix="/api/v1")
 app.include_router(complaints_router, prefix="/api/v1")
 
 # mail router
-app.include_router(mail_router) 
+app.include_router(mail_router, prefix="/api/v1") 
 
 # payment gateway router
 app.include_router(payment_gateway_router, prefix="/api/v1") 

@@ -87,7 +87,10 @@ export interface ApiOrder {
   serviceFeeAmount: number;
   shippingOutFeeAmount: number;
   totalPaidAmount: number;
+  paymentMethod: string | null;
+  paymentTime: string | null;
   contactName: string;
+  contactEmail: string | null;
   phone: string;
   street: string;
   city: string;

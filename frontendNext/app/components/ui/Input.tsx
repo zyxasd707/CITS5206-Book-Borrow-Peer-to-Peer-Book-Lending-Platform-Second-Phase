@@ -49,6 +49,16 @@ const Input: React.FC<InputProps> = ({
   const inputClasses =
     `${baseStyles} ${variantStyles} ${paddingStyles} ${className}`.trim();
 
+  const normalizedProps = { ...props };
+
+  if ("value" in normalizedProps && normalizedProps.value == null) {
+    normalizedProps.value = "";
+  }
+
+  if ("checked" in normalizedProps && normalizedProps.checked == null) {
+    normalizedProps.checked = false;
+  }
+
   return (
     <div className="w-full">
       {label && (
@@ -66,7 +76,7 @@ const Input: React.FC<InputProps> = ({
         )}
 
         {/* input */}
-        <input type={inputType} className={inputClasses} {...props} />
+        <input type={inputType} className={inputClasses} {...normalizedProps} />
 
         {/* password switch button */}
         {isPassword && (

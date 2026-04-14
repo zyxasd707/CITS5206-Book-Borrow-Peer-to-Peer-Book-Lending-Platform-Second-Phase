@@ -38,6 +38,13 @@ const TX_STAGE_META = {
   canceled: { label: "Canceled", className: "bg-gray-100 text-gray-700" },
 } as const;
 
+const getDisplayedStatusMeta = (order: ApiOrder) => {
+  if (order.status === "PENDING_SHIPMENT" && order.shippingOutTrackingNumber) {
+    return { label: "Shipped", className: "text-green-600" };
+  }
+  return STATUS_META[order.status];
+};
+
 const fetchOrderDetails = async (orderId: string): Promise<ApiOrder | null> => {
   try {
     const apiUrl = getApiUrl();
@@ -72,6 +79,7 @@ export default function OrderDetailPage() {
   const [trackingNumber, setTrackingNumber] = useState(""); // input tracking number
   const [carrier, setCarrier] = useState("AUSPOST"); // default carrier="AUSPOST"
   const [confirmReceiveModalOpen, setConfirmReceiveModalOpen] = useState(false);
+  const [borrowerConfirmReceiveModalOpen, setBorrowerConfirmReceiveModalOpen] = useState(false);
 
   // MVP6: refund state
   const [refunds, setRefunds] = useState<Array<{
@@ -138,7 +146,7 @@ export default function OrderDetailPage() {
   }, [id]);
 
   const statusMeta = useMemo(
-    () => (order ? STATUS_META[order.status] : null),
+    () => (order ? getDisplayedStatusMeta(order) : null),
     [order]
   );
 
@@ -179,8 +187,8 @@ export default function OrderDetailPage() {
     if (!order) return "pending";
     if (order.status === "CANCELED") return "canceled";
     if (order.status === "PENDING_PAYMENT") return "pending";
-    if (order.status === "PENDING_SHIPMENT") return "paid";
     if (order.shippingOutTrackingNumber) return "shipped";
+    if (order.status === "PENDING_SHIPMENT") return "paid";
     if (["BORROWING", "OVERDUE", "RETURNED", "COMPLETED"].includes(order.status)) {
       return "shipped";
     }
@@ -289,6 +297,38 @@ export default function OrderDetailPage() {
       if (updatedOrder) setOrder(updatedOrder);
       // Trigger notification badge refresh in Header
       window.dispatchEvent(new Event("notif-update"));
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to confirm receive");
+    }
+  };
+
+  const handleBorrowerConfirmReceive = async (orderId: string) => {
+    try {
+      const token = getToken();
+      if (!token) {
+        toast.error("Please login first");
+        router.push("/auth");
+        return;
+      }
+
+      const res = await fetch(
+        `${getApiUrl()}/api/v1/orders/${orderId}/borrower-confirm-received`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      if (!res.ok) throw new Error("Failed to confirm receive");
+
+      toast.success("Book received successfully");
+
+      const updatedOrder = await fetchOrderDetails(orderId);
+      if (updatedOrder) setOrder(updatedOrder);
     } catch (err) {
       console.error(err);
       toast.error("Failed to confirm receive");
@@ -410,6 +450,16 @@ export default function OrderDetailPage() {
                 Transaction: {TX_STAGE_META[txStage].label}
               </span>
             </div>
+            <div>
+              Payment Method:{" "}
+              <span className="text-black font-medium">
+                {order.paymentMethod || "Card via Stripe"}
+              </span>
+            </div>
+            <div>
+              Payment Time:{" "}
+              <span className="text-black font-medium">{fmtDate(order.paymentTime)}</span>
+            </div>
           </div>
         </Card>
 
@@ -433,6 +483,12 @@ export default function OrderDetailPage() {
               <div>
                 Phone:{" "}
                 <span className="font-medium text-black">{order.phone}</span>
+              </div>
+              <div>
+                Email:{" "}
+                <span className="font-medium text-black">
+                  {order.contactEmail || order.borrower.email}
+                </span>
               </div>
               <div>
                 Address:{" "}
@@ -749,6 +805,16 @@ export default function OrderDetailPage() {
               Confirm Receive Book
             </Button>
           )}
+          {isBorrower &&
+            order.status === "PENDING_SHIPMENT" &&
+            order.shippingOutTrackingNumber && (
+              <Button
+                className="bg-green-600 text-white hover:bg-green-700"
+                onClick={() => setBorrowerConfirmReceiveModalOpen(true)}
+              >
+                Confirm Receive
+              </Button>
+            )}
         </div>
       </Card>
 
@@ -762,7 +828,7 @@ export default function OrderDetailPage() {
           <div>
             Status:{" "}
             <span className="font-medium">
-              {STATUS_META[order.status].label}
+              {getDisplayedStatusMeta(order).label}
             </span>
           </div>
           <div>
@@ -879,6 +945,35 @@ export default function OrderDetailPage() {
               onClick={() => {
                 handleConfirmReceive(order!.id);
                 setConfirmReceiveModalOpen(false);
+              }}
+            >
+              Confirm
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        isOpen={borrowerConfirmReceiveModalOpen}
+        onClose={() => setBorrowerConfirmReceiveModalOpen(false)}
+        title="Confirm Receive"
+      >
+        <div className="space-y-4">
+          <p>
+            Are you sure you have received this shipment? This action will start
+            the borrowing period for the order.
+          </p>
+          <div className="flex justify-end gap-2 mt-4">
+            <Button
+              variant="outline"
+              onClick={() => setBorrowerConfirmReceiveModalOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                handleBorrowerConfirmReceive(order!.id);
+                setBorrowerConfirmReceiveModalOpen(false);
               }}
             >
               Confirm

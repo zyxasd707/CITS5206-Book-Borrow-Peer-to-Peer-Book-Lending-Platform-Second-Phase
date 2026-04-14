@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { getCurrentUser, isAuthenticated } from "../../../utils/auth";
 import { Camera } from "lucide-react";
@@ -21,6 +21,17 @@ const parseDOB = (dob?: string | null) => {
   if (!m) return { year: "", month: "", day: "" };
   const [_, y, mo, d] = m;
   return { year: y, month: mo.padStart(2, "0"), day: d.padStart(2, "0") };
+};
+
+const CURRENT_YEAR = new Date().getFullYear();
+const YEAR_OPTIONS = Array.from({ length: 101 }, (_, i) => String(CURRENT_YEAR - i));
+const MONTH_OPTIONS = Array.from({ length: 12 }, (_, i) => String(i + 1).padStart(2, "0"));
+
+const getDaysInMonth = (year?: string, month?: string) => {
+  const y = Number(year);
+  const m = Number(month);
+  if (!y || !m) return 31;
+  return new Date(y, m, 0).getDate();
 };
 
 
@@ -55,6 +66,10 @@ const UpdateProfilePage: React.FC = () => {
 const [uploadingAvatar, setUploadingAvatar] = useState(false);
 const [changingPassword, setChangingPassword] = useState(false);
 const [passwordForm, setPasswordForm] = useState({ currentPassword: "", newPassword: "" });
+  const dayOptions = useMemo(() => {
+    const days = getDaysInMonth(dobForm.year, dobForm.month);
+    return Array.from({ length: days }, (_, i) => String(i + 1).padStart(2, "0"));
+  }, [dobForm.year, dobForm.month]);
 
 const handleChangePassword = async () => {
   if (!passwordForm.currentPassword || !passwordForm.newPassword) {
@@ -291,27 +306,57 @@ const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
                   Date of birth
                 </label>
                 <div className="grid grid-cols-3 gap-4">
-                  <Input
-                    placeholder="DD"
+                  <Select
                     value={dobForm.day}
                     onChange={(e) =>
                       setDobForm((p) => ({ ...p, day: e.target.value }))
                     }
-                  />
-                  <Input
-                    placeholder="MM"
+                  >
+                    <option value="">Day</option>
+                    {dayOptions.map((day) => (
+                      <option key={day} value={day}>
+                        {day}
+                      </option>
+                    ))}
+                  </Select>
+                  <Select
                     value={dobForm.month}
                     onChange={(e) =>
-                      setDobForm((p) => ({ ...p, month: e.target.value }))
+                      setDobForm((p) => {
+                        const nextMonth = e.target.value;
+                        const maxDay = getDaysInMonth(p.year, nextMonth);
+                        const normalizedDay =
+                          p.day && Number(p.day) > maxDay ? String(maxDay).padStart(2, "0") : p.day;
+                        return { ...p, month: nextMonth, day: normalizedDay };
+                      })
                     }
-                  />
-                  <Input
-                    placeholder="YYYY"
+                  >
+                    <option value="">Month</option>
+                    {MONTH_OPTIONS.map((month) => (
+                      <option key={month} value={month}>
+                        {month}
+                      </option>
+                    ))}
+                  </Select>
+                  <Select
                     value={dobForm.year}
                     onChange={(e) =>
-                      setDobForm((p) => ({ ...p, year: e.target.value }))
+                      setDobForm((p) => {
+                        const nextYear = e.target.value;
+                        const maxDay = getDaysInMonth(nextYear, p.month);
+                        const normalizedDay =
+                          p.day && Number(p.day) > maxDay ? String(maxDay).padStart(2, "0") : p.day;
+                        return { ...p, year: nextYear, day: normalizedDay };
+                      })
                     }
-                  />
+                  >
+                    <option value="">Year</option>
+                    {YEAR_OPTIONS.map((year) => (
+                      <option key={year} value={year}>
+                        {year}
+                      </option>
+                    ))}
+                  </Select>
                 </div>
               </div>
 

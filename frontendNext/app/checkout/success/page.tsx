@@ -4,15 +4,23 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { hasStripePublishableKey, stripePromise } from "@/utils/stripe";
+import { createOrder } from "@/utils/borrowingOrders";
 import { getApiUrl } from "@/utils/auth";
 import { useCartStore } from "@/app/store/cartStore";
 
 export default function CheckoutSuccessPage() {
   const [status, setStatus] = useState<"succeeded" | "processing" | "canceled" | "unknown">("unknown");
   const [pi, setPi] = useState<string | null>(null);
+  const [logs, setLogs] = useState<string[]>([]);
+  const [orderCreated, setOrderCreated] = useState(false);
   const [orderIds, setOrderIds] = useState<string[]>([]);
   const [confirmStatus, setConfirmStatus] = useState<"idle" | "confirming" | "done" | "error">("idle");
   const fetchCart = useCartStore((state) => state.fetchCart);
+
+  const log = (msg: string, extra?: any) => {
+    console.log(msg, extra ?? "");
+    setLogs(prev => [...prev, `${msg} ${extra ? JSON.stringify(extra) : ""}`]);
+  };
 
   // Confirm order with backend (fallback for when webhook doesn't fire)
   const confirmOrder = async (paymentId: string) => {
@@ -38,8 +46,22 @@ export default function CheckoutSuccessPage() {
         // Trigger notification badge refresh in Header
         window.dispatchEvent(new Event("notif-update"));
       } else {
-        const err = await res.json().catch(() => ({}));
-        console.error("Confirm order failed:", err);
+        const rawText = await res.text();
+        let err: any = {};
+
+        if (rawText) {
+          try {
+            err = JSON.parse(rawText);
+          } catch {
+            err = { rawText };
+          }
+        }
+
+        console.error("Confirm order failed:", {
+          status: res.status,
+          statusText: res.statusText,
+          ...err,
+        });
         setConfirmStatus("error");
       }
     } catch (e) {
@@ -68,13 +90,17 @@ export default function CheckoutSuccessPage() {
 
       if (!clientSecret) {
         if (piId) {
-          // Stripe redirect can arrive without client secret; honor explicit success.
+          log("[success] no client_secret, but have PI ->", {
+            paymentIntentId: piId,
+            redirectStatus,
+          });
           if (redirectStatus === "succeeded") {
             setStatus("succeeded");
+            await confirmOrder(piId);
           } else {
             setStatus("processing");
+            await confirmOrder(piId);
           }
-          confirmOrder(piId);
         } else {
           setStatus("unknown");
         }
@@ -89,7 +115,6 @@ export default function CheckoutSuccessPage() {
 
       const { paymentIntent: piObj, error } =
         await stripe.retrievePaymentIntent(clientSecret);
-
       if (error) {
         setStatus("unknown");
         return;
@@ -97,18 +122,36 @@ export default function CheckoutSuccessPage() {
 
       setPi(piObj?.id || piId);
       const finalPiId = piObj?.id || piId;
+      const checkoutId = localStorage.getItem("last_checkout_id") || "";
+      localStorage.removeItem("last_checkout_id");
 
       switch (piObj?.status) {
         case "succeeded":
           setStatus("succeeded");
-          // Payment confirmed by Stripe — create orders via backend
-          if (finalPiId) confirmOrder(finalPiId);
+          if (piObj?.id && checkoutId) {
+            try {
+              const createdKey = `order_created_for_${checkoutId}`;
+              if (!sessionStorage.getItem(createdKey)) {
+                await createOrder(checkoutId, piObj.id);
+                sessionStorage.setItem(createdKey, "1");
+              }
+              setOrderCreated(true);
+            } catch (orderError: any) {
+              log("[success] createOrder failed ->", orderError?.response?.data || orderError);
+              if (finalPiId) {
+                await confirmOrder(finalPiId);
+              }
+            }
+          } else if (finalPiId) {
+            await confirmOrder(finalPiId);
+          }
           break;
         case "processing":
         case "requires_action":
           setStatus("processing");
-          // Still processing — try to confirm anyway (Stripe may have captured)
-          if (finalPiId) confirmOrder(finalPiId);
+          if (finalPiId) {
+            await confirmOrder(finalPiId);
+          }
           break;
         case "requires_payment_method":
         case "canceled":

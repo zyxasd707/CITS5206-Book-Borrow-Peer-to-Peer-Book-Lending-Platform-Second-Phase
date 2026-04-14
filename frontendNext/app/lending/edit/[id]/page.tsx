@@ -162,7 +162,7 @@ export default function EditBookPage() {
       author: form.author,
       category: form.category,
       description: form.description,
-      coverImgUrl: form.coverFile?.url || "",
+      coverImgUrl: form.coverImgUrl || "",
       conditionImgURLs: form.conditionFiles.map((f) => f.url),
       status: form.status,
       condition: form.condition,

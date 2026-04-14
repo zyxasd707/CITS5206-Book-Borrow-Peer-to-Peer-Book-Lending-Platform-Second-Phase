@@ -16,7 +16,10 @@ from services.complaint_service import ComplaintService
 from services.notification_service import NotificationService
 from typing import Set
 import logging
-from services.email_service import send_order_confirmation_receipt_email
+from services.email_service import (
+    send_order_confirmation_receipt_email,
+    send_shipment_status_email,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -345,6 +348,7 @@ class OrderService:
             result.append({
                 "order_id": order.id,
                 "status": order.status,
+                "action_type": order.action_type,
                 "total_paid_amount": float(order.total_paid_amount),
                 "books": books_info,
                 "create_at": order.created_at,
@@ -352,6 +356,8 @@ class OrderService:
                 "completed_at": order.completed_at,
                 "owner_id": order.owner_id,
                 "borrower_id": order.borrower_id,
+                "shipping_out_tracking_number": order.shipping_out_tracking_number,
+                "shipping_return_tracking_number": order.shipping_return_tracking_number,
             })
         return result
     
@@ -482,6 +488,17 @@ class OrderService:
         for order in orders:
             out_num = order.shipping_out_tracking_number if order.shipping_out_carrier == "AUSPOST" else None
             return_num = order.shipping_return_tracking_number if order.shipping_return_carrier == "AUSPOST" else None
+            first_book = next((ob.book for ob in order.books if ob.book), None)
+            book_title = None
+            if first_book:
+                book_title = first_book.title_or or first_book.title_en
+
+            if order.owner_id == user_id:
+                counterpart_name = order.borrower.name if order.borrower else None
+                counterpart_role = "Borrower"
+            else:
+                counterpart_name = order.owner.name if order.owner else None
+                counterpart_role = "Owner"
 
             # Only include if at least one AUPOST tracking number exists
             if out_num or return_num:
@@ -489,6 +506,13 @@ class OrderService:
                     "order_id": order.id,
                     "shipping_out_tracking_number": out_num,
                     "shipping_return_tracking_number": return_num,
+                    "book_title": book_title,
+                    "counterpart_name": counterpart_name,
+                    "counterpart_role": counterpart_role,
+                    "created_at": order.created_at,
+                    "updated_at": order.updated_at,
+                    "start_at": order.start_at,
+                    "returned_at": order.returned_at,
                 })
 
         return result
@@ -589,6 +613,8 @@ class OrderService:
             )
             order.due_at = order.start_at + timedelta(days=max_lending_days)
 
+            estimated_delivery_date = order.start_at.strftime("%d/%m/%Y") if order.start_at else "TBD"
+
             # Notify borrower: book shipped
             NotificationService.create(
                 db, user_id=order.borrower_id, order_id=order.id,
@@ -597,6 +623,34 @@ class OrderService:
                 message=f"The lender has shipped your book. Tracking: {tracking_number} ({carrier_upper}).",
                 commit=False,
             )
+
+            try:
+                borrower_name = (order.borrower.name if order.borrower and order.borrower.name else "there")
+                owner_name = (order.owner.name if order.owner and order.owner.name else "there")
+
+                if order.borrower and order.borrower.email:
+                    send_shipment_status_email(
+                        email=order.borrower.email,
+                        username=borrower_name,
+                        order_id=order.id,
+                        tracking_number=tracking_number,
+                        courier_name=carrier_upper,
+                        estimated_delivery_date=estimated_delivery_date,
+                        recipient_role="borrower",
+                    )
+
+                if order.owner and order.owner.email:
+                    send_shipment_status_email(
+                        email=order.owner.email,
+                        username=owner_name,
+                        order_id=order.id,
+                        tracking_number=tracking_number,
+                        courier_name=carrier_upper,
+                        estimated_delivery_date=estimated_delivery_date,
+                        recipient_role="owner",
+                    )
+            except Exception as e:
+                logger.warning("Failed to send shipment status emails: %s", e)
 
             # implement distribute shipping fee function
             try:
@@ -688,6 +742,86 @@ class OrderService:
 
         db.commit()
         return count
+
+    @staticmethod
+    def borrower_confirm_received(db: Session, order_id: str, current_user: User) -> bool:
+        order = db.query(Order).filter(Order.id == order_id).first()
+
+        if not order:
+            raise HTTPException(status_code=404, detail="Order not found")
+
+        if order.borrower_id != current_user.user_id and not current_user.is_admin:
+            raise HTTPException(status_code=403, detail="Only borrower can confirm receipt")
+
+        if order.status != "PENDING_SHIPMENT":
+            raise HTTPException(
+                status_code=400,
+                detail=f"Cannot confirm receipt for order with status '{order.status}'",
+            )
+
+        if not order.shipping_out_tracking_number:
+            raise HTTPException(
+                status_code=400,
+                detail="Outbound tracking must be recorded before confirming receipt",
+            )
+
+        now = datetime.now(timezone.utc)
+        if order.action_type == "purchase":
+            order.status = "COMPLETED"
+            order.completed_at = now
+
+            NotificationService.create(
+                db,
+                user_id=order.borrower_id,
+                order_id=order.id,
+                type="COMPLETED",
+                title="Order Completed",
+                message="You confirmed receipt of the purchased book. The order is now complete.",
+                commit=False,
+            )
+            NotificationService.create(
+                db,
+                user_id=order.owner_id,
+                order_id=order.id,
+                type="COMPLETED",
+                title="Order Completed",
+                message="The buyer confirmed receiving the book. The order is now complete.",
+                commit=False,
+            )
+        else:
+            from datetime import timedelta
+
+            order.status = "BORROWING"
+            order.start_at = now
+
+            max_lending_days = max(
+                (ob.book.max_lending_days for ob in order.books if ob.book and ob.book.max_lending_days),
+                default=20,
+            )
+            order.due_at = now + timedelta(days=max_lending_days)
+
+            NotificationService.create(
+                db,
+                user_id=order.borrower_id,
+                order_id=order.id,
+                type="BORROWING",
+                title="Book Received",
+                message="You confirmed receipt of the shipped book. The borrowing period has started.",
+                commit=False,
+            )
+            NotificationService.create(
+                db,
+                user_id=order.owner_id,
+                order_id=order.id,
+                type="BORROWING",
+                title="Borrower Confirmed Receipt",
+                message="The borrower confirmed receiving the book. The borrowing period has started.",
+                commit=False,
+            )
+
+        db.commit()
+        db.refresh(order)
+        return True
 
 
 
