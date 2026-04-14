@@ -17,6 +17,7 @@ class UserSummary(BaseModel):
 class OrderSummary(BaseModel):
     order_id: str
     status: str
+    action_type: str
     total_paid_amount: float
     books: List[BookSummary]
     create_at: datetime = None

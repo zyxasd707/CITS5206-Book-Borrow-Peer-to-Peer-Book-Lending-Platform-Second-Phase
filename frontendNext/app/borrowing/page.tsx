@@ -4,12 +4,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Search, Filter, Package, Clock, AlertTriangle, ArrowDownCircle, ArrowUpCircle, User as UserIcon, RefreshCw } from "lucide-react";
+import { toast } from "sonner";
 import CoverImg from "../components/ui/CoverImg";
 import Card from "../components/ui/Card";
 import Button from "../components/ui/Button";
 import { EmptyState, ErrorState, LoadingState } from "../components/ui/AsyncState";
 import type { OrderStatus } from "@/app/types/order";
-import { getBorrowingOrders, type Order } from "@/utils/borrowingOrders";
+import { confirmBorrowerReceived, getBorrowingOrders, type Order } from "@/utils/borrowingOrders";
 import { getCurrentUser } from "@/utils/auth";
 
 const STATUS_META: Record<OrderStatus, { label: string; className: string }> = {
@@ -52,6 +53,7 @@ function getDisplayedStatusMeta(
 
 function getEffectiveStatus(order: Order): OrderStatus {
   if (
+    order.action_type === "borrow" &&
     order.status === "PENDING_SHIPMENT" &&
     order.shipping_out_tracking_number
   ) {
@@ -68,6 +70,7 @@ export default function OrderListPage() {
   const [search, setSearch] = useState("");
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [usersCache, setUsersCache] = useState<Record<string, any>>({});
+  const [confirmingOrderId, setConfirmingOrderId] = useState<string | null>(null);
   const router = useRouter();
 
   useEffect(() => {
@@ -131,6 +134,21 @@ export default function OrderListPage() {
 
   const countBy = (s: OrderStatus) =>
     orders.filter((o) => getEffectiveStatus(o) === s).length;
+
+  const handleConfirmReceive = async (orderId: string) => {
+    try {
+      setConfirmingOrderId(orderId);
+      await confirmBorrowerReceived(orderId);
+      const refreshedOrders = await getBorrowingOrders();
+      setOrders(refreshedOrders);
+      toast.success("Book received successfully");
+    } catch (error) {
+      console.error("Failed to confirm receipt:", error);
+      toast.error("Failed to confirm receive");
+    } finally {
+      setConfirmingOrderId(null);
+    }
+  };
 
   const filterOptions = [
     {
@@ -248,6 +266,12 @@ export default function OrderListPage() {
                 filteredOrders.map((order) => {
                   const firstBook = order.books[0];
                   const extra = Math.max(0, order.books.length - 1);
+                  const isBorrower =
+                    currentUserId !== null && order.borrower_id === currentUserId;
+                  const canConfirmReceive =
+                    isBorrower &&
+                    order.status === "PENDING_SHIPMENT" &&
+                    !!order.shipping_out_tracking_number;
                   const meta = getDisplayedStatusMeta(
                     order.status,
                     order.shipping_out_tracking_number
@@ -397,6 +421,18 @@ export default function OrderListPage() {
 
                         {/* Actions */}
                         <div className="flex gap-2 mt-3 flex-wrap">
+                          {canConfirmReceive && (
+                            <Button
+                              size="sm"
+                              className="bg-green-600 text-white hover:bg-green-700"
+                              disabled={confirmingOrderId === order.order_id}
+                              onClick={() => handleConfirmReceive(order.order_id)}
+                            >
+                              {confirmingOrderId === order.order_id
+                                ? "Confirming..."
+                                : "Confirm Receive"}
+                            </Button>
+                          )}
                           <Button
                             variant="outline"
                             size="sm"

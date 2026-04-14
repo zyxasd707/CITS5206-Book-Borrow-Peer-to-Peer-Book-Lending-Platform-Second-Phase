@@ -348,6 +348,7 @@ class OrderService:
             result.append({
                 "order_id": order.id,
                 "status": order.status,
+                "action_type": order.action_type,
                 "total_paid_amount": float(order.total_paid_amount),
                 "books": books_info,
                 "create_at": order.created_at,
@@ -728,6 +729,86 @@ class OrderService:
 
         db.commit()
         return count
+
+    @staticmethod
+    def borrower_confirm_received(db: Session, order_id: str, current_user: User) -> bool:
+        order = db.query(Order).filter(Order.id == order_id).first()
+
+        if not order:
+            raise HTTPException(status_code=404, detail="Order not found")
+
+        if order.borrower_id != current_user.user_id and not current_user.is_admin:
+            raise HTTPException(status_code=403, detail="Only borrower can confirm receipt")
+
+        if order.status != "PENDING_SHIPMENT":
+            raise HTTPException(
+                status_code=400,
+                detail=f"Cannot confirm receipt for order with status '{order.status}'",
+            )
+
+        if not order.shipping_out_tracking_number:
+            raise HTTPException(
+                status_code=400,
+                detail="Outbound tracking must be recorded before confirming receipt",
+            )
+
+        now = datetime.now(timezone.utc)
+        if order.action_type == "purchase":
+            order.status = "COMPLETED"
+            order.completed_at = now
+
+            NotificationService.create(
+                db,
+                user_id=order.borrower_id,
+                order_id=order.id,
+                type="COMPLETED",
+                title="Order Completed",
+                message="You confirmed receipt of the purchased book. The order is now complete.",
+                commit=False,
+            )
+            NotificationService.create(
+                db,
+                user_id=order.owner_id,
+                order_id=order.id,
+                type="COMPLETED",
+                title="Order Completed",
+                message="The buyer confirmed receiving the book. The order is now complete.",
+                commit=False,
+            )
+        else:
+            from datetime import timedelta
+
+            order.status = "BORROWING"
+            order.start_at = now
+
+            max_lending_days = max(
+                (ob.book.max_lending_days for ob in order.books if ob.book and ob.book.max_lending_days),
+                default=20,
+            )
+            order.due_at = now + timedelta(days=max_lending_days)
+
+            NotificationService.create(
+                db,
+                user_id=order.borrower_id,
+                order_id=order.id,
+                type="BORROWING",
+                title="Book Received",
+                message="You confirmed receipt of the shipped book. The borrowing period has started.",
+                commit=False,
+            )
+            NotificationService.create(
+                db,
+                user_id=order.owner_id,
+                order_id=order.id,
+                type="BORROWING",
+                title="Borrower Confirmed Receipt",
+                message="The borrower confirmed receiving the book. The borrowing period has started.",
+                commit=False,
+            )
+
+        db.commit()
+        db.refresh(order)
+        return True
 
 
 

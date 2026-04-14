@@ -79,6 +79,7 @@ export default function OrderDetailPage() {
   const [trackingNumber, setTrackingNumber] = useState(""); // input tracking number
   const [carrier, setCarrier] = useState("AUSPOST"); // default carrier="AUSPOST"
   const [confirmReceiveModalOpen, setConfirmReceiveModalOpen] = useState(false);
+  const [borrowerConfirmReceiveModalOpen, setBorrowerConfirmReceiveModalOpen] = useState(false);
 
   // MVP6: refund state
   const [refunds, setRefunds] = useState<Array<{
@@ -275,6 +276,38 @@ export default function OrderDetailPage() {
 
       const res = await fetch(
         `${getApiUrl()}/api/v1/orders/${orderId}/owner-confirm-received`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      if (!res.ok) throw new Error("Failed to confirm receive");
+
+      toast.success("Book received successfully");
+
+      const updatedOrder = await fetchOrderDetails(orderId);
+      if (updatedOrder) setOrder(updatedOrder);
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to confirm receive");
+    }
+  };
+
+  const handleBorrowerConfirmReceive = async (orderId: string) => {
+    try {
+      const token = getToken();
+      if (!token) {
+        toast.error("Please login first");
+        router.push("/auth");
+        return;
+      }
+
+      const res = await fetch(
+        `${getApiUrl()}/api/v1/orders/${orderId}/borrower-confirm-received`,
         {
           method: "PUT",
           headers: {
@@ -748,6 +781,16 @@ export default function OrderDetailPage() {
               Confirm Receive Book
             </Button>
           )}
+          {isBorrower &&
+            order.status === "PENDING_SHIPMENT" &&
+            order.shippingOutTrackingNumber && (
+              <Button
+                className="bg-green-600 text-white hover:bg-green-700"
+                onClick={() => setBorrowerConfirmReceiveModalOpen(true)}
+              >
+                Confirm Receive
+              </Button>
+            )}
         </div>
       </Card>
 
@@ -878,6 +921,35 @@ export default function OrderDetailPage() {
               onClick={() => {
                 handleConfirmReceive(order!.id);
                 setConfirmReceiveModalOpen(false);
+              }}
+            >
+              Confirm
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        isOpen={borrowerConfirmReceiveModalOpen}
+        onClose={() => setBorrowerConfirmReceiveModalOpen(false)}
+        title="Confirm Receive"
+      >
+        <div className="space-y-4">
+          <p>
+            Are you sure you have received this shipment? This action will start
+            the borrowing period for the order.
+          </p>
+          <div className="flex justify-end gap-2 mt-4">
+            <Button
+              variant="outline"
+              onClick={() => setBorrowerConfirmReceiveModalOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                handleBorrowerConfirmReceive(order!.id);
+                setBorrowerConfirmReceiveModalOpen(false);
               }}
             >
               Confirm
