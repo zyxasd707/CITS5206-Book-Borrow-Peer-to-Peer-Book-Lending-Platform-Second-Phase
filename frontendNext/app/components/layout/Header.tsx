@@ -15,6 +15,7 @@ import Avatar from "@/app/components/ui/Avatar";
 import { useCartStore } from "@/app/store/cartStore";
 import type { User } from "@/app/types/user";
 import type { ChatThread } from "@/app/types/message";
+import { BarChart3 } from "lucide-react";
 
 const isAdminLikeUser = (user: User | null) =>
   Boolean(user?.is_admin) || Boolean(user?.email?.toLowerCase().includes("admin"));
@@ -33,7 +34,7 @@ const Header: React.FC = () => {
 
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
 
-    // Add this effect to clear search when route changes
+  // Add this effect to clear search when route changes
   useEffect(() => {
     const handleRouteChange = () => {
       setSearchQuery("");
@@ -41,7 +42,7 @@ const Header: React.FC = () => {
 
     // Subscribe to route changes
     window.addEventListener('popstate', handleRouteChange);
-    
+
     return () => {
       window.removeEventListener('popstate', handleRouteChange);
     };
@@ -267,6 +268,18 @@ const Header: React.FC = () => {
                         <UserIcon className="w-4 h-4 mr-3" />
                         View Profile
                       </Link>
+
+                      {/* Admin Analytics Dashboard (only for admin users) */}
+                      {currentUser?.is_admin && (
+                        <Link
+                          href="/admin/user-metrics"
+                          className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                          onClick={() => setShowProfileMenu(false)}
+                        >
+                          <BarChart3 className="w-4 h-4 mr-2" />
+                          See Analytics
+                        </Link>
+                      )}
 
                       {/* New Shipping entry */}
                       <Link

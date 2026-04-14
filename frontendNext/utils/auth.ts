@@ -383,40 +383,6 @@ export const getUserById = async (id: string): Promise<User | null> => {
     const userData = response.data;
 
     return mapApiUserToUser(userData);
-    const user: User = {
-      id: userData.id,
-      firstName: userData.firstName,
-      lastName: userData.lastName,
-      name: userData.name,
-      email: userData.email,
-      phoneNumber: userData.phoneNumber || undefined,
-      dateOfBirth: userData.dateOfBirth || undefined,
-
-      country: userData.country,
-      streetAddress: userData.streetAddress,
-      city: userData.city,
-      state: userData.state,
-      zipCode: userData.zipCode,
-      coordinates: userData.coordinates || undefined,
-      maxDistance: userData.maxDistance || undefined,
-
-      avatar:
-        userData.avatar ||
-        `https://ui-avatars.com/api/?name=${encodeURIComponent(
-          userData.name
-        )}&background=f97316&color=fff`,
-      profilePicture: userData.profilePicture || undefined,
-
-      createdAt: new Date(userData.createdAt),
-
-      bio: userData.bio || undefined,
-      preferredLanguages: userData.preferredLanguages || undefined,
-      stripe_account_id: userData.stripe_account_id || undefined,
-      is_admin: Boolean(userData.is_admin ?? userData.isAdmin),
-
-    };
-
-    return user;
   } catch (error) {
     console.error(`Failed to get user ${id}:`, error);
     return null;
