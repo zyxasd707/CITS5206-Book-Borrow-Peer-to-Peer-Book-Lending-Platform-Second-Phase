@@ -1,11 +1,11 @@
 import os
 import stripe
 import traceback
-from fastapi import APIRouter, Depends, HTTPException, status, Request, Header, Body
+from fastapi import APIRouter, Depends, HTTPException, status, Request, Header, Body, Query
 from core.config import settings
 from services import payment_gateway_service
 from sqlalchemy.orm import Session
-from core.dependencies import get_db
+from core.dependencies import get_db, get_current_admin
 from models.payment_gateway import (
     PaymentInitiateRequest,
     PaymentStatusResponse,
@@ -274,6 +274,521 @@ def get_user_refunds(user_id: str, db: Session = Depends(get_db)):
     # Sort by newest first
     result.sort(key=lambda x: x["created_at"] or "", reverse=True)
     return {"user_id": user_id, "refunds": result}
+
+
+# ---------------------------
+# MVP6 Phase 3: Admin Refund Endpoints
+# ---------------------------
+
+@router.get("/refunds/admin", status_code=status.HTTP_200_OK)
+def get_admin_refunds(
+    status_filter: Optional[str] = Query(None, description="Filter by status: succeeded/pending/failed"),
+    refund_type: Optional[str] = Query(None, description="Filter by type: full/deposit/shipping/partial"),
+    search: Optional[str] = Query(None, description="Search by book title, user name, order ID, or refund ID"),
+    sort_by: Optional[str] = Query("created_at", description="Sort field: created_at/amount"),
+    sort_order: Optional[str] = Query("desc", description="Sort order: asc/desc"),
+    page: int = Query(1, ge=1, description="Page number"),
+    page_size: int = Query(20, ge=1, le=100, description="Items per page"),
+    admin: "User" = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    """
+    Admin-only: Get all refund records across all users with search, filter, sort, and pagination.
+    Also returns KPI summary (total count, total amount, success rate, failed count).
+    """
+    from models.order import Order, OrderBook
+    from models.payment_split import PaymentSplit
+    from models.payment_gateway import Refund, Payment, AuditLog, Dispute
+    from models.book import Book
+    from models.user import User
+    from sqlalchemy import func as sa_func, or_, cast, String
+
+    # --- KPI Stats ---
+    total_count = db.query(sa_func.count(Refund.id)).scalar() or 0
+    total_amount = db.query(sa_func.coalesce(sa_func.sum(Refund.amount), 0)).scalar() or 0
+    succeeded_count = db.query(sa_func.count(Refund.id)).filter(Refund.status == "succeeded").scalar() or 0
+    failed_count = db.query(sa_func.count(Refund.id)).filter(Refund.status == "failed").scalar() or 0
+    pending_count = db.query(sa_func.count(Refund.id)).filter(Refund.status == "pending").scalar() or 0
+    success_rate = round((succeeded_count / total_count * 100), 1) if total_count > 0 else 0
+
+    # --- Build query ---
+    query = db.query(Refund).join(Payment, Refund.payment_id == Payment.payment_id)
+
+    # Status filter
+    if status_filter:
+        query = query.filter(Refund.status == status_filter)
+
+    # Search
+    if search:
+        search_term = f"%{search}%"
+        # We need to join more tables for search
+        query = query.outerjoin(
+            PaymentSplit, Payment.payment_id == PaymentSplit.payment_id
+        ).outerjoin(
+            Order, PaymentSplit.order_id == Order.id
+        ).outerjoin(
+            User, Order.borrower_id == User.user_id
+        )
+        query = query.filter(
+            or_(
+                Refund.refund_id.ilike(search_term),
+                Order.id.ilike(search_term),
+                User.name.ilike(search_term),
+                User.email.ilike(search_term),
+            )
+        )
+
+    # Sort
+    if sort_by == "amount":
+        order_col = Refund.amount
+    else:
+        order_col = Refund.created_at
+    if sort_order == "asc":
+        query = query.order_by(order_col.asc())
+    else:
+        query = query.order_by(order_col.desc())
+
+    # Pagination
+    total_filtered = query.count()
+    refunds = query.offset((page - 1) * page_size).limit(page_size).all()
+
+    # --- Build response ---
+    result = []
+    for r in refunds:
+        payment = db.query(Payment).filter(Payment.payment_id == r.payment_id).first()
+
+        # Find order via PaymentSplit
+        sp = db.query(PaymentSplit).filter(PaymentSplit.payment_id == r.payment_id).first()
+        order = None
+        borrower = None
+        lender = None
+        book_titles = []
+        disputes = []
+
+        if sp:
+            order = db.query(Order).filter(Order.id == sp.order_id).first()
+            if order:
+                borrower = db.query(User).filter(User.user_id == order.borrower_id).first()
+                lender = db.query(User).filter(User.user_id == order.owner_id).first()
+                order_books = db.query(OrderBook).filter(OrderBook.order_id == order.id).all()
+                for ob in order_books:
+                    book = db.query(Book).filter(Book.id == ob.book_id).first()
+                    if book:
+                        book_titles.append(book.title_en or book.title_or or "Unknown")
+
+        # Determine refund type
+        if sp:
+            total_cents = (sp.deposit_cents or 0) + (sp.shipping_cents or 0)
+            if r.amount >= total_cents and total_cents > 0:
+                r_type = "full"
+            elif r.amount == (sp.deposit_cents or 0) and (sp.deposit_cents or 0) > 0:
+                r_type = "deposit"
+            elif r.amount == (sp.shipping_cents or 0) and (sp.shipping_cents or 0) > 0:
+                r_type = "shipping"
+            else:
+                r_type = "partial"
+        else:
+            r_type = "unknown"
+
+        # Refund type filter (post-query since type is computed)
+        if refund_type and r_type != refund_type:
+            continue
+
+        # Get disputes for this payment
+        if payment:
+            payment_disputes = db.query(Dispute).filter(Dispute.payment_id == payment.payment_id).all()
+            disputes = [
+                {
+                    "dispute_id": d.dispute_id,
+                    "reason": d.reason,
+                    "status": d.status,
+                    "created_at": d.created_at.isoformat() if d.created_at else None,
+                }
+                for d in payment_disputes
+            ]
+
+        # Determine trigger condition from audit logs
+        trigger = "unknown"
+        if sp and order:
+            log = db.query(AuditLog).filter(
+                AuditLog.reference_id == order.id,
+                AuditLog.event_type.in_(["refund_on_cancel", "auto_refund", "refund_payment", "manual_refund"])
+            ).first()
+            if log:
+                if "cancel" in log.event_type:
+                    trigger = "user_cancel"
+                elif "auto" in log.event_type:
+                    trigger = "timeout"
+                elif "manual" in log.event_type:
+                    trigger = "admin_manual"
+                else:
+                    trigger = "payment_flow"
+
+        result.append({
+            "refund_id": r.refund_id,
+            "payment_id": r.payment_id,
+            "amount": r.amount,
+            "currency": r.currency,
+            "status": r.status,
+            "reason": r.reason,
+            "refund_type": r_type,
+            "trigger": trigger,
+            "created_at": r.created_at.isoformat() if r.created_at else None,
+            "updated_at": r.updated_at.isoformat() if r.updated_at else None,
+            "order": {
+                "order_id": order.id if order else None,
+                "status": order.status if order else None,
+                "book_titles": book_titles,
+            } if order else None,
+            "borrower": {
+                "user_id": borrower.user_id,
+                "name": borrower.name,
+                "email": borrower.email,
+            } if borrower else None,
+            "lender": {
+                "user_id": lender.user_id,
+                "name": lender.name,
+                "email": lender.email,
+            } if lender else None,
+            "disputes": disputes,
+        })
+
+    return {
+        "kpi": {
+            "total_count": total_count,
+            "total_amount": total_amount,
+            "succeeded_count": succeeded_count,
+            "failed_count": failed_count,
+            "pending_count": pending_count,
+            "success_rate": success_rate,
+        },
+        "pagination": {
+            "page": page,
+            "page_size": page_size,
+            "total": total_filtered,
+            "total_pages": (total_filtered + page_size - 1) // page_size,
+        },
+        "refunds": result,
+    }
+
+
+@router.get("/refunds/admin/{refund_id}", status_code=status.HTTP_200_OK)
+def get_admin_refund_detail(
+    refund_id: str,
+    admin: "User" = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    """
+    Admin-only: Get detailed info for a single refund, including Stripe IDs,
+    borrower/lender info, audit timeline, disputes, and payment breakdown.
+    """
+    from models.order import Order, OrderBook
+    from models.payment_split import PaymentSplit
+    from models.payment_gateway import Refund, Payment, AuditLog, Dispute
+    from models.book import Book
+    from models.user import User
+
+    refund = db.query(Refund).filter(Refund.refund_id == refund_id).first()
+    if not refund:
+        raise HTTPException(status_code=404, detail="Refund not found")
+
+    payment = db.query(Payment).filter(Payment.payment_id == refund.payment_id).first()
+    sp = db.query(PaymentSplit).filter(PaymentSplit.payment_id == refund.payment_id).first()
+
+    order = None
+    borrower = None
+    lender = None
+    book_titles = []
+    timeline = []
+    disputes = []
+
+    if sp:
+        order = db.query(Order).filter(Order.id == sp.order_id).first()
+        if order:
+            borrower = db.query(User).filter(User.user_id == order.borrower_id).first()
+            lender = db.query(User).filter(User.user_id == order.owner_id).first()
+            order_books = db.query(OrderBook).filter(OrderBook.order_id == order.id).all()
+            for ob in order_books:
+                book = db.query(Book).filter(Book.id == ob.book_id).first()
+                if book:
+                    book_titles.append(book.title_en or book.title_or or "Unknown")
+
+            # Audit log timeline
+            logs = db.query(AuditLog).filter(
+                AuditLog.reference_id == order.id
+            ).order_by(AuditLog.created_at.asc()).all()
+            timeline = [
+                {
+                    "event": log.event_type,
+                    "actor": log.actor,
+                    "message": log.message,
+                    "timestamp": log.created_at.isoformat() if log.created_at else None,
+                }
+                for log in logs
+            ]
+
+    # Disputes
+    if payment:
+        payment_disputes = db.query(Dispute).filter(Dispute.payment_id == payment.payment_id).all()
+        disputes = [
+            {
+                "dispute_id": d.dispute_id,
+                "user_id": d.user_id,
+                "reason": d.reason,
+                "note": d.note,
+                "status": d.status,
+                "deduction": d.deduction,
+                "created_at": d.created_at.isoformat() if d.created_at else None,
+            }
+            for d in payment_disputes
+        ]
+
+    # Refund type
+    if sp:
+        total_cents = (sp.deposit_cents or 0) + (sp.shipping_cents or 0)
+        if refund.amount >= total_cents and total_cents > 0:
+            r_type = "full"
+        elif refund.amount == (sp.deposit_cents or 0) and (sp.deposit_cents or 0) > 0:
+            r_type = "deposit"
+        elif refund.amount == (sp.shipping_cents or 0) and (sp.shipping_cents or 0) > 0:
+            r_type = "shipping"
+        else:
+            r_type = "partial"
+    else:
+        r_type = "unknown"
+
+    # Trigger condition
+    trigger = "unknown"
+    if sp and order:
+        log = db.query(AuditLog).filter(
+            AuditLog.reference_id == order.id,
+            AuditLog.event_type.in_(["refund_on_cancel", "auto_refund", "refund_payment", "manual_refund"])
+        ).first()
+        if log:
+            if "cancel" in log.event_type:
+                trigger = "user_cancel"
+            elif "auto" in log.event_type:
+                trigger = "timeout"
+            elif "manual" in log.event_type:
+                trigger = "admin_manual"
+            else:
+                trigger = "payment_flow"
+
+    return {
+        "refund_id": refund.refund_id,
+        "payment_id": refund.payment_id,
+        "amount": refund.amount,
+        "currency": refund.currency,
+        "status": refund.status,
+        "reason": refund.reason,
+        "refund_type": r_type,
+        "trigger": trigger,
+        "created_at": refund.created_at.isoformat() if refund.created_at else None,
+        "updated_at": refund.updated_at.isoformat() if refund.updated_at else None,
+        "payment": {
+            "payment_id": payment.payment_id,
+            "amount": payment.amount,
+            "deposit": payment.deposit,
+            "shipping_fee": payment.shipping_fee,
+            "service_fee": payment.service_fee,
+            "status": payment.status,
+            "action_type": payment.action_type,
+        } if payment else None,
+        "payment_split": {
+            "deposit_cents": sp.deposit_cents,
+            "shipping_cents": sp.shipping_cents,
+            "service_fee_cents": sp.service_fee_cents,
+        } if sp else None,
+        "order": {
+            "order_id": order.id,
+            "status": order.status,
+            "book_titles": book_titles,
+            "created_at": order.created_at.isoformat() if order.created_at else None,
+            "canceled_at": order.canceled_at.isoformat() if order.canceled_at else None,
+        } if order else None,
+        "borrower": {
+            "user_id": borrower.user_id,
+            "name": borrower.name,
+            "email": borrower.email,
+        } if borrower else None,
+        "lender": {
+            "user_id": lender.user_id,
+            "name": lender.name,
+            "email": lender.email,
+        } if lender else None,
+        "timeline": timeline,
+        "disputes": disputes,
+    }
+
+
+@router.post("/refunds/admin/{refund_id}/retry", status_code=status.HTTP_200_OK)
+def retry_failed_refund(
+    refund_id: str,
+    admin: "User" = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    """
+    Admin-only: Retry a failed Stripe refund.
+    Creates a new Stripe refund for the same payment and amount.
+    """
+    from models.payment_gateway import Refund, Payment, AuditLog
+    from models.payment_split import PaymentSplit
+    from models.order import Order
+
+    refund = db.query(Refund).filter(Refund.refund_id == refund_id).first()
+    if not refund:
+        raise HTTPException(status_code=404, detail="Refund not found")
+    if refund.status != "failed":
+        raise HTTPException(status_code=400, detail=f"Refund status is '{refund.status}', only 'failed' refunds can be retried")
+
+    try:
+        new_refund = stripe.Refund.create(
+            payment_intent=refund.payment_id,
+            amount=refund.amount,
+            reason=refund.reason,
+        )
+    except stripe.error.InvalidRequestError as e:
+        raise HTTPException(status_code=400, detail=f"Stripe error: {str(e)}")
+
+    # Update existing refund record with new Stripe refund
+    refund.refund_id = new_refund.id
+    refund.status = new_refund.status
+    refund.updated_at = None  # trigger auto-update
+
+    # Audit log
+    sp = db.query(PaymentSplit).filter(PaymentSplit.payment_id == refund.payment_id).first()
+    order_id = sp.order_id if sp else refund.payment_id
+    log = AuditLog(
+        event_type="admin_retry_refund",
+        reference_id=order_id,
+        actor=admin.user_id,
+        message=f"Admin retried failed refund. Old: {refund_id}, New: {new_refund.id}, Amount: {refund.amount} cents",
+    )
+    db.add(log)
+    db.commit()
+
+    return {
+        "message": "Refund retry initiated",
+        "old_refund_id": refund_id,
+        "new_refund_id": new_refund.id,
+        "amount": refund.amount,
+        "status": new_refund.status,
+    }
+
+
+@router.post("/refunds/admin/manual", status_code=status.HTTP_201_CREATED)
+def manual_admin_refund(
+    order_id: str = Body(..., description="Order ID to refund"),
+    refund_type: str = Body("full", description="Refund type: full/deposit/shipping"),
+    reason: str = Body("Admin manual refund", description="Reason for refund"),
+    admin: "User" = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    """
+    Admin-only: Manually issue a refund for any order.
+    Works regardless of order status (admin override).
+    """
+    from models.order import Order
+    from models.payment_split import PaymentSplit
+    from models.payment_gateway import Refund, Payment, AuditLog
+
+    order = db.query(Order).filter(Order.id == order_id).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+
+    sp = db.query(PaymentSplit).filter(PaymentSplit.order_id == order_id).first()
+    if not sp:
+        raise HTTPException(status_code=404, detail="Payment split not found for this order")
+
+    # Calculate refund amount based on type
+    if refund_type == "shipping":
+        refund_amount = int(sp.shipping_cents or 0)
+    elif refund_type == "deposit":
+        refund_amount = int(sp.deposit_cents or 0)
+    else:  # full
+        refund_amount = int(sp.deposit_cents or 0) + int(sp.shipping_cents or 0)
+
+    if refund_amount <= 0:
+        raise HTTPException(status_code=400, detail=f"No refundable amount for refund_type='{refund_type}'")
+
+    # Check if already fully refunded
+    from sqlalchemy import func as sa_func
+    existing_refunded = (
+        db.query(sa_func.coalesce(sa_func.sum(Refund.amount), 0))
+        .filter(Refund.payment_id == sp.payment_id, Refund.status.in_(["succeeded", "pending"]))
+        .scalar()
+    ) or 0
+    payment = db.query(Payment).filter(Payment.payment_id == sp.payment_id).first()
+    if payment and int(existing_refunded) + refund_amount > int(payment.amount or 0):
+        raise HTTPException(status_code=400, detail="Refund amount would exceed original payment amount")
+
+    try:
+        r = stripe.Refund.create(
+            payment_intent=sp.payment_id,
+            amount=refund_amount,
+            reason=reason,
+        )
+    except stripe.error.InvalidRequestError as e:
+        raise HTTPException(status_code=400, detail=f"Stripe error: {str(e)}")
+
+    # Save refund record
+    db_refund = Refund(
+        refund_id=r.id,
+        payment_id=sp.payment_id,
+        amount=refund_amount,
+        currency=r.currency,
+        status=r.status,
+        reason=reason,
+    )
+    db.add(db_refund)
+
+    # Update payment status
+    from sqlalchemy import func as sa_func
+    total_refunded = int(existing_refunded) + refund_amount
+    if payment:
+        if total_refunded >= int(payment.amount or 0):
+            payment.status = "refunded"
+        else:
+            payment.status = "partially_refunded"
+
+    # Update order refund amount
+    order.total_refunded_amount = (order.total_refunded_amount or 0) + refund_amount / 100.0
+
+    # Audit log
+    log = AuditLog(
+        event_type="manual_refund",
+        reference_id=order_id,
+        actor=admin.user_id,
+        message=f"Admin manual refund: {refund_type}, {refund_amount} cents. Reason: {reason}",
+    )
+    db.add(log)
+
+    # Send notification to borrower
+    try:
+        from services.notification_service import NotificationService
+        amount_display = refund_amount / 100
+        NotificationService.create(
+            db, user_id=order.borrower_id, order_id=order.id,
+            type="REFUND",
+            title="Refund Issued",
+            message=f"A refund of ${amount_display:.2f} {r.currency.upper()} has been issued by admin. Reason: {reason}",
+            commit=False,
+        )
+    except Exception as e:
+        print(f"[WARN] Failed to create manual refund notification: {e}")
+
+    db.commit()
+
+    return {
+        "message": "Manual refund issued successfully",
+        "refund_id": r.id,
+        "order_id": order_id,
+        "amount": refund_amount,
+        "currency": r.currency,
+        "status": r.status,
+        "refund_type": refund_type,
+        "reason": reason,
+    }
 
 
 @router.post("/payment/compensate/{payment_id}", status_code=status.HTTP_200_OK)
