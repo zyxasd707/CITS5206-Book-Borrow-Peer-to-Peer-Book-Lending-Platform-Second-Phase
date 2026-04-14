@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Card from "@/app/components/ui/Card";
 import Button from "@/app/components/ui/Button";
 import Input from "@/app/components/ui/Input";
-import { LoadingState } from "@/app/components/ui/AsyncState";
+import { EmptyState, ErrorState, LoadingState } from "@/app/components/ui/AsyncState";
 
 import { getCurrentUser, updateUser, getUserById } from "@/utils/auth";
 import type { User } from "@/app/types/user";
@@ -140,6 +140,11 @@ export default function CheckoutPage() {
 
   const [rebuilding, setRebuilding] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [userLoaded, setUserLoaded] = useState(false);
+  const [initializingCheckout, setInitializingCheckout] = useState(true);
+  const [initError, setInitError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [actionNotice, setActionNotice] = useState<string | null>(null);
   const checkoutFields = [
     { f: "contactName", label: "Full Name" },
     { f: "phone", label: "Phone Number" },
@@ -159,9 +164,15 @@ export default function CheckoutPage() {
   // 1. load current user, fill address info
   useEffect(() => {
     async function loadUser() {
-      const user = await getCurrentUser();
-      if (user) {
-        setCurrentUser(user);
+      try {
+        const user = await getCurrentUser();
+        if (user) {
+          setCurrentUser(user);
+        }
+      } catch {
+        setInitError("Unable to load your account. Please refresh and try again.");
+      } finally {
+        setUserLoaded(true);
       }
     }
     loadUser();
@@ -201,16 +212,28 @@ export default function CheckoutPage() {
 
   // 2. init checkout
   useEffect(() => {
-    if (!currentUser) return;
+    if (!userLoaded) return;
+    if (!currentUser) {
+      setInitializingCheckout(false);
+      return;
+    }
     (async () => {
-      let data = await getMyCheckouts();
-      if (!data || data.length === 0) {
-        const newCheckout = await rebuildCheckout(currentUser, [], {}, {});
-        data = [newCheckout];
+      setInitializingCheckout(true);
+      setInitError(null);
+      try {
+        let data = await getMyCheckouts();
+        if (!data || data.length === 0) {
+          const newCheckout = await rebuildCheckout(currentUser, [], {}, {});
+          data = [newCheckout];
+        }
+        setCheckouts(data);
+      } catch {
+        setInitError("Failed to load checkout data. Please retry.");
+      } finally {
+        setInitializingCheckout(false);
       }
-      setCheckouts(data);
     })();
-  }, [currentUser]);
+  }, [currentUser, userLoaded]);
 
   // 3. enrich items with book info
   useEffect(() => {
@@ -274,6 +297,8 @@ export default function CheckoutPage() {
   // save address
   const saveAddress = async () => {
     if (!currentUser || !currentCheckout) return;
+    setActionError(null);
+    setActionNotice(null);
     await updateUser({
       id: currentUser.id,
       state: currentCheckout.state,
@@ -288,7 +313,7 @@ export default function CheckoutPage() {
     const newCheckout = await rebuildCheckout(currentUser, fullItems, cleaned, selectedQuoteByOwner);
     setCheckouts([newCheckout]);
     setIsEditing(false);
-    alert("Address saved!");
+    setActionNotice("Address saved.");
   };
 
   // ---------- Get quotes per owner for DELIVERY items ----------
@@ -375,9 +400,11 @@ export default function CheckoutPage() {
 
   // save delivery method
   const saveDeliveryMethod = async () => {
+    setActionError(null);
+    setActionNotice(null);
     const unselected = items.filter((b) => !itemShipping[b.bookId]);
     if (unselected.length > 0) {
-      alert("Please select delivery method for all items before saving.");
+      setActionError("Please select delivery method for all items before saving.");
       return;
     }
 
@@ -390,7 +417,7 @@ export default function CheckoutPage() {
 
     await requestQuotes();
     setDeliveryMethodSaved(true);
-    alert("Delivery methods saved!");
+    setActionNotice("Delivery methods saved.");
   };
 
 
@@ -409,23 +436,20 @@ export default function CheckoutPage() {
   const startPayment = async (donation: number = 0) => {
     const co = checkouts[0];
     if (!co || !currentUser) return;
+    setActionError(null);
 
     const ownerIds = Array.from(new Set(items.map((it) => it.ownerId))).filter(Boolean);
     const lenderAccountId =
       ownerIds.length > 0 ? ownersMap[ownerIds[0]]?.stripeAccountId : undefined;
 
     if (!lenderAccountId) {
-      alert("Owner payout account is not set. Please contact the book owner and try again.");
+      setActionError("Owner payout account is not set. Please contact the book owner and try again.");
       return;
     }
 
-    const toCents = (n: number | undefined | null) =>
-      Math.max(0, Math.round((n || 0) * 100));
     console.log("[startPayment] lenderAccountId =", lenderAccountId);
     console.log("[startPayment] checkout[0] =", co);
     console.log("[startPayment] donation =", donation);
-
-    const totalAmount = co.totalDue + donation;
 
     try {
       setPaying(true);
@@ -456,13 +480,14 @@ export default function CheckoutPage() {
       setShowDonationModal(false);
     } catch (e: any) {
       console.error("initiatePayment failed:", e?.response?.data || e);
-      alert(e?.response?.data?.detail || "Failed to initiate payment");
+      setActionError(e?.response?.data?.detail || "Failed to initiate payment");
     } finally {
       setPaying(false);
     }
   };
 
   const handleCheckout = () => {
+    setActionError(null);
     // Validate address fields
     const co = checkouts[0];
     if (!co) return;
@@ -480,33 +505,33 @@ export default function CheckoutPage() {
 
     if (missingFields.length > 0) {
       const fieldNames = missingFields.map(({ label }) => label).join(', ');
-      alert(`Please fill in the following required fields: ${fieldNames}`);
+      setActionError(`Please fill in the following required fields: ${fieldNames}`);
       return;
     }
 
     // Check if address is being edited
     if (isEditing) {
-      alert("Please save your delivery address before checkout.");
+      setActionError("Please save your delivery address before checkout.");
       return;
     }
 
     // Validate delivery methods are selected
     const unselected = items.filter((b) => !itemShipping[b.bookId]);
     if (unselected.length > 0) {
-      alert("Please select delivery method for all items before checkout.");
+      setActionError("Please select delivery method for all items before checkout.");
       return;
     }
 
     // Check if delivery methods have been saved
     if (!deliveryMethodSaved) {
-      alert("Please save your delivery methods by clicking the 'Save Delivery Method' button.");
+      setActionError("Please save your delivery methods by clicking the 'Save Delivery Method' button.");
       return;
     }
 
     // Backend requires owner zipcode for checkout creation/update.
     if (ownersMissingZip.length > 0) {
       const ownerNames = ownersMissingZip.map((id) => ownersMap[id]?.name || id).join(", ");
-      alert(
+      setActionError(
         `Checkout cannot continue because owner profile postcode is missing: ${ownerNames}. ` +
         "Please contact the owner(s) to complete their profile postcode."
       );
@@ -519,7 +544,7 @@ export default function CheckoutPage() {
   const handleDonationSubmit = () => {
     const donation = parseFloat(donationAmount) || 0;
     if (donation < 0) {
-      alert("Donation amount cannot be negative");
+      setActionError("Donation amount cannot be negative");
       return;
     }
     startPayment(donation);
@@ -527,12 +552,45 @@ export default function CheckoutPage() {
 
 
   // ---------- When Empty ----------
-  if (!items.length) {
+  if (!userLoaded || initializingCheckout) {
     return (
       <div className="p-6">
         <LoadingState
           title="Preparing checkout..."
           description="Loading cart items, shipping options, and pricing."
+        />
+      </div>
+    );
+  }
+  if (!currentUser) {
+    return (
+      <div className="p-6">
+        <ErrorState
+          title="Login required"
+          description="Please sign in to continue checkout."
+          retryLabel="Go to login"
+          onRetry={() => router.push("/auth")}
+        />
+      </div>
+    );
+  }
+  if (initError) {
+    return (
+      <div className="p-6">
+        <ErrorState
+          title="Checkout unavailable"
+          description={initError}
+          onRetry={() => window.location.reload()}
+        />
+      </div>
+    );
+  }
+  if (!items.length) {
+    return (
+      <div className="p-6">
+        <EmptyState
+          title="Your checkout is empty"
+          description="Add books to cart first, then return to checkout."
         />
       </div>
     );
@@ -549,6 +607,14 @@ export default function CheckoutPage() {
   return (
     <div className="max-w-6xl mx-auto p-4 sm:p-6 space-y-6">
       <h1 className="text-2xl font-bold">Checkout</h1>
+      {actionError && (
+        <ErrorState title="Action required" description={actionError} className="p-4" />
+      )}
+      {actionNotice && (
+        <div className="rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-700">
+          {actionNotice}
+        </div>
+      )}
 
       {/* Address */}
       <Card>

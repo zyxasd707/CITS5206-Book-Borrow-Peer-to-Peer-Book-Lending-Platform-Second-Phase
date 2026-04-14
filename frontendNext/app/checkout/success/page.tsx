@@ -7,20 +7,16 @@ import { hasStripePublishableKey, stripePromise } from "@/utils/stripe";
 import { createOrder } from "@/utils/borrowingOrders";
 import { getApiUrl } from "@/utils/auth";
 import { useCartStore } from "@/app/store/cartStore";
+import { ErrorState, LoadingState } from "@/app/components/ui/AsyncState";
 
 export default function CheckoutSuccessPage() {
   const [status, setStatus] = useState<"succeeded" | "processing" | "canceled" | "unknown">("unknown");
   const [pi, setPi] = useState<string | null>(null);
-  const [logs, setLogs] = useState<string[]>([]);
+  const [resolving, setResolving] = useState(true);
   const [orderCreated, setOrderCreated] = useState(false);
   const [orderIds, setOrderIds] = useState<string[]>([]);
   const [confirmStatus, setConfirmStatus] = useState<"idle" | "confirming" | "done" | "error">("idle");
   const fetchCart = useCartStore((state) => state.fetchCart);
-
-  const log = (msg: string, extra?: any) => {
-    console.log(msg, extra ?? "");
-    setLogs(prev => [...prev, `${msg} ${extra ? JSON.stringify(extra) : ""}`]);
-  };
 
   // Confirm order with backend (fallback for when webhook doesn't fire)
   const confirmOrder = async (paymentId: string) => {
@@ -72,96 +68,107 @@ export default function CheckoutSuccessPage() {
 
   useEffect(() => {
     (async () => {
-      const p = new URLSearchParams(window.location.search);
-      const paymentIntentFromUrl = p.get("payment_intent");
-      const redirectStatus = p.get("redirect_status");
-      const csFromUrl = p.get("payment_intent_client_secret");
+      try {
+        const p = new URLSearchParams(window.location.search);
+        const paymentIntentFromUrl = p.get("payment_intent");
+        const redirectStatus = p.get("redirect_status");
+        const csFromUrl = p.get("payment_intent_client_secret");
 
-      let clientSecret =
-        csFromUrl || localStorage.getItem("last_pi_client_secret") || "";
-      let piId =
-        paymentIntentFromUrl || localStorage.getItem("last_pi_id") || null;
+        const clientSecret =
+          csFromUrl || localStorage.getItem("last_pi_client_secret") || "";
+        const piId =
+          paymentIntentFromUrl || localStorage.getItem("last_pi_id") || null;
 
-      setPi(piId);
+        setPi(piId);
 
-      // Clean up localStorage
-      localStorage.removeItem("last_pi_client_secret");
-      localStorage.removeItem("last_pi_id");
+        // Clean up localStorage
+        localStorage.removeItem("last_pi_client_secret");
+        localStorage.removeItem("last_pi_id");
 
-      if (!clientSecret) {
-        if (piId) {
-          log("[success] no client_secret, but have PI ->", {
-            paymentIntentId: piId,
-            redirectStatus,
-          });
-          if (redirectStatus === "succeeded") {
-            setStatus("succeeded");
-            await confirmOrder(piId);
-          } else {
-            setStatus("processing");
-            await confirmOrder(piId);
-          }
-        } else {
-          setStatus("unknown");
-        }
-        return;
-      }
-
-      const stripe = await stripePromise;
-      if (!stripe) {
-        setStatus("unknown");
-        return;
-      }
-
-      const { paymentIntent: piObj, error } =
-        await stripe.retrievePaymentIntent(clientSecret);
-      if (error) {
-        setStatus("unknown");
-        return;
-      }
-
-      setPi(piObj?.id || piId);
-      const finalPiId = piObj?.id || piId;
-      const checkoutId = localStorage.getItem("last_checkout_id") || "";
-      localStorage.removeItem("last_checkout_id");
-
-      switch (piObj?.status) {
-        case "succeeded":
-          setStatus("succeeded");
-          if (piObj?.id && checkoutId) {
-            try {
-              const createdKey = `order_created_for_${checkoutId}`;
-              if (!sessionStorage.getItem(createdKey)) {
-                await createOrder(checkoutId, piObj.id);
-                sessionStorage.setItem(createdKey, "1");
-              }
-              setOrderCreated(true);
-            } catch (orderError: any) {
-              log("[success] createOrder failed ->", orderError?.response?.data || orderError);
-              if (finalPiId) {
-                await confirmOrder(finalPiId);
-              }
+        if (!clientSecret) {
+          if (piId) {
+            if (redirectStatus === "succeeded") {
+              setStatus("succeeded");
+              await confirmOrder(piId);
+            } else {
+              setStatus("processing");
+              await confirmOrder(piId);
             }
-          } else if (finalPiId) {
-            await confirmOrder(finalPiId);
+          } else {
+            setStatus("unknown");
           }
-          break;
-        case "processing":
-        case "requires_action":
-          setStatus("processing");
-          if (finalPiId) {
-            await confirmOrder(finalPiId);
-          }
-          break;
-        case "requires_payment_method":
-        case "canceled":
-          setStatus("canceled");
-          break;
-        default:
+          return;
+        }
+
+        const stripe = await stripePromise;
+        if (!stripe) {
           setStatus("unknown");
+          return;
+        }
+
+        const { paymentIntent: piObj, error } =
+          await stripe.retrievePaymentIntent(clientSecret);
+        if (error) {
+          setStatus("unknown");
+          return;
+        }
+
+        setPi(piObj?.id || piId);
+        const finalPiId = piObj?.id || piId;
+        const checkoutId = localStorage.getItem("last_checkout_id") || "";
+        localStorage.removeItem("last_checkout_id");
+
+        switch (piObj?.status) {
+          case "succeeded":
+            setStatus("succeeded");
+            if (piObj?.id && checkoutId) {
+              try {
+                const createdKey = `order_created_for_${checkoutId}`;
+                if (!sessionStorage.getItem(createdKey)) {
+                  await createOrder(checkoutId, piObj.id);
+                  sessionStorage.setItem(createdKey, "1");
+                }
+                setOrderCreated(true);
+              } catch (orderError: any) {
+                console.error("[success] createOrder failed ->", orderError?.response?.data || orderError);
+                if (finalPiId) {
+                  await confirmOrder(finalPiId);
+                }
+              }
+            } else if (finalPiId) {
+              await confirmOrder(finalPiId);
+            }
+            break;
+          case "processing":
+          case "requires_action":
+            setStatus("processing");
+            if (finalPiId) {
+              await confirmOrder(finalPiId);
+            }
+            break;
+          case "requires_payment_method":
+          case "canceled":
+            setStatus("canceled");
+            break;
+          default:
+            setStatus("unknown");
+        }
+      } finally {
+        setResolving(false);
       }
     })();
-  }, []);
+  }, [fetchCart]);
+
+  if (resolving) {
+    return (
+      <div className="max-w-6xl mx-auto p-6">
+        <LoadingState
+          title="Finalizing payment result..."
+          description="Please wait while we confirm your payment and order."
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-6xl mx-auto p-6 space-y-4">
@@ -203,14 +210,16 @@ export default function CheckoutSuccessPage() {
       )}
 
       {(status === "canceled" || status === "unknown") && (
-        <div className="p-4 rounded-md bg-red-50 border border-red-200">
-          <p className="font-medium text-red-700">Payment not completed.</p>
-          <p className="text-sm text-red-700">
-            {hasStripePublishableKey
-              ? "You can try again from the checkout page."
-              : "Stripe is not configured. Set `NEXT_PUBLIC_STRIPE_PK` and rebuild the frontend."}
-          </p>
-        </div>
+        <ErrorState
+          title="Payment not completed."
+          description={
+            hasStripePublishableKey
+              ? "You can retry from checkout. If you were charged, check your orders in a few minutes."
+              : "Stripe is not configured. Set `NEXT_PUBLIC_STRIPE_PK` and rebuild the frontend."
+          }
+          retryLabel="Back to checkout"
+          onRetry={() => (window.location.href = "/checkout")}
+        />
       )}
 
       <div className="flex gap-3">
