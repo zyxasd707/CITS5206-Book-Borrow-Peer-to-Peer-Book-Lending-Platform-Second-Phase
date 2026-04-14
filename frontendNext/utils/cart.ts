@@ -62,7 +62,9 @@ export const removeItemsFromCart = async (ids: string[]) => {
 // get cart's items
 export const getMyCart = async () => {
   const token = getToken();
-  if (!token) throw new Error("No auth token");
+  if (!token) {
+    return { items: [] };
+  }
   const API_URL = getApiUrl();
 
   const res = await axios.get(`${API_URL}/api/v1/cart/`, {
