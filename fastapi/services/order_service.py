@@ -472,6 +472,17 @@ class OrderService:
         for order in orders:
             out_num = order.shipping_out_tracking_number if order.shipping_out_carrier == "AUSPOST" else None
             return_num = order.shipping_return_tracking_number if order.shipping_return_carrier == "AUSPOST" else None
+            first_book = next((ob.book for ob in order.books if ob.book), None)
+            book_title = None
+            if first_book:
+                book_title = first_book.title_or or first_book.title_en
+
+            if order.owner_id == user_id:
+                counterpart_name = order.borrower.name if order.borrower else None
+                counterpart_role = "Borrower"
+            else:
+                counterpart_name = order.owner.name if order.owner else None
+                counterpart_role = "Owner"
 
             # Only include if at least one AUPOST tracking number exists
             if out_num or return_num:
@@ -479,6 +490,9 @@ class OrderService:
                     "order_id": order.id,
                     "shipping_out_tracking_number": out_num,
                     "shipping_return_tracking_number": return_num,
+                    "book_title": book_title,
+                    "counterpart_name": counterpart_name,
+                    "counterpart_role": counterpart_role,
                     "created_at": order.created_at,
                     "updated_at": order.updated_at,
                     "start_at": order.start_at,

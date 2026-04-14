@@ -138,19 +138,23 @@ const ShippingPage: React.FC = () => {
             <div className="space-y-4">
               {currentList.map((item) => (
                 <Card key={item.order_id} className="border border-gray-200 shadow-sm">
-                  <div className="flex justify-between items-center mb-2">
-                    <h3
-                      className="font-semibold text-black hover:underline cursor-pointer"
-                      onClick={() => router.push(`/borrowing/${item.order_id}`)}
-                    >
-                      Order #{item.order_id}
-                    </h3>
-                  </div>
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="min-w-0 text-sm text-gray-700">
+                      <h3
+                        className="font-semibold text-black hover:underline cursor-pointer text-base sm:text-lg"
+                        onClick={() => router.push(`/borrowing/${item.order_id}`)}
+                      >
+                        {item.book_title || `Order #${item.order_id}`}
+                      </h3>
 
-                  <div className="text-sm text-gray-700">
-                    {activeTab === "sent" && item.shipping_out_tracking_number && (
-                      <>
-                        <p>
+                      {item.counterpart_name && (
+                        <p className="mt-1 text-gray-600">
+                          {item.counterpart_role || "User"}: {item.counterpart_name}
+                        </p>
+                      )}
+
+                      {activeTab === "sent" && item.shipping_out_tracking_number && (
+                        <p className="mt-2">
                           Outgoing Tracking:{" "}
                           <a
                             href={`https://auspost.com.au/mypost/track/details/${item.shipping_out_tracking_number}`}
@@ -161,15 +165,10 @@ const ShippingPage: React.FC = () => {
                             {item.shipping_out_tracking_number}
                           </a>
                         </p>
-                        <p className="mt-1 text-gray-500">
-                          Shipped Date: {formatDateTime(item.updated_at || item.start_at || item.created_at)}
-                        </p>
-                      </>
-                    )}
+                      )}
 
-                    {activeTab === "received" && item.shipping_return_tracking_number && (
-                      <>
-                        <p>
+                      {activeTab === "received" && item.shipping_return_tracking_number && (
+                        <p className="mt-2">
                           Return Tracking:{" "}
                           <a
                             href={`https://auspost.com.au/mypost/track/details/${item.shipping_return_tracking_number}`}
@@ -180,12 +179,20 @@ const ShippingPage: React.FC = () => {
                             {item.shipping_return_tracking_number}
                           </a>
                         </p>
-                        <p className="mt-1 text-gray-500">
-                          Received Date: {formatDateTime(item.returned_at || item.updated_at || item.created_at)}
-                        </p>
-                      </>
-                    )}
+                      )}
+                    </div>
 
+                    <div className="shrink-0 text-xs text-gray-500 sm:text-right">
+                      <p>
+                        {activeTab === "sent" ? "Shipped Date" : "Received Date"}:{" "}
+                        {formatDateTime(
+                          activeTab === "sent"
+                            ? item.updated_at || item.start_at || item.created_at
+                            : item.returned_at || item.updated_at || item.created_at
+                        )}
+                      </p>
+                      <p className="mt-1 text-gray-400">Order ID: {item.order_id}</p>
+                    </div>
                   </div>
                 </Card>
               ))}

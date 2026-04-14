@@ -88,6 +88,9 @@ class TrackingNumberItem(BaseModel):
     order_id: str
     shipping_out_tracking_number: Optional[str]
     shipping_return_tracking_number: Optional[str]
+    book_title: Optional[str] = None
+    counterpart_name: Optional[str] = None
+    counterpart_role: Optional[str] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
     start_at: Optional[datetime] = None
