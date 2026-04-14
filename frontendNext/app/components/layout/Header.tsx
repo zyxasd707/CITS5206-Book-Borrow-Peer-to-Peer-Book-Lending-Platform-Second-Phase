@@ -83,10 +83,17 @@ const Header: React.FC = () => {
     };
     window.addEventListener("notif-read", handleNotifRead);
 
+    // Listen for notification-update event (e.g. after order cancel/refund)
+    const handleNotifUpdate = () => {
+      fetchSystemNotifCount();
+    };
+    window.addEventListener("notif-update", handleNotifUpdate);
+
     return () => {
       window.removeEventListener("auth-changed", handleAuthChange);
       window.removeEventListener("storage", checkAuthStatus);
       window.removeEventListener("notif-read", handleNotifRead);
+      window.removeEventListener("notif-update", handleNotifUpdate);
     };
   }, [fetchCart]);
 

@@ -225,6 +225,8 @@ export default function OrderDetailPage() {
           // Refresh refund data
           const refundData = await getRefundsForOrder(id);
           setRefunds(refundData.refunds || []);
+          // Trigger notification badge refresh in Header
+          window.dispatchEvent(new Event("notif-update"));
           return;
         } catch (refundErr) {
           console.error("Refund-cancel failed, falling back:", refundErr);
@@ -250,6 +252,8 @@ export default function OrderDetailPage() {
       if (updatedOrder) {
         setOrder(updatedOrder);
       }
+      // Trigger notification badge refresh in Header
+      window.dispatchEvent(new Event("notif-update"));
     } catch (err) {
       console.error("Cancel order error:", err);
       toast.error("Failed to cancel order");
@@ -291,6 +295,8 @@ export default function OrderDetailPage() {
 
       const updatedOrder = await fetchOrderDetails(orderId);
       if (updatedOrder) setOrder(updatedOrder);
+      // Trigger notification badge refresh in Header
+      window.dispatchEvent(new Event("notif-update"));
     } catch (err) {
       console.error(err);
       toast.error("Failed to confirm receive");
@@ -363,6 +369,8 @@ export default function OrderDetailPage() {
       if (updatedOrder) {
         setOrder(updatedOrder);
       }
+      // Trigger notification badge refresh in Header
+      window.dispatchEvent(new Event("notif-update"));
 
       setShipModalOpen(false); // close Modal
     } catch (err) {

@@ -43,6 +43,8 @@ export default function CheckoutSuccessPage() {
         setConfirmStatus("done");
         // Refresh cart (items should be cleared by backend)
         fetchCart();
+        // Trigger notification badge refresh in Header
+        window.dispatchEvent(new Event("notif-update"));
       } else {
         const rawText = await res.text();
         let err: any = {};
@@ -169,9 +171,6 @@ export default function CheckoutSuccessPage() {
         <div className="p-4 rounded-md bg-green-50 border border-green-200">
           <p className="font-medium text-green-700">Payment succeeded!</p>
           <p className="text-sm text-green-700">Payment Intent: {pi}</p>
-          <p className="text-sm text-green-700">
-            {orderCreated ? "Order created successfully." : "Payment succeeded. Finalizing your order..."}
-          </p>
           {confirmStatus === "done" && orderIds.length > 0 && (
             <p className="text-sm text-green-700 mt-1">
               Order created successfully. You can view it in your borrowing orders.
