@@ -24,6 +24,8 @@ class OrderSummary(BaseModel):
     completed_at: Optional[datetime] = None
     owner_id: str
     borrower_id: str
+    shipping_out_tracking_number: Optional[str] = None
+    shipping_return_tracking_number: Optional[str] = None
 
 class BookDetail(BaseModel):
     bookId: str

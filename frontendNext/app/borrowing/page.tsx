@@ -29,11 +29,35 @@ const TX_STAGE_META = {
   canceled: { label: "Canceled", className: "bg-gray-100 text-gray-700" },
 } as const;
 
-function getTransactionStage(status: OrderStatus): keyof typeof TX_STAGE_META {
+function getTransactionStage(
+  status: OrderStatus,
+  shippingOutTrackingNumber?: string | null
+): keyof typeof TX_STAGE_META {
   if (status === "PENDING_PAYMENT") return "pending";
+  if (shippingOutTrackingNumber) return "shipped";
   if (status === "PENDING_SHIPMENT") return "paid";
   if (status === "CANCELED") return "canceled";
   return "shipped";
+}
+
+function getDisplayedStatusMeta(
+  status: OrderStatus,
+  shippingOutTrackingNumber?: string | null
+) {
+  if (status === "PENDING_SHIPMENT" && shippingOutTrackingNumber) {
+    return { label: "Shipped", className: "text-green-600" };
+  }
+  return STATUS_META[status];
+}
+
+function getEffectiveStatus(order: Order): OrderStatus {
+  if (
+    order.status === "PENDING_SHIPMENT" &&
+    order.shipping_out_tracking_number
+  ) {
+    return "BORROWING";
+  }
+  return order.status;
 }
 
 export default function OrderListPage() {
@@ -91,7 +115,7 @@ export default function OrderListPage() {
   const filteredOrders = useMemo(() => {
     let list = orders;
     if (statusFilter !== "all") {
-      list = list.filter((o) => o.status === statusFilter);
+      list = list.filter((o) => getEffectiveStatus(o) === statusFilter);
     }
     if (search) {
       const q = search.toLowerCase();
@@ -106,7 +130,7 @@ export default function OrderListPage() {
   }, [orders, statusFilter, search]);
 
   const countBy = (s: OrderStatus) =>
-    orders.filter((o) => o.status === s).length;
+    orders.filter((o) => getEffectiveStatus(o) === s).length;
 
   const filterOptions = [
     {
@@ -224,8 +248,14 @@ export default function OrderListPage() {
                 filteredOrders.map((order) => {
                   const firstBook = order.books[0];
                   const extra = Math.max(0, order.books.length - 1);
-                  const meta = STATUS_META[order.status];
-                  const txStage = getTransactionStage(order.status);
+                  const meta = getDisplayedStatusMeta(
+                    order.status,
+                    order.shipping_out_tracking_number
+                  );
+                  const txStage = getTransactionStage(
+                    order.status,
+                    order.shipping_out_tracking_number
+                  );
                   const txMeta = TX_STAGE_META[txStage];
                   const isOverdue =
                     order.status === "BORROWING" &&

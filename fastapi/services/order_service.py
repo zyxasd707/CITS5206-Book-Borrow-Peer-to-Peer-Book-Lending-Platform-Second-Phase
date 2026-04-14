@@ -355,6 +355,8 @@ class OrderService:
                 "completed_at": order.completed_at,
                 "owner_id": order.owner_id,
                 "borrower_id": order.borrower_id,
+                "shipping_out_tracking_number": order.shipping_out_tracking_number,
+                "shipping_return_tracking_number": order.shipping_return_tracking_number,
             })
         return result
     

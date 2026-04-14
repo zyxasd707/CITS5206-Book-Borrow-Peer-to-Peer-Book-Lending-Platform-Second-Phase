@@ -8,6 +8,8 @@ export type Order = {
   order_id: string;
   status: OrderStatus;
   total_paid_amount: number;
+  shipping_out_tracking_number?: string | null;
+  shipping_return_tracking_number?: string | null;
   books: Array<{
     id: string;
     title: string;
