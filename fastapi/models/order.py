@@ -145,7 +145,14 @@ class Order(Base):
             "serviceFeeAmount": float(self.service_fee_amount or 0),
             "shippingOutFeeAmount": float(self.shipping_out_fee_amount or 0),
             "totalPaidAmount": float(self.total_paid_amount or 0),
+            "paymentMethod": "Card via Stripe" if self.payment_id else None,
+            "paymentTime": (
+                self.payment.created_at.isoformat()
+                if self.payment and self.payment.created_at
+                else (self.created_at.isoformat() if self.created_at else None)
+            ),
             "contactName": self.contact_name,
+            "contactEmail": self.borrower.email if self.borrower else None,
             "phone": self.phone,
             "street": self.street,
             "city": self.city,
