@@ -88,6 +88,10 @@ class TrackingNumberItem(BaseModel):
     order_id: str
     shipping_out_tracking_number: Optional[str]
     shipping_return_tracking_number: Optional[str]
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+    start_at: Optional[datetime] = None
+    returned_at: Optional[datetime] = None
 
 class ConfirmShipmentRequest(BaseModel):
     tracking_number: str

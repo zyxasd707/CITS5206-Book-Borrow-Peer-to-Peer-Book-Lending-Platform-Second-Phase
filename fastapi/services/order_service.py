@@ -479,6 +479,10 @@ class OrderService:
                     "order_id": order.id,
                     "shipping_out_tracking_number": out_num,
                     "shipping_return_tracking_number": return_num,
+                    "created_at": order.created_at,
+                    "updated_at": order.updated_at,
+                    "start_at": order.start_at,
+                    "returned_at": order.returned_at,
                 })
 
         return result

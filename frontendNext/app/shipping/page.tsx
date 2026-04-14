@@ -8,6 +8,9 @@ import { getCurrentUser, isAuthenticated } from "@/utils/auth";
 import { getUserAuspostTrackingNumbers, type TrackingNumberItem } from "@/utils/shipping";
 import clsx from "clsx";
 
+const formatDateTime = (value?: string | null) =>
+  value ? new Date(value).toLocaleString("en-AU") : "—";
+
 const ShippingPage: React.FC = () => {
   const router = useRouter();
   const [currentUser, setCurrentUser] = useState<any>(null);
@@ -146,31 +149,41 @@ const ShippingPage: React.FC = () => {
 
                   <div className="text-sm text-gray-700">
                     {activeTab === "sent" && item.shipping_out_tracking_number && (
-                      <p>
-                        Outgoing Tracking:{" "}
-                        <a
-                          href={`https://auspost.com.au/mypost/track/details/${item.shipping_out_tracking_number}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="font-mono text-blue-600 underline hover:text-blue-800"
-                        >
-                          {item.shipping_out_tracking_number}
-                        </a>
-                      </p>
+                      <>
+                        <p>
+                          Outgoing Tracking:{" "}
+                          <a
+                            href={`https://auspost.com.au/mypost/track/details/${item.shipping_out_tracking_number}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="font-mono text-blue-600 underline hover:text-blue-800"
+                          >
+                            {item.shipping_out_tracking_number}
+                          </a>
+                        </p>
+                        <p className="mt-1 text-gray-500">
+                          Shipped Date: {formatDateTime(item.updated_at || item.start_at || item.created_at)}
+                        </p>
+                      </>
                     )}
 
                     {activeTab === "received" && item.shipping_return_tracking_number && (
-                      <p>
-                        Return Tracking:{" "}
-                        <a
-                          href={`https://auspost.com.au/mypost/track/details/${item.shipping_return_tracking_number}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="font-mono text-green-600 underline hover:text-green-800"
-                        >
-                          {item.shipping_return_tracking_number}
-                        </a>
-                      </p>
+                      <>
+                        <p>
+                          Return Tracking:{" "}
+                          <a
+                            href={`https://auspost.com.au/mypost/track/details/${item.shipping_return_tracking_number}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="font-mono text-green-600 underline hover:text-green-800"
+                          >
+                            {item.shipping_return_tracking_number}
+                          </a>
+                        </p>
+                        <p className="mt-1 text-gray-500">
+                          Received Date: {formatDateTime(item.returned_at || item.updated_at || item.created_at)}
+                        </p>
+                      </>
                     )}
 
                   </div>
