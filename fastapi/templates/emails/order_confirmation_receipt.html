@@ -1,0 +1,42 @@
+<p>Hello, {username},</p>
+<p>Your payment was successful and your order has been confirmed.</p>
+<p>This email also serves as your receipt.</p>
+
+<div style="margin:16px 0;padding:16px;border:1px solid #ddd;border-radius:8px;">
+  <h2 style="margin:0 0 12px 0;">Receipt Summary</h2>
+  <p style="margin:0 0 8px 0;">
+    <strong>Payment ID:</strong> {payment_id}<br>
+    <strong>Order Date:</strong> {order_created_at}<br>
+    <strong>Payment Method:</strong> {payment_method}<br>
+    <strong>Total paid:</strong> {total_amount}
+  </p>
+
+  <p style="margin:0;">
+    <strong>Borrower:</strong><br>
+    {contact_name}<br>
+    {street}<br>
+    {city} {postcode}<br>
+    {country}<br>
+    {phone_line}
+  </p>
+</div>
+
+<table style="border-collapse:collapse;width:100%;">
+  <thead>
+    <tr>
+      <th style="padding:8px;border:1px solid #ddd;text-align:left;">Order ID</th>
+      <th style="padding:8px;border:1px solid #ddd;text-align:left;">Type</th>
+      <th style="padding:8px;border:1px solid #ddd;text-align:left;">Delivery</th>
+      <th style="padding:8px;border:1px solid #ddd;text-align:left;">Books</th>
+      <th style="padding:8px;border:1px solid #ddd;text-align:left;">Item Amount</th>
+      <th style="padding:8px;border:1px solid #ddd;text-align:left;">Shipping</th>
+      <th style="padding:8px;border:1px solid #ddd;text-align:left;">Service Fee</th>
+      <th style="padding:8px;border:1px solid #ddd;text-align:left;">Amount</th>
+    </tr>
+  </thead>
+  <tbody>
+    {orders_table_rows}
+  </tbody>
+</table>
+
+<p>You can view your order details in BookBorrow at any time.</p>

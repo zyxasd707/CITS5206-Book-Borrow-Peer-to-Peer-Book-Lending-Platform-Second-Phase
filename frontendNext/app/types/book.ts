@@ -10,6 +10,17 @@ export interface Book {
   description: string;
   coverImgUrl?: string;
   ownerId: string;
+  owner?: {
+    id: string;
+    name: string;
+    firstName?: string;
+    lastName?: string;
+    avatar?: string;
+    profilePicture?: string;
+    city?: string;
+    state?: string;
+    zipCode?: string;
+  } | null;
 
   canRent: boolean;
   canSell: boolean;

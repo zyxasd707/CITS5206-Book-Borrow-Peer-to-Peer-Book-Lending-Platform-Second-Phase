@@ -6,10 +6,11 @@ const API_URL = getApiUrl();
 
 // Get user details by email
 export async function getUserByEmail(email: string) {
-  const res = await fetch(`${API_URL}/api/v1/users/by-email/${email}`, { // NOTE: This endpoint must be created in the backend.
+  const token = getToken();
+  const res = await fetch(`${API_URL}/api/v1/messages/users/by-email/${email}`, {
     method: "GET",
     headers: {
-      Authorization: `Bearer ${localStorage.getItem("access_token")}`,
+      Authorization: `Bearer ${token}`,
     },
     credentials: "include",
   });
@@ -22,10 +23,11 @@ export async function getUserByEmail(email: string) {
 
 // Get all conversations
 export async function getConversations() {
+  const token = getToken();
   const res = await fetch(`${API_URL}/api/v1/messages/conversations`, {
     method: "GET",
     headers: {
-      Authorization: `Bearer ${localStorage.getItem("access_token")}`,
+      Authorization: `Bearer ${token}`,
     },
     credentials: "include",
   });
@@ -40,10 +42,11 @@ export async function getConversations() {
 
 // Get conversation with specific user
 export async function getConversation(otherUserEmail: string) {
+  const token = getToken();
   const res = await fetch(`${API_URL}/api/v1/messages/conversation/${otherUserEmail}`, {
     method: "GET",
     headers: {
-      Authorization: `Bearer ${localStorage.getItem("access_token")}`,
+      Authorization: `Bearer ${token}`,
     },
     credentials: "include",
   });
@@ -56,11 +59,12 @@ export async function getConversation(otherUserEmail: string) {
 
 // Send a text message
 export async function sendMessage(receiverEmail: string, content: string) {
+  const token = getToken();
   const res = await fetch(`${API_URL}/api/v1/messages/send`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${localStorage.getItem("access_token")}`,
+      Authorization: `Bearer ${token}`,
     },
     credentials: "include",
     body: JSON.stringify({
@@ -79,10 +83,11 @@ export async function sendMessage(receiverEmail: string, content: string) {
 
 // Mark conversation as read
 export async function markConversationAsRead(otherUserEmail: string) {
+  const token = getToken();
   const res = await fetch(`${API_URL}/api/v1/messages/mark-conversation-read/${otherUserEmail}`, {
     method: "PUT",
     headers: {
-      Authorization: `Bearer ${localStorage.getItem("access_token")}`,
+      Authorization: `Bearer ${token}`,
     },
     credentials: "include",
   });
@@ -95,10 +100,11 @@ export async function markConversationAsRead(otherUserEmail: string) {
 
 // Get unread count for specific sender
 export async function getUnreadCount(otherUserEmail: string) {
+  const token = getToken();
   const res = await fetch(`${API_URL}/api/v1/messages/unread-count/${otherUserEmail}`, {
     method: "GET",
     headers: {
-      Authorization: `Bearer ${localStorage.getItem("access_token")}`,
+      Authorization: `Bearer ${token}`,
     },
     credentials: "include",
   });
@@ -113,6 +119,7 @@ export async function getUnreadCount(otherUserEmail: string) {
 // Send a message with an image attachment
 export async function sendMessageWithImage(receiverEmail: string, content: string | null, file: File) {
   try {
+    const token = getToken();
     const formData = new FormData();
     formData.append('receiver_email', receiverEmail);
     if (content) {
@@ -123,7 +130,7 @@ export async function sendMessageWithImage(receiverEmail: string, content: strin
     const res = await fetch(`${API_URL}/api/v1/messages/send-with-image`, {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${localStorage.getItem("access_token")}`,
+        Authorization: `Bearer ${token}`,
       },
       body: formData,
       credentials: "include",

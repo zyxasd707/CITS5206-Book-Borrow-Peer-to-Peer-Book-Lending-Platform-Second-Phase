@@ -40,12 +40,16 @@ services:
     image: frontendnext:latest
     build: ./frontendNext
     container_name: next-frontend
+    env_file:
+      - ./.env
     expose:
       - "3000"
     depends_on:
       - backend
     networks:
       - mynetwork
+    env_file:
+      - ./.env
 
   nginx:
     image: nginx:latest

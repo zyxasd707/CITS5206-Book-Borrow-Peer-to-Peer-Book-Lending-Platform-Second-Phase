@@ -4,10 +4,17 @@ import type { User } from "@/app/types/user";
 
 // API Configuration
 export const getApiUrl = () => {
-  if (process.env.NODE_ENV === "production") {
-    return process.env.NEXT_PUBLIC_API_URL || "https://api.bookborrow.org/";
+  const configuredUrl = process.env.NEXT_PUBLIC_API_URL;
+  if (configuredUrl) {
+    return configuredUrl.replace(/\/$/, "");
   }
-  return process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
+  // Default to same-origin so nginx can proxy /api requests to FastAPI.
+  if (typeof window !== "undefined") {
+    return window.location.origin;
+  }
+
+  return "";
 };
 
 
@@ -27,6 +34,57 @@ interface RegisterData {
 
 type UpdateUserPayload = Omit<User, "dateOfBirth"> & {
   dateOfBirth?: string | null;
+};
+
+const splitUserName = (name?: string | null) => {
+  const safeName = (name || "").trim();
+  if (!safeName) {
+    return { firstName: "", lastName: "" };
+  }
+
+  const parts = safeName.split(/\s+/);
+  return {
+    firstName: parts[0] || "",
+    lastName: parts.slice(1).join(" "),
+  };
+};
+
+const mapApiUserToUser = (userData: any): User => {
+  const derivedName = splitUserName(userData.name);
+  const firstName = userData.firstName || derivedName.firstName;
+  const lastName = userData.lastName || derivedName.lastName;
+
+  return {
+    id: userData.id,
+    firstName,
+    lastName,
+    name: userData.name,
+    email: userData.email,
+    phoneNumber: userData.phoneNumber || undefined,
+    dateOfBirth: userData.dateOfBirth || undefined,
+
+    country: userData.country,
+    streetAddress: userData.streetAddress,
+    city: userData.city,
+    state: userData.state,
+    zipCode: userData.zipCode,
+    coordinates: userData.coordinates || undefined,
+    maxDistance: userData.maxDistance || undefined,
+
+    avatar:
+      userData.avatar ||
+      `https://ui-avatars.com/api/?name=${encodeURIComponent(
+        userData.name
+      )}&background=f97316&color=fff`,
+    profilePicture: userData.profilePicture || undefined,
+
+    createdAt: new Date(userData.createdAt),
+
+    bio: userData.bio || undefined,
+    preferredLanguages: userData.preferredLanguages || undefined,
+    stripe_account_id: userData.stripe_account_id || undefined,
+    is_admin: userData.is_admin,
+  };
 };
 
 // User login function
@@ -235,15 +293,16 @@ export const initAuth = () => {
     axios.interceptors.response.use(
       (response) => response,
       (error) => {
-        if (error.response?.status === 401) {
-          const hadToken = !!localStorage.getItem("access_token");
-          if (hadToken) {
+        const hasToken = !!localStorage.getItem("access_token");
+
+        if (error.response?.status === 401 && hasToken) {
             console.warn("Session expired, logging out...");
-            localStorage.removeItem("access_token");
-            delete axios.defaults.headers.common["Authorization"];
-            window.dispatchEvent(new Event("auth-changed"));
-            window.location.href = "/auth";
-          }
+            // Clear the local login status
+          localStorage.removeItem("access_token");
+          delete axios.defaults.headers.common["Authorization"];
+
+          // Notify the global refresh
+          window.dispatchEvent(new Event("auth-changed"));
         }
         return Promise.reject(error);
       }
@@ -355,6 +414,7 @@ export const getUserById = async (id: string): Promise<User | null> => {
 
     const userData = response.data;
 
+    return mapApiUserToUser(userData);
     const user: User = {
       id: userData.id,
       firstName: userData.firstName,
@@ -430,6 +490,27 @@ export const resetPassword = async (
     return { success: true, message: response.data.message };
   } catch (err) {
     let errorMessage = "Failed to reset password";
+    if (axios.isAxiosError(err)) {
+      errorMessage = err.response?.data?.detail || err.message;
+    }
+    throw new Error(errorMessage);
+  }
+};
+
+export const changePassword = async (currentPassword: string, newPassword: string) => {
+  const API_URL = getApiUrl();
+  try {
+    const response = await axios.post(
+      `${API_URL}/api/v1/auth/change-password`,
+      { current_password: currentPassword, new_password: newPassword },
+      { headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${localStorage.getItem("access_token")}`,
+      }}
+    );
+    return { success: true, message: response.data.message };
+  } catch (err) {
+    let errorMessage = "Failed to change password";
     if (axios.isAxiosError(err)) {
       errorMessage = err.response?.data?.detail || err.message;
     }

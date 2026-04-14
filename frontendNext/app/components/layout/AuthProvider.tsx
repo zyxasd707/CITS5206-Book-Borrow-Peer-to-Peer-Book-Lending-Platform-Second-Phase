@@ -20,7 +20,7 @@ export default function AuthProvider({ children }: AuthProviderProps) {
   // routes need to login 
   const protectedRoutes = ["/profile", "/orders", "/lending", "/borrowing", 
     "/cart", "/checkout",
-    "/message", "/shipping", "/complain"
+    "/message", "/shipping", "/complain", "/admin"
   ];
 
   // Special rule: only protect sub-routes under /books (e.g. /books/123)
@@ -50,6 +50,16 @@ export default function AuthProvider({ children }: AuthProviderProps) {
     };
 
     checkAuth();
+
+    const handleAuthChange = () => {
+      checkAuth();
+    };
+
+    window.addEventListener("auth-changed", handleAuthChange);
+
+    return () => {
+      window.removeEventListener("auth-changed", handleAuthChange);
+    };
   }, [pathname, router]);
 
 

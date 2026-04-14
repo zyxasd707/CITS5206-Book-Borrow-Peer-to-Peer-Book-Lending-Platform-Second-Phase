@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Card from "@/app/components/ui/Card";
 import Button from "@/app/components/ui/Button";
 import Input from "@/app/components/ui/Input";
+import { LoadingState } from "@/app/components/ui/AsyncState";
 
 import { getCurrentUser, updateUser, getUserById } from "@/utils/auth";
 import type { User } from "@/app/types/user";
@@ -13,10 +14,8 @@ import { getBookById } from "@/utils/books";
 import { getMyCheckouts, rebuildCheckout } from "@/utils/checkout";
 import { listServiceFees } from "@/utils/serviceFee";
 import { getShippingQuotes } from "@/utils/shipping";
-//import { createOrder } from "@/utils/borrowingOrders";
-
-import { loadStripe } from "@stripe/stripe-js";
 import { Elements, PaymentElement, useElements, useStripe } from "@stripe/react-stripe-js";
+import { hasStripePublishableKey, stripePromise } from "@/utils/stripe";
 import { initiatePayment } from "@/utils/payments";
 
 // When the page loads → Check if checkout exists, create a new one if not
@@ -52,14 +51,14 @@ interface CheckoutItem {
   shippingQuote?: number;
 }
 
-const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PK!);
-
 type PaymentConfirmFormProps = {
   clientSecret: string;
   onSuccess?: () => void;
 };
 
-// Payment Confirm
+const TEST_DESTINATION_ACCOUNT_ID =
+  process.env.NEXT_PUBLIC_STRIPE_TEST_DESTINATION_ACCOUNT_ID || "acct_1TGXxXQvCdOoVRC6";
+
 function PaymentConfirmForm({ clientSecret, onSuccess }: PaymentConfirmFormProps) {
   const stripe = useStripe();
   const elements = useElements();
@@ -69,84 +68,66 @@ function PaymentConfirmForm({ clientSecret, onSuccess }: PaymentConfirmFormProps
 
   const handleConfirm = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!stripe || !elements || !ready) {
-      console.log("[confirm] blocked:", { hasStripe: !!stripe, hasElements: !!elements, ready });
-      return;
-    }
+    if (!stripe || !elements || !ready) return;
 
     setSubmitting(true);
     setErr(null);
 
-    console.log("[confirm] calling elements.submit()");
     const { error: submitError } = await elements.submit();
-    console.log("[confirm] elements.submit result:", submitError);
     if (submitError) {
       setSubmitting(false);
       setErr(submitError.message || "Please check your details.");
       return;
     }
 
-    console.log("[confirm] calling stripe.confirmPayment()");
     const result = await stripe.confirmPayment({
       elements,
-      // return_url 
       confirmParams: {
-        return_url: typeof window !== "undefined"
-          ? `${window.location.origin}/checkout/success`
-          : undefined,
+        return_url:
+          typeof window !== "undefined"
+            ? `${window.location.origin}/checkout/success`
+            : undefined,
       },
       redirect: "if_required",
     });
 
     setSubmitting(false);
 
-    console.log("[confirm] result:", result);
-
     if (result.error) {
-      console.error("[confirm] error:", result.error);
       setErr(result.error.message || "Payment failed");
       return;
     }
 
-    const pi = result.paymentIntent;
-    if (pi?.client_secret) {
-      localStorage.setItem("last_pi_client_secret", pi.client_secret);
-    }
-    if (pi?.id) {
-      localStorage.setItem("last_pi_id", pi.id);
-    }
     onSuccess?.();
-
-    console.log("[confirm] success, PI:", { id: pi?.id, status: pi?.status });
   };
-
 
   return (
     <form onSubmit={handleConfirm} className="space-y-3">
       <PaymentElement
-        onReady={() => { setReady(true); console.log("[PaymentElement] ready"); }}
-        onChange={(ev) => { setReady(true); console.log("[PaymentElement] change", ev.complete); }}
+        onReady={() => setReady(true)}
+        onChange={() => setReady(true)}
       />
       <button
         className="px-4 py-2 rounded-md bg-black text-white w-full"
         disabled={!stripe || !elements || !ready || submitting}
       >
         {submitting ? "Processing..." : "Confirm Payment"}
-
       </button>
       {err && <p className="text-red-600 text-sm">{err}</p>}
     </form>
   );
 }
 
-
-
 export default function CheckoutPage() {
   const router = useRouter();
   const [globalShippingChoice, setGlobalShippingChoice] = useState<"standard" | "express" | null>("standard");
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [checkouts, setCheckouts] = useState<any[]>([]);
-  const [ownersMap, setOwnersMap] = useState<Record<string, { name: string; zipCode: string }>>({});
+  const [ownersMap, setOwnersMap] = useState<Record<string, { name: string; zipCode: string; stripeAccountId?: string | null }>>({});
+  const [ownersMap, setOwnersMap] = useState<
+    Record<string, { name: string; zipCode: string; stripeAccountId?: string }>
+  >({});
+  const [ownersMissingZip, setOwnersMissingZip] = useState<string[]>([]);
   const [serviceRate, setServiceRate] = useState<number>(0);
   const currentCheckout = checkouts.length > 0 ? checkouts[0] : null;
   const items: CheckoutItem[] = currentCheckout?.items || [];
@@ -193,21 +174,33 @@ export default function CheckoutPage() {
   useEffect(() => {
     async function loadOwners() {
       const uniqueOwnerIds = Array.from(new Set(items.map((b) => b.ownerId)));
-      const map: Record<string, { name: string; zipCode: string }> = {};
+      const map: Record<string, { name: string; zipCode: string; stripeAccountId?: string | null }> = {};
+      const map: Record<string, { name: string; zipCode: string; stripeAccountId?: string }> = {};
+      const missingZipOwnerIds: string[] = [];
 
       for (const id of uniqueOwnerIds) {
         try {
           const u = await getUserById(id);
+          if (!u?.zipCode?.trim()) {
+            missingZipOwnerIds.push(id);
+          }
           map[id] = {
             name: [u?.firstName, u?.lastName].filter(Boolean).join(" ") || "Unknown Owner",
             zipCode: u?.zipCode || "0000",
+            stripeAccountId: u?.stripe_account_id || null,
           };
         } catch {
-          map[id] = { name: "Unknown Owner", zipCode: "0000" };
+          map[id] = { name: "Unknown Owner", zipCode: "0000", stripeAccountId: null };
+            stripeAccountId: u?.stripe_account_id,
+          };
+        } catch {
+          missingZipOwnerIds.push(id);
+          map[id] = { name: "Unknown Owner", zipCode: "0000", stripeAccountId: undefined };
         }
       }
 
       setOwnersMap(map);
+      setOwnersMissingZip(missingZipOwnerIds);
     }
 
     if (items.length > 0) loadOwners();
@@ -425,17 +418,18 @@ export default function CheckoutPage() {
     const co = checkouts[0];
     if (!co || !currentUser) return;
 
+    const ownerIds = Array.from(new Set(items.map((it) => it.ownerId))).filter(Boolean);
     const lenderAccountId =
-      (currentUser as any).stripe_account_id;
+      ownerIds.length > 0 ? ownersMap[ownerIds[0]]?.stripeAccountId : undefined;
 
     if (!lenderAccountId) {
-      alert("No payout account found. Please open your payment account first.");
+      alert("Owner payout account is not set. Please contact the book owner and try again.");
       return;
     }
 
     const toCents = (n: number | undefined | null) =>
       Math.max(0, Math.round((n || 0) * 100));
-    console.log("[startPayment] currentUser.stripe_account_id =", (currentUser as any)?.stripe_account_id);
+    console.log("[startPayment] lenderAccountId =", lenderAccountId);
     console.log("[startPayment] checkout[0] =", co);
     console.log("[startPayment] donation =", donation);
 
@@ -443,6 +437,10 @@ export default function CheckoutPage() {
 
     try {
       setPaying(true);
+      const toCents = (n: number | undefined | null) =>
+        Math.max(0, Math.round((n || 0) * 100));
+      const totalAmount = co.totalDue + donation;
+
       const res = await initiatePayment({
         user_id: currentUser.id,
         amount: toCents(totalAmount),
@@ -455,7 +453,12 @@ export default function CheckoutPage() {
         checkout_id: co.checkoutId,
         lender_account_id: lenderAccountId,
       });
-      console.log("[initiatePayment] toCall:", res)
+
+      if (typeof window !== "undefined") {
+        localStorage.setItem("last_pi_id", res.payment_id);
+        localStorage.setItem("last_pi_client_secret", res.client_secret);
+        localStorage.setItem("last_checkout_id", co.checkoutId);
+      }
 
       setClientSecret(res.client_secret);
       setShowDonationModal(false);
@@ -508,6 +511,16 @@ export default function CheckoutPage() {
       return;
     }
 
+    // Backend requires owner zipcode for checkout creation/update.
+    if (ownersMissingZip.length > 0) {
+      const ownerNames = ownersMissingZip.map((id) => ownersMap[id]?.name || id).join(", ");
+      alert(
+        `Checkout cannot continue because owner profile postcode is missing: ${ownerNames}. ` +
+        "Please contact the owner(s) to complete their profile postcode."
+      );
+      return;
+    }
+
     setShowDonationModal(true);
   };
 
@@ -524,9 +537,11 @@ export default function CheckoutPage() {
   // ---------- When Empty ----------
   if (!items.length) {
     return (
-      <div className="p-6 text-center">
-        <h2 className="text-lg font-medium text-gray-900 mb-4">Loading...</h2>
-        {/* <Button variant="outline" onClick={() => router.push("/books")}>Back to Books</Button> */}
+      <div className="p-6">
+        <LoadingState
+          title="Preparing checkout..."
+          description="Loading cart items, shipping options, and pricing."
+        />
       </div>
     );
   }
@@ -540,7 +555,7 @@ export default function CheckoutPage() {
   ));
 
   return (
-    <div className="max-w-6xl mx-auto p-6 space-y-6">
+    <div className="max-w-6xl mx-auto p-4 sm:p-6 space-y-6">
       <h1 className="text-2xl font-bold">Checkout</h1>
 
       {/* Address */}
@@ -572,7 +587,7 @@ export default function CheckoutPage() {
       {/* Items & Delivery */}
       <Card>
         <div className="p-4 space-y-3">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-2">
             <h2 className="text-lg font-semibold">Items & Delivery</h2>
             <Button variant="outline" onClick={saveDeliveryMethod} className="text-sm">Save Delivery Method</Button>
 
@@ -589,7 +604,7 @@ export default function CheckoutPage() {
                   <div className="divide-y space-y-2">
                     {ownerItems.map((b: CheckoutItem) => (
                       <div key={b.bookId} className="py-3">
-                        <div className="flex items-center justify-between">
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                           <div>
                             <div className="font-medium">
                               《{b.titleOr}》
@@ -600,7 +615,7 @@ export default function CheckoutPage() {
                           </div>
 
                           {/* Post / Pickup select */}
-                          <div className="flex items-center gap-2">
+                          <div className="flex flex-wrap items-center gap-2">
                             <span className="text-sm text-gray-700">Delivery Method:</span>
                             {b.deliveryMethod === "post" && (
                               <span className="px-4 py-1 rounded bg-black text-white text-sm">Post</span>
@@ -646,7 +661,7 @@ export default function CheckoutPage() {
                         <h4 className="text-sm font-semibold mb-2 text-gray-800">
                           AusPost Shipping Quotes
                         </h4>
-                        <div className="flex gap-2">
+                        <div className="flex flex-wrap gap-2">
                           {quotesByOwner[ownerId].map((q) => {
                             const choiceKey = q.serviceLevel === "Standard" ? "standard" : "express";
                             return (
@@ -746,6 +761,12 @@ export default function CheckoutPage() {
             {paying ? "Preparing..." : "Checkout"}
           </Button>
         </div>
+      ) : !hasStripePublishableKey ? (
+        <Card>
+          <div className="p-4 rounded-md bg-red-50 border border-red-200 text-red-700">
+            Stripe is not configured. Set `NEXT_PUBLIC_STRIPE_PK` in your environment and rebuild the frontend.
+          </div>
+        </Card>
       ) : (
         <Elements
           key={clientSecret}

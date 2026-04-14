@@ -20,6 +20,7 @@ from database.connection import SessionLocal
 from models.user import User
 from models.book import Book
 from models.order import Order, OrderBook
+from models.payment_gateway import Payment
 from core.security import get_password_hash
 
 
@@ -35,33 +36,61 @@ USERS = [
     {
         "user_id": short_uid(),
         "name": "Alice Chen",
+        "first_name": "Alice",
+        "last_name": "Chen",
         "email": "alice@example.com",
         "password": "Password123!",
         "location": "Perth, WA",
+        "country": "Australia",
+        "street_address": "10 Murray Street",
+        "city": "Perth",
+        "state": "WA",
+        "zip_code": "6000",
         "is_admin": False,
     },
     {
         "user_id": short_uid(),
         "name": "Bob Smith",
+        "first_name": "Bob",
+        "last_name": "Smith",
         "email": "bob@example.com",
         "password": "Password123!",
         "location": "Melbourne, VIC",
+        "country": "Australia",
+        "street_address": "25 Swanston Street",
+        "city": "Melbourne",
+        "state": "VIC",
+        "zip_code": "3000",
         "is_admin": False,
     },
     {
         "user_id": short_uid(),
         "name": "Carol Wang",
+        "first_name": "Carol",
+        "last_name": "Wang",
         "email": "carol@example.com",
         "password": "Password123!",
         "location": "Sydney, NSW",
+        "country": "Australia",
+        "street_address": "88 George Street",
+        "city": "Sydney",
+        "state": "NSW",
+        "zip_code": "2000",
         "is_admin": False,
     },
     {
         "user_id": short_uid(),
         "name": "Admin User",
+        "first_name": "Admin",
+        "last_name": "User",
         "email": "admin@bookhive.com",
         "password": "Admin123!",
         "location": "Perth, WA",
+        "country": "Australia",
+        "street_address": "1 St Georges Terrace",
+        "city": "Perth",
+        "state": "WA",
+        "zip_code": "6000",
         "is_admin": True,
     },
 ]
@@ -332,6 +361,13 @@ def seed(*, force: bool = False):
                 password_hash=get_password_hash(u["password"]),
                 password_algo="bcrypt",
                 location=u["location"],
+                first_name=u.get("first_name"),
+                last_name=u.get("last_name"),
+                country=u.get("country"),
+                street_address=u.get("street_address"),
+                city=u.get("city"),
+                state=u.get("state"),
+                zip_code=u.get("zip_code"),
                 is_admin=u["is_admin"],
             )
             db.add(user)
@@ -425,6 +461,111 @@ def seed(*, force: bool = False):
             print(f"  Created order: {order.id} ({o['status']})")
 
         db.commit()
+
+        # --- Seed a CANCELED order with payment + refund for testing ---
+        print("Seeding refund demo data...")
+        from models.payment_gateway import Payment as PaymentModel, Refund, AuditLog
+        from models.payment_split import PaymentSplit
+
+        alice = db.query(User).filter(User.email == "alice@example.com").first()
+        bob = db.query(User).filter(User.email == "bob@example.com").first()
+        book4 = db.query(Book).filter(Book.title_en == "The Hitchhiker's Guide to the Galaxy").first()
+
+        if alice and bob and book4:
+            # Check if refund demo already exists
+            existing_refund = db.query(Refund).filter(Refund.refund_id == "re_mock_demo001").first()
+            if not existing_refund:
+                payment_id = "pi_mock_demo001"
+                refund_order_id = uid()
+                canceled_time = datetime.utcnow() - timedelta(days=1)
+                created_time = canceled_time - timedelta(hours=2)
+
+                # Create Payment
+                payment = PaymentModel(
+                    payment_id=payment_id,
+                    checkout_id="cs_mock_demo001",
+                    user_id=alice.user_id,
+                    amount=1000,
+                    currency="aud",
+                    status="refunded",
+                    deposit=1000,
+                    shipping_fee=0,
+                    service_fee=0,
+                    created_at=created_time,
+                    destination="acct_mock",
+                    action_type="BORROW",
+                )
+                db.add(payment)
+                db.flush()
+
+                # Create CANCELED Order
+                refund_order = Order(
+                    id=refund_order_id,
+                    owner_id=bob.user_id,
+                    borrower_id=alice.user_id,
+                    status="CANCELED",
+                    action_type="borrow",
+                    created_at=created_time,
+                    canceled_at=canceled_time,
+                    shipping_method="pickup",
+                    deposit_or_sale_amount=10.00,
+                    service_fee_amount=0.00,
+                    shipping_out_fee_amount=0.00,
+                    total_paid_amount=10.00,
+                    total_refunded_amount=10.00,
+                    payment_id=payment_id,
+                    estimated_delivery_time=3,
+                    contact_name="Yuan Alice",
+                    phone="0414069405",
+                    street="555 Wellington St",
+                    city="PERTH",
+                    postcode="6000",
+                    country="Australia",
+                )
+                db.add(refund_order)
+                db.flush()
+
+                # Link book to order
+                db.add(OrderBook(order_id=refund_order_id, book_id=book4.id))
+
+                # Create PaymentSplit
+                db.add(PaymentSplit(
+                    payment_id=payment_id,
+                    order_id=refund_order_id,
+                    owner_id=bob.user_id,
+                    connected_account_id="acct_mock",
+                    currency="aud",
+                    deposit_cents=1000,
+                    shipping_cents=0,
+                    service_fee_cents=0,
+                    transfer_amount_cents=0,
+                ))
+
+                # Create Refund record
+                db.add(Refund(
+                    refund_id="re_mock_demo001",
+                    payment_id=payment_id,
+                    amount=1000,
+                    currency="aud",
+                    status="succeeded",
+                    reason="Order cancelled by user",
+                    created_at=canceled_time,
+                ))
+
+                # Create AuditLog
+                db.add(AuditLog(
+                    event_type="refund_on_cancel",
+                    reference_id=refund_order_id,
+                    actor="user",
+                    message="User cancelled order, full refund issued",
+                    created_at=canceled_time,
+                ))
+
+                db.commit()
+                print(f"  Created CANCELED order with refund: {refund_order_id}")
+            else:
+                print("  Refund demo data already exists, skipping.")
+
         print("\nSeed complete!")
         print("\nTest accounts:")
         for u in USERS:

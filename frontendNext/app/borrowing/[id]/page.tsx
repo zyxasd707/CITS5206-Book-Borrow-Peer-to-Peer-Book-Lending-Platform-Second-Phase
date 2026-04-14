@@ -3,7 +3,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { Clock, Truck, ArrowLeft, AlertTriangle } from "lucide-react";
+import { Clock, Truck, ArrowLeft, AlertTriangle, ExternalLink } from "lucide-react";
 import CoverImg from "@/app/components/ui/CoverImg";
 import Card from "@/app/components/ui/Card";
 import Button from "@/app/components/ui/Button";
@@ -30,6 +30,13 @@ const fmtAUD = (amount?: number) =>
   typeof amount === "number" ? `A$ ${amount.toFixed(2)}` : "—";
 
 const fmtDate = (v?: string | null) => (v ? new Date(v).toLocaleString() : "—");
+
+const TX_STAGE_META = {
+  pending: { label: "Pending", className: "bg-amber-100 text-amber-800" },
+  paid: { label: "Paid", className: "bg-blue-100 text-blue-800" },
+  shipped: { label: "Shipped", className: "bg-green-100 text-green-800" },
+  canceled: { label: "Canceled", className: "bg-gray-100 text-gray-700" },
+} as const;
 
 const fetchOrderDetails = async (orderId: string): Promise<ApiOrder | null> => {
   try {
@@ -168,6 +175,17 @@ export default function OrderDetailPage() {
 
   const isOwner = user?.id === order?.owner.id;
   const isBorrower = user?.id === order?.borrower.id;
+  const txStage: keyof typeof TX_STAGE_META = useMemo(() => {
+    if (!order) return "pending";
+    if (order.status === "CANCELED") return "canceled";
+    if (order.status === "PENDING_PAYMENT") return "pending";
+    if (order.status === "PENDING_SHIPMENT") return "paid";
+    if (order.shippingOutTrackingNumber) return "shipped";
+    if (["BORROWING", "OVERDUE", "RETURNED", "COMPLETED"].includes(order.status)) {
+      return "shipped";
+    }
+    return "paid";
+  }, [order]);
 
   const handleCancelOrder = async () => {
     if (!user) {
@@ -377,6 +395,13 @@ export default function OrderDetailPage() {
                 )}
               </div>
             )}
+            <div className="pt-2">
+              <span
+                className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ${TX_STAGE_META[txStage].className}`}
+              >
+                Transaction: {TX_STAGE_META[txStage].label}
+              </span>
+            </div>
           </div>
         </Card>
 
@@ -611,6 +636,18 @@ export default function OrderDetailPage() {
               </p>
             </div>
           )}
+
+          <div className="border-t p-4">
+            <Button
+              variant="outline"
+              size="sm"
+              className="flex items-center gap-2 border-black text-black hover:bg-black hover:text-white"
+              onClick={() => router.push(`/refunds/${id}`)}
+            >
+              <ExternalLink className="w-4 h-4" />
+              View Refund Details
+            </Button>
+          </div>
         </Card>
       )}
 
@@ -655,9 +692,10 @@ export default function OrderDetailPage() {
             <Button
               variant="outline"
               className="border-black text-black hover:bg-black hover:text-white"
-              onClick={() =>
-                handleAuthRequired(`/messages?orderId=${order.id}`)
-              }
+              onClick={() => {
+                const otherEmail = isBorrower ? order.owner.email : order.borrower.email;
+                handleAuthRequired(`/message?to=${encodeURIComponent(otherEmail)}`);
+              }}
             >
               Message
             </Button>

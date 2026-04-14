@@ -8,15 +8,17 @@ import Input from "../ui/Input";
 import ProfileIncompleteModal from "../ui/ProfileIncompleteModal";
 import { isProfileComplete } from "@/utils/profileValidation";
 
-import { User as UserIcon, LogOut, Plus, Truck, Mail, LifeBuoy, ShoppingBag } from "lucide-react";
+import { User as UserIcon, LogOut, Plus, Truck, Mail, LifeBuoy, ShoppingBag, ShieldCheck } from "lucide-react";
 import { logoutUser, isAuthenticated, getCurrentUser, getApiUrl, getToken } from "@/utils/auth";
-import { getRefundsForOrder } from "@/utils/payments";
 
 import Avatar from "@/app/components/ui/Avatar";
 import { useCartStore } from "@/app/store/cartStore";
 import type { User } from "@/app/types/user";
 import type { ChatThread } from "@/app/types/message";
 import { BarChart3 } from "lucide-react";
+
+const isAdminLikeUser = (user: User | null) =>
+  Boolean(user?.is_admin) || Boolean(user?.email?.toLowerCase().includes("admin"));
 
 const Header: React.FC = () => {
   const router = useRouter();
@@ -116,38 +118,17 @@ const Header: React.FC = () => {
     router.push("/register");
   };
 
-  // Fetch system notification count (new refunds since last viewed)
+  // Fetch system notification count from notifications API
   const fetchSystemNotifCount = async () => {
     try {
       const apiUrl = getApiUrl();
       const token = getToken();
-      const lastSeen = localStorage.getItem("notif_last_seen") || "0";
-
-      const res = await fetch(`${apiUrl}/api/v1/orders/?status=CANCELED`, {
+      const res = await fetch(`${apiUrl}/api/v1/notifications/unread-count`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) return;
-
       const data = await res.json();
-      const orders = Array.isArray(data) ? data : (data.value || data.items || []);
-
-      let count = 0;
-      for (const order of orders) {
-        const oid = order.order_id || order.id;
-        try {
-          const refundData = await getRefundsForOrder(oid);
-          if (refundData.refunds) {
-            for (const r of refundData.refunds) {
-              if (new Date(r.created_at).getTime() > Number(lastSeen)) {
-                count++;
-              }
-            }
-          }
-        } catch {
-          // skip
-        }
-      }
-      setSystemNotifCount(count);
+      setSystemNotifCount(data.unread_count || 0);
     } catch {
       // silent fail
     }
@@ -316,6 +297,16 @@ const Header: React.FC = () => {
                       >
                         <LifeBuoy className="w-4 h-4 mr-3" />Support
                       </Link>
+
+                      {isAdminLikeUser(currentUser) && (
+                        <Link
+                          href="/admin/analytics"
+                          className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                          onClick={() => setShowProfileMenu(false)}
+                        >
+                          <ShieldCheck className="w-4 h-4 mr-3" />Admin Dashboard
+                        </Link>
+                      )}
 
                       <hr className="my-1" />
 

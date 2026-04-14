@@ -32,7 +32,7 @@ export async function getShippingQuotes(
   weight: number
 ): Promise<ShippingQuotesResponse> {
   try {
-    const res = await axios.get(`${API_URL}/shipping/domestic/postage/calculate`, {
+    const res = await axios.get(`${API_URL}/api/v1/shipping/domestic/postage/calculate`, {
       params: {
         from_postcode: fromPostcode,
         to_postcode: toPostcode,

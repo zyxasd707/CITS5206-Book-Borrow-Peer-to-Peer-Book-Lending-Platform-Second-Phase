@@ -126,10 +126,10 @@ export default function RegisterPage() {
   };
 
   return (
-    <div className="flex-1 bg-gray-100 flex items-center justify-center p-4">
+    <div className="flex-1 bg-gray-100 flex items-center justify-center p-3 sm:p-4">
       <Card className="w-full max-w-md">
         <div className="text-center mb-6">
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-900 mb-2">
             Create Account
           </h1>
           <p className="text-gray-600">
@@ -160,7 +160,7 @@ export default function RegisterPage() {
           />
 
           {/* Verification Code */}
-          <div className="flex gap-2 items-end">
+          <div className="flex flex-col sm:flex-row gap-2 sm:items-end">
             <div className="flex-1">
               <Input
                 label="Verification Code"
@@ -176,7 +176,7 @@ export default function RegisterPage() {
               onClick={otpSent ? handleVerifyOtp : handleSendOtp}
               isLoading={isLoading || isVerifying}
               variant={isVerified ? "outline" : "primary"}
-              className="min-w-[130px]"
+              className="w-full sm:w-auto min-w-[130px]"
             >
               {isVerified
                 ? "Verified"

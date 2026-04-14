@@ -16,7 +16,7 @@ export async function initiatePayment(payload: {
   checkout_id: string;
   lender_account_id: string;
 }) {
-  const res = await axios.post(`${API_URL}/payment_gateway/payment/initiate`, payload, {
+  const res = await axios.post(`${API_URL}/api/v1/payment_gateway/payment/initiate`, payload, {
     headers: {
       Authorization: `Bearer ${localStorage.getItem("access_token")}`,
     },
@@ -38,7 +38,7 @@ export async function initiatePayment(payload: {
 // Create a Stripe Express account and get onboarding link
 export async function createExpressAccount(email: string) {
   const res = await axios.post(
-    `${API_URL}/payment_gateway/accounts/express`,
+    `${API_URL}/api/v1/payment_gateway/accounts/express`,
     { email },
     {
       headers: {
@@ -59,7 +59,7 @@ export async function distributeShippingFee(
   lenderAccountId: string,      // e.g "acct_123..."
 ) {
   const res = await axios.post(
-    `${API_URL}/payment_gateway/payment/distribute_shipping_fee/${paymentId}`,
+    `${API_URL}/api/v1/payment_gateway/payment/distribute_shipping_fee/${paymentId}`,
     { lender_account_id: lenderAccountId },
     {
       headers: {
@@ -84,7 +84,7 @@ export async function refundPayment(
   opts?: { amount_cents?: number; reason?: string } // partial refunds in the future
 ) {
   const res = await axios.post(
-    `${API_URL}/payment_gateway/payment/refund/${paymentId}`,
+    `${API_URL}/api/v1/payment_gateway/payment/refund/${paymentId}`,
     { reason: opts?.reason },
     {
       headers: {
@@ -114,7 +114,7 @@ export async function createPaymentDispute(
   }
 ) {
   const res = await axios.post(
-    `${API_URL}/payment_gateway/payment/dispute/create/${paymentId}`,
+    `${API_URL}/api/v1/payment_gateway/payment/dispute/create/${paymentId}`,
     {
       payment_id: paymentId,
       ...data,
@@ -142,7 +142,7 @@ export async function handlePaymentDispute(
   console.log("handlePaymentDispute payload:", paymentId, data);
 
   const res = await axios.post(
-    `${API_URL}/payment_gateway/payment/dispute/handle/${paymentId}`,
+    `${API_URL}/api/v1/payment_gateway/payment/dispute/handle/${paymentId}`,
     data,
     {
       headers: {
@@ -202,6 +202,45 @@ export async function cancelOrderWithRefund(orderId: string) {
   };
 }
 
+// MVP6: Get all refunds for a user
+export async function getUserRefunds(userId: string) {
+  const res = await axios.get(
+    `${API_URL}/payment_gateway/refunds/user/${userId}`,
+    {
+      headers: {
+        Authorization: `Bearer ${localStorage.getItem("access_token")}`,
+      },
+      withCredentials: true,
+    }
+  );
+  return res.data as {
+    user_id: string;
+    refunds: Array<{
+      refund_id: string;
+      amount: number;
+      currency: string;
+      status: string;
+      reason: string | null;
+      refund_type: string;
+      created_at: string | null;
+      updated_at: string | null;
+      order: {
+        order_id: string;
+        status: string;
+        book_titles: string[];
+        created_at: string | null;
+        canceled_at: string | null;
+      };
+      timeline: Array<{
+        event: string;
+        actor: string;
+        message: string;
+        timestamp: string | null;
+      }>;
+    }>;
+  };
+}
+
 // Execute compensation transfer after dispute resolved
 export async function compensatePayment(
   paymentId: string,
@@ -210,7 +249,7 @@ export async function compensatePayment(
   console.log("🚀 Trigger compensatePayment:", { paymentId, destination });
 
   const res = await axios.post(
-    `${API_URL}/payment_gateway/payment/compensate/${paymentId}?destination=${encodeURIComponent(destination)}`,
+    `${API_URL}/api/v1/payment_gateway/payment/compensate/${paymentId}?destination=${encodeURIComponent(destination)}`,
     {},
     {
       headers: {
