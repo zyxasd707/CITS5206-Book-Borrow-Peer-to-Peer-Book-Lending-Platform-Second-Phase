@@ -402,6 +402,16 @@ export default function OrderDetailPage() {
                 Transaction: {TX_STAGE_META[txStage].label}
               </span>
             </div>
+            <div>
+              Payment Method:{" "}
+              <span className="text-black font-medium">
+                {order.paymentMethod || "Card via Stripe"}
+              </span>
+            </div>
+            <div>
+              Payment Time:{" "}
+              <span className="text-black font-medium">{fmtDate(order.paymentTime)}</span>
+            </div>
           </div>
         </Card>
 
@@ -425,6 +435,12 @@ export default function OrderDetailPage() {
               <div>
                 Phone:{" "}
                 <span className="font-medium text-black">{order.phone}</span>
+              </div>
+              <div>
+                Email:{" "}
+                <span className="font-medium text-black">
+                  {order.contactEmail || order.borrower.email}
+                </span>
               </div>
               <div>
                 Address:{" "}

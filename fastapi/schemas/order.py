@@ -46,9 +46,12 @@ class OrderDetail(BaseModel):
     serviceFeeAmount: float
     shippingOutFeeAmount: float
     totalPaidAmount: float
+    paymentMethod: Optional[str] = None
+    paymentTime: Optional[datetime] = None
     
     # address
     contactName: str
+    contactEmail: Optional[str] = None
     phone: Optional[str]
     street: str
     city: str
