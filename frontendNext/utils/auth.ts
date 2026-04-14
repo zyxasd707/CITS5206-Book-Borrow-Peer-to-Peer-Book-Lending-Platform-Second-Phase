@@ -329,6 +329,13 @@ export const getCurrentUser = async (): Promise<User | null> => {
 
     return mapApiUserToUser(userData);
   } catch (error) {
+    if (axios.isAxiosError(error) && error.response?.status === 401) {
+      localStorage.removeItem("access_token");
+      delete axios.defaults.headers.common["Authorization"];
+      window.dispatchEvent(new Event("auth-changed"));
+      return null;
+    }
+
     console.error("Failed to get user info:", error);
     localStorage.removeItem("access_token");
     delete axios.defaults.headers.common["Authorization"];
