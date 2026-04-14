@@ -182,7 +182,7 @@ export const sendVerificationEmail = async (
 
   try {
     const response = await axios.post(
-      `${API_URL}/email/send_verification`,
+      `${API_URL}/api/v1/email/send_verification`,
       { emailAddress, username: username ?? "" },
       {
         headers: { "Content-Type": "application/json" },
@@ -218,7 +218,7 @@ export const verifyOtp = async (emailAddress: string, otp: string) => {
   const API_URL = getApiUrl();
 
   try {
-    const response = await axios.post(`${API_URL}/email/verify_otp`, {
+    const response = await axios.post(`${API_URL}/api/v1/email/verify_otp`, {
       emailAddress,
       otp,
     });

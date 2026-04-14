@@ -1,5 +1,4 @@
 version: "3.9"
-
 services:
   db:             # Local MySQL database for development only;
     image: mysql:8.0

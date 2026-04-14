@@ -115,7 +115,7 @@ app.include_router(cart_router, prefix="/api/v1")
 app.include_router(complaints_router, prefix="/api/v1")
 
 # mail router
-app.include_router(mail_router) 
+app.include_router(mail_router, prefix="/api/v1") 
 
 # payment gateway router
 app.include_router(payment_gateway_router, prefix="/api/v1") 
