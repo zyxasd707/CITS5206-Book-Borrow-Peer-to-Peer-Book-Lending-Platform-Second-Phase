@@ -6,9 +6,8 @@ import { CheckCircle2, CircleX, Clock3, MessageSquareWarning } from "lucide-reac
 import { getCurrentUser } from "@/utils/auth";
 import { getComplaints, resolveComplaint, type Complaint } from "@/utils/complaints";
 
-function isAdminLikeUser(user: { email?: string; is_admin?: boolean } | null) {
-  if (!user) return false;
-  return Boolean(user.is_admin) || Boolean(user.email?.toLowerCase().includes("admin"));
+function isAdminLikeUser(user: { is_admin?: boolean } | null) {
+  return Boolean(user?.is_admin);
 }
 
 export default function AdminComplaintsPage() {
