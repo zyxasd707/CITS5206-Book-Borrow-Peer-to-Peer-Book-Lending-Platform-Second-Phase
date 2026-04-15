@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from typing import Optional, List, Literal
 from sqlalchemy.orm import Session
 
-from core.dependencies import get_db, get_current_user
+from core.dependencies import get_db, get_current_user, get_current_admin
 from models.user import User as UserModel
 from models.complaint import Complaint, ComplaintMessage
 from services.complaint_service import ComplaintService
@@ -153,7 +153,7 @@ def resolve_complaint(
     complaint_id: str,
     body: AdminResolveBody,
     db: Session = Depends(get_db),
-    user: UserModel = Depends(get_current_user),
+    admin_user: UserModel = Depends(get_current_admin), 
 ):
     """
     Use this API for admin users to handle a complaint.  -> You need admin account for this.
@@ -163,8 +163,6 @@ def resolve_complaint(
     - complaint_id is auto-generated ID of this complaint.
     """
 
-    if user.user_id != "admin":                 # TODO: Change the admin to a proper judging logic
-        raise HTTPException(status_code=403, detail="Admin only")
     c = ComplaintService.admin_update(
         db,
         complaint_id=complaint_id,
