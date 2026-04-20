@@ -122,8 +122,18 @@ export default function BooksPage() {
 
   return (
     <div className="flex h-full">
-      {/* Filter Sidebar */}
+      {/* Filter Sidebar - desktop only */}
       <div className="hidden lg:flex lg:w-1/5 lg:min-w-48 lg:max-w-64">
+        <BookFilter
+          filters={filters}
+          books={allBooks}
+          onFilterChange={handleFilterChange}
+          onClearFilters={handleClearFilters}
+        />
+      </div>
+
+      {/* Filter - mobile floating button */}
+      <div className="lg:hidden">
         <BookFilter
           filters={filters}
           books={allBooks}
