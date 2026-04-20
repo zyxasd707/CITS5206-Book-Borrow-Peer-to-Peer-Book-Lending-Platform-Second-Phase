@@ -34,9 +34,10 @@ class UserResponse(BaseModel):
 
     createdAt: str
     stripe_account_id: Optional[str] = None
+    is_admin: Optional[bool] = None
 
 
-# DateOfBirth 
+# DateOfBirth
 class DateOfBirth(BaseModel):
     month: str
     day: str
@@ -107,7 +108,7 @@ def _to_user_response(u: User) -> UserResponse:
 
         createdAt=created_out,
         stripe_account_id=getattr(u, "stripe_account_id", None),
-
+        is_admin=bool(getattr(u, "is_admin", False)),
     )
 
 
