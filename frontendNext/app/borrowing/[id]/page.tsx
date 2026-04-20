@@ -81,6 +81,18 @@ export default function OrderDetailPage() {
   const [confirmReceiveModalOpen, setConfirmReceiveModalOpen] = useState(false);
   const [borrowerConfirmReceiveModalOpen, setBorrowerConfirmReceiveModalOpen] = useState(false);
 
+  // MVP6-1: lender damage report state
+  const [damageSeverity, setDamageSeverity] = useState<"none" | "light" | "medium" | "severe">("none");
+  const [damageNote, setDamageNote] = useState("");
+  const [damagePhotos, setDamagePhotos] = useState<File[]>([]);
+  const [confirmSubmitting, setConfirmSubmitting] = useState(false);
+
+  const resetDamageForm = () => {
+    setDamageSeverity("none");
+    setDamageNote("");
+    setDamagePhotos([]);
+  };
+
   // MVP6: refund state
   const [refunds, setRefunds] = useState<Array<{
     refund_id: string;
@@ -270,12 +282,34 @@ export default function OrderDetailPage() {
   };
 
   const handleConfirmReceive = async (orderId: string) => {
+    const token = getToken();
+    if (!token) {
+      toast.error("Please login first");
+      router.push("/auth");
+      return;
+    }
+
+    setConfirmSubmitting(true);
     try {
-      const token = getToken();
-      if (!token) {
-        toast.error("Please login first");
-        router.push("/auth");
-        return;
+      // Upload evidence photos first (only if damage was reported)
+      let uploadedPaths: string[] = [];
+      if (damageSeverity !== "none" && damagePhotos.length > 0) {
+        const uploads = await Promise.all(
+          damagePhotos.map(async (file) => {
+            const fd = new FormData();
+            fd.append("file", file);
+            fd.append("scene", "deposit_evidence");
+            const up = await fetch(`${getApiUrl()}/api/v1/upload/image`, {
+              method: "POST",
+              headers: { Authorization: `Bearer ${token}` },
+              body: fd,
+            });
+            if (!up.ok) throw new Error(`Upload failed for ${file.name}`);
+            const data = await up.json();
+            return data.path as string;
+          })
+        );
+        uploadedPaths = uploads;
       }
 
       const res = await fetch(
@@ -286,20 +320,35 @@ export default function OrderDetailPage() {
             "Content-Type": "application/json",
             Authorization: `Bearer ${token}`,
           },
+          body: JSON.stringify({
+            damage_severity: damageSeverity,
+            note: damageNote.trim() || null,
+            evidence_photos: uploadedPaths,
+          }),
         }
       );
 
-      if (!res.ok) throw new Error("Failed to confirm receive");
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: "Failed to confirm receive" }));
+        throw new Error(err.detail || "Failed to confirm receive");
+      }
 
-      toast.success("Book received successfully");
+      if (damageSeverity === "none") {
+        toast.success("Book received. Deposit refund will be processed.");
+      } else {
+        toast.success("Damage report submitted. Deposit is now pending admin review.");
+      }
+
+      resetDamageForm();
 
       const updatedOrder = await fetchOrderDetails(orderId);
       if (updatedOrder) setOrder(updatedOrder);
-      // Trigger notification badge refresh in Header
       window.dispatchEvent(new Event("notif-update"));
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      toast.error("Failed to confirm receive");
+      toast.error(err?.message || "Failed to confirm receive");
+    } finally {
+      setConfirmSubmitting(false);
     }
   };
 
@@ -926,28 +975,115 @@ export default function OrderDetailPage() {
 
       <Modal
         isOpen={confirmReceiveModalOpen}
-        onClose={() => setConfirmReceiveModalOpen(false)}
+        onClose={() => {
+          if (confirmSubmitting) return;
+          setConfirmReceiveModalOpen(false);
+          resetDamageForm();
+        }}
         title="Confirm Receive Book"
       >
         <div className="space-y-4">
-          <p>
-            Are you sure you have received the returned books? This action will
-            mark the order as COMPLETED and trigger refund if applicable.
+          <p className="text-sm text-gray-700">
+            Mark the returned book as received. If the book arrived damaged,
+            select a severity and upload evidence so an admin can decide the
+            deposit deduction.
           </p>
-          <div className="flex justify-end gap-2 mt-4">
+
+          <div>
+            <label className="block text-sm font-medium mb-2">Book condition</label>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              {([
+                { value: "none", label: "No damage", sub: "Full refund" },
+                { value: "light", label: "Light", sub: "~25% deduction" },
+                { value: "medium", label: "Medium", sub: "~50% deduction" },
+                { value: "severe", label: "Severe", sub: "Full forfeit" },
+              ] as const).map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  disabled={confirmSubmitting}
+                  onClick={() => setDamageSeverity(opt.value)}
+                  className={`rounded-lg border p-3 text-left text-sm transition-colors ${
+                    damageSeverity === opt.value
+                      ? "border-blue-500 bg-blue-50 text-blue-700"
+                      : "border-gray-200 hover:bg-gray-50"
+                  }`}
+                >
+                  <div className="font-medium">{opt.label}</div>
+                  <div className="text-xs text-gray-500">{opt.sub}</div>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {damageSeverity !== "none" && (
+            <>
+              <div>
+                <label className="block text-sm font-medium mb-2">
+                  Damage photos <span className="text-gray-500">(up to 6)</span>
+                </label>
+                <input
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  disabled={confirmSubmitting}
+                  onChange={(e) => {
+                    const files = Array.from(e.target.files || []).slice(0, 6);
+                    setDamagePhotos(files);
+                  }}
+                  className="block w-full text-sm text-gray-700 file:mr-3 file:rounded-md file:border-0 file:bg-blue-600 file:text-white file:px-3 file:py-1.5 file:text-sm hover:file:bg-blue-700"
+                />
+                {damagePhotos.length > 0 && (
+                  <p className="text-xs text-gray-500 mt-1">
+                    {damagePhotos.length} file{damagePhotos.length === 1 ? "" : "s"} selected
+                  </p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-2">
+                  Note <span className="text-gray-500">(optional)</span>
+                </label>
+                <textarea
+                  value={damageNote}
+                  onChange={(e) => setDamageNote(e.target.value)}
+                  disabled={confirmSubmitting}
+                  rows={3}
+                  placeholder="Describe the damage you observed..."
+                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                />
+              </div>
+
+              <div className="rounded-md bg-amber-50 border border-amber-200 p-3 text-xs text-amber-800">
+                The borrower will be notified and has 7 days to upload counter-evidence.
+                An admin will review both sides and decide the final deduction.
+              </div>
+            </>
+          )}
+
+          <div className="flex justify-end gap-2 pt-2">
             <Button
               variant="outline"
-              onClick={() => setConfirmReceiveModalOpen(false)}
+              disabled={confirmSubmitting}
+              onClick={() => {
+                setConfirmReceiveModalOpen(false);
+                resetDamageForm();
+              }}
             >
               Cancel
             </Button>
             <Button
-              onClick={() => {
-                handleConfirmReceive(order!.id);
+              disabled={confirmSubmitting}
+              onClick={async () => {
+                await handleConfirmReceive(order!.id);
                 setConfirmReceiveModalOpen(false);
               }}
             >
-              Confirm
+              {confirmSubmitting
+                ? "Submitting..."
+                : damageSeverity === "none"
+                ? "Confirm & Release Deposit"
+                : "Submit Damage Report"}
             </Button>
           </div>
         </div>

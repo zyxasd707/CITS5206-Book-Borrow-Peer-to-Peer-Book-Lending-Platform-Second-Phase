@@ -110,15 +110,37 @@ def confirm_shipment(
     if success:
         return {"message": "Shipment confirmed successfully"}
     
+class OwnerConfirmReceivedRequest(BaseModel):
+    damage_severity: Optional[str] = "none"  # none | light | medium | severe
+    note: Optional[str] = None
+    evidence_photos: List[str] = []
+
+
 @router.put("/{order_id}/owner-confirm-received", status_code=status.HTTP_200_OK)
 def owner_confirm_received(
     order_id: str,
+    request: Optional[OwnerConfirmReceivedRequest] = None,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    success = OrderService.owner_confirm_received(db, order_id, current_user)
+    request = request or OwnerConfirmReceivedRequest()
+    success = OrderService.owner_confirm_received(
+        db,
+        order_id,
+        current_user,
+        damage_severity=request.damage_severity,
+        note=request.note,
+        evidence_photos=request.evidence_photos,
+    )
     if success:
-        return {"message": "Order marked as COMPLETED and refund triggered if applicable"}
+        severity = (request.damage_severity or "none").lower()
+        if severity == "none":
+            return {"message": "Order marked as COMPLETED and refund triggered if applicable"}
+        return {
+            "message": "Order marked as COMPLETED. Damage reported — deposit pending admin review.",
+            "deposit_status": "pending_review",
+            "severity": severity,
+        }
 
 @router.put("/{order_id}/borrower-confirm-received", status_code=status.HTTP_200_OK)
 def borrower_confirm_received(

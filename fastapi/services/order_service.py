@@ -952,27 +952,41 @@ class OrderService:
         return count
     
     @staticmethod
-    def owner_confirm_received(db: Session, order_id: str, current_user: User) -> bool:
+    def owner_confirm_received(
+        db: Session,
+        order_id: str,
+        current_user: User,
+        damage_severity: Optional[str] = None,
+        note: Optional[str] = None,
+        evidence_photos: Optional[List[str]] = None,
+    ) -> bool:
         """
-        Owner manually confirms that returned books are received
+        Owner manually confirms that returned books are received.
+
+        MVP6-1: accepts optional damage report. severity='none' (or omitted)
+        keeps the existing flow (auto deposit release). severity in
+        {light, medium, severe} puts the deposit in 'pending_review' for
+        admin arbitration and records the lender's evidence.
         """
         order = db.query(Order).filter(Order.id == order_id).first()
         if not order:
             raise HTTPException(status_code=404, detail="Order not found")
-        
+
         if order.status != "RETURNED":
             raise HTTPException(status_code=400, detail="Order is not in RETURNED status")
-        
+
         if order.owner_id != current_user.user_id and not current_user.is_admin:
             raise HTTPException(status_code=403, detail="Only owner can confirm received books")
-        
-        # Upate order status
+
+        severity = (damage_severity or "none").lower()
+        if severity not in {"none", "light", "medium", "severe"}:
+            raise HTTPException(status_code=400, detail="Invalid damage_severity")
+
+        # Order lifecycle: always advance to COMPLETED. Deposit lifecycle is tracked separately.
         order.status = "COMPLETED"
         order.completed_at = datetime.now(timezone.utc)
 
-        # Restore book availability for borrowed books
-        # For borrow orders: set books back to 'listed'
-        # For purchase orders: books stay as 'sold'
+        # Restore book availability for borrow orders
         if order.action_type == "borrow":
             for order_book in order.books:
                 if order_book.book:
@@ -980,30 +994,98 @@ class OrderService:
                     if book and book.status == "lent":
                         book.status = "listed"
 
-        NotificationService.create(
-            db, user_id=order.borrower_id, order_id=order.id,
-            type="COMPLETED",
-            title="Order Completed",
-            message=f"The lender has confirmed receipt of the returned book. Your deposit refund will be processed.",
-            commit=False,
-        )
-        NotificationService.create(
-            db, user_id=order.owner_id, order_id=order.id,
-            type="COMPLETED",
-            title="Order Completed",
-            message=f"You have confirmed receipt of the returned book. Order is now complete.",
-            commit=False,
-        )
+        # Deferred imports to avoid circular refs
+        from models.deposit_evidence import DepositEvidence
+        from models.deposit_audit_log import DepositAuditLog
+        import json
 
-        db.commit()
-        db.refresh(order)
+        if severity == "none":
+            # Clean return → auto release
+            order.deposit_status = "released"
+            order.deposit_deducted_cents = 0
+            order.damage_severity_final = "none"
 
-        # Trigger refund
-        if order.payment_id:
-            try:
-                refund_data = {"reason": "Books returned and received"}
-                from services.payment_gateway_service import refund_payment
-                refund_payment(order.payment_id, refund_data, db=db)
-            except Exception as e:
-                print(f"[WARN] refund_payment failed: {e}")  
+            NotificationService.create(
+                db, user_id=order.borrower_id, order_id=order.id,
+                type="COMPLETED",
+                title="Order Completed",
+                message="The lender has confirmed receipt of the returned book. Your deposit refund will be processed.",
+                commit=False,
+            )
+            NotificationService.create(
+                db, user_id=order.owner_id, order_id=order.id,
+                type="COMPLETED",
+                title="Order Completed",
+                message="You have confirmed receipt of the returned book. Order is now complete.",
+                commit=False,
+            )
+
+            db.add(DepositAuditLog(
+                order_id=order.id,
+                actor_id=order.owner_id,
+                actor_role="lender",
+                action="release",
+                amount_cents=0,
+                final_severity="none",
+                note="Clean return confirmed by lender.",
+            ))
+
+            db.commit()
+            db.refresh(order)
+
+            # Trigger refund (existing flow)
+            if order.payment_id:
+                try:
+                    refund_data = {"reason": "Books returned and received"}
+                    from services.payment_gateway_service import refund_payment
+                    refund_payment(order.payment_id, refund_data, db=db)
+                except Exception as e:
+                    print(f"[WARN] refund_payment failed: {e}")
+        else:
+            # Damaged return → lender evidence on record, admin arbitrates later
+            order.deposit_status = "pending_review"
+
+            db.add(DepositEvidence(
+                order_id=order.id,
+                submitter_id=order.owner_id,
+                submitter_role="lender",
+                photos=json.dumps(evidence_photos or []),
+                claimed_severity=severity,
+                note=note,
+            ))
+            db.add(DepositAuditLog(
+                order_id=order.id,
+                actor_id=order.owner_id,
+                actor_role="lender",
+                action="evidence_submitted",
+                final_severity=severity,
+                note=(note or "").strip() or f"Lender reported damage: {severity}",
+            ))
+
+            NotificationService.create(
+                db, user_id=order.borrower_id, order_id=order.id,
+                type="DEPOSIT_UPDATED",
+                title="Damage Reported — Admin Review Pending",
+                message=(
+                    f"The lender reported damage (severity: {severity}) to the returned book. "
+                    "An admin will review and decide the deposit deduction. "
+                    "You can upload counter-evidence within 7 days if you disagree."
+                ),
+                commit=False,
+            )
+            NotificationService.create(
+                db, user_id=order.owner_id, order_id=order.id,
+                type="DEPOSIT_UPDATED",
+                title="Damage Report Submitted",
+                message=(
+                    f"Your damage report (severity: {severity}) has been recorded. "
+                    "An admin will review the evidence and determine the deduction."
+                ),
+                commit=False,
+            )
+
+            db.commit()
+            db.refresh(order)
+            # NO automatic refund — admin will trigger partial/full via /deposits/admin endpoints
+
         return True
