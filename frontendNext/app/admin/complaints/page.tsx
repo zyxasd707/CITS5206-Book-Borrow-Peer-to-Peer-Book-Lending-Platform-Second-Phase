@@ -96,7 +96,7 @@ export default function AdminComplaintsPage() {
           <h1 className="text-2xl font-bold">Complaint Approvals</h1>
           <p className="text-gray-600">Approve or reject complaint outcomes.</p>
         </div>
-        <Link href="/admin/analytics" className="text-sm underline">
+        <Link href="/admin" className="text-sm underline">
           Back to Dashboard
         </Link>
       </div>

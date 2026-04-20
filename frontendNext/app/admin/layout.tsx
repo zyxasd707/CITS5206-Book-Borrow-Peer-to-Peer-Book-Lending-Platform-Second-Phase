@@ -4,7 +4,6 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
-  BarChart3,
   Users,
   BookOpen,
   ClipboardList,
@@ -22,7 +21,6 @@ type MenuItem = {
 
 const menuItems: MenuItem[] = [
   { label: "Dashboard", href: "/admin", icon: LayoutDashboard },
-  { label: "Analytics", href: "/admin/analytics", icon: BarChart3 },
   { label: "User Metrics", href: "/admin/user-metrics", icon: Users },
   { label: "Book Metrics", href: "/admin/book-metrics", icon: BookOpen },
   { label: "View Orders", href: "/admin/view-orders", icon: ClipboardList },
