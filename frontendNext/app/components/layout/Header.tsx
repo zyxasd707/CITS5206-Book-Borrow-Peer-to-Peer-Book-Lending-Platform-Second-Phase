@@ -205,9 +205,15 @@ const Header: React.FC = () => {
               )}
 
 
-              {/* Lend Books button - mobile version (icon only) */}
+              {/* Lend Books button - mobile version */}
               {isLoggedIn && (
-                <Button variant="outline" size="sm" className="sm:hidden p-2">
+                <Button variant="outline" size="sm" className="sm:hidden p-2" onClick={async () => {
+                  if (!currentUser || !isProfileComplete(currentUser)) {
+                    setIsProfileModalOpen(true);
+                    return;
+                  }
+                  router.push("/lending/add");
+                }}>
                   <Plus className="w-4 h-4" />
                 </Button>
               )}
