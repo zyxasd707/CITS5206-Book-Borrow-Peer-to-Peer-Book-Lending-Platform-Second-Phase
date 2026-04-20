@@ -241,6 +241,134 @@ export async function getUserRefunds(userId: string) {
   };
 }
 
+// MVP6 Phase 3: Admin Refund APIs
+
+export async function getAdminRefunds(params?: {
+  status_filter?: string;
+  refund_type?: string;
+  search?: string;
+  sort_by?: string;
+  sort_order?: string;
+  page?: number;
+  page_size?: number;
+}) {
+  const searchParams = new URLSearchParams();
+  if (params?.status_filter) searchParams.set("status_filter", params.status_filter);
+  if (params?.refund_type) searchParams.set("refund_type", params.refund_type);
+  if (params?.search) searchParams.set("search", params.search);
+  if (params?.sort_by) searchParams.set("sort_by", params.sort_by);
+  if (params?.sort_order) searchParams.set("sort_order", params.sort_order);
+  if (params?.page) searchParams.set("page", String(params.page));
+  if (params?.page_size) searchParams.set("page_size", String(params.page_size));
+
+  const qs = searchParams.toString();
+  const res = await axios.get(
+    `${API_URL}/api/v1/payment_gateway/refunds/admin${qs ? `?${qs}` : ""}`,
+    {
+      headers: { Authorization: `Bearer ${localStorage.getItem("access_token")}` },
+      withCredentials: true,
+    }
+  );
+  return res.data as {
+    kpi: {
+      total_count: number;
+      total_amount: number;
+      succeeded_count: number;
+      failed_count: number;
+      pending_count: number;
+      success_rate: number;
+    };
+    pagination: {
+      page: number;
+      page_size: number;
+      total: number;
+      total_pages: number;
+    };
+    refunds: Array<{
+      refund_id: string;
+      payment_id: string;
+      amount: number;
+      currency: string;
+      status: string;
+      reason: string | null;
+      refund_type: string;
+      trigger: string;
+      created_at: string | null;
+      updated_at: string | null;
+      order: {
+        order_id: string;
+        status: string;
+        book_titles: string[];
+      } | null;
+      borrower: { user_id: string; name: string; email: string } | null;
+      lender: { user_id: string; name: string; email: string } | null;
+      disputes: Array<{
+        dispute_id: string;
+        reason: string;
+        status: string;
+        created_at: string | null;
+      }>;
+    }>;
+  };
+}
+
+export async function getAdminRefundDetail(refundId: string) {
+  const res = await axios.get(
+    `${API_URL}/api/v1/payment_gateway/refunds/admin/${refundId}`,
+    {
+      headers: { Authorization: `Bearer ${localStorage.getItem("access_token")}` },
+      withCredentials: true,
+    }
+  );
+  return res.data;
+}
+
+export async function retryRefund(refundId: string) {
+  const res = await axios.post(
+    `${API_URL}/api/v1/payment_gateway/refunds/admin/${refundId}/retry`,
+    {},
+    {
+      headers: { Authorization: `Bearer ${localStorage.getItem("access_token")}` },
+      withCredentials: true,
+    }
+  );
+  return res.data as {
+    message: string;
+    old_refund_id: string;
+    new_refund_id: string;
+    amount: number;
+    status: string;
+  };
+}
+
+export async function manualAdminRefund(data: {
+  order_id: string;
+  refund_type: string;
+  reason: string;
+}) {
+  const res = await axios.post(
+    `${API_URL}/api/v1/payment_gateway/refunds/admin/manual`,
+    data,
+    {
+      headers: {
+        Authorization: `Bearer ${localStorage.getItem("access_token")}`,
+        "Content-Type": "application/json",
+      },
+      withCredentials: true,
+    }
+  );
+  return res.data as {
+    message: string;
+    refund_id: string;
+    order_id: string;
+    amount: number;
+    currency: string;
+    status: string;
+    refund_type: string;
+    reason: string;
+  };
+}
+
 // Execute compensation transfer after dispute resolved
 export async function compensatePayment(
   paymentId: string,
