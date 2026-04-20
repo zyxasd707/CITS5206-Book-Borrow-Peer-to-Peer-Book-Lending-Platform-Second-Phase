@@ -1044,6 +1044,7 @@ class OrderService:
         else:
             # Damaged return → lender evidence on record, admin arbitrates later
             order.deposit_status = "pending_review"
+            order.damage_severity_final = None  # cleared until admin rules
 
             db.add(DepositEvidence(
                 order_id=order.id,
