@@ -29,8 +29,8 @@ class DepositAuditLog(Base):
     __tablename__ = "deposit_audit_log"
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    order_id = Column(String(36), ForeignKey("orders.id", ondelete="CASCADE"),
-                      nullable=False, index=True)
+    order_id = Column(String(36), ForeignKey("orders.id", ondelete="SET NULL"),
+                      nullable=True, index=True)
     actor_id = Column(String(25), ForeignKey("users.user_id", ondelete="SET NULL"),
                       nullable=True, index=True)
     actor_role = Column(Enum(*AUDIT_ACTOR_ROLE_ENUM, name="audit_actor_role_enum"),

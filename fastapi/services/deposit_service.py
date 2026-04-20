@@ -129,6 +129,19 @@ def _apply_strike(db: Session, borrower: User, severity: str) -> Dict[str, Any]:
         )
         restrict_applied = True
 
+        # MVP6-1: notify the borrower they've been auto-restricted
+        NotificationService.create(
+            db, user_id=borrower.user_id,
+            type="USER_RESTRICTED",
+            title="Borrowing Restricted",
+            message=(
+                f"Your borrowing has been automatically restricted after "
+                f"{borrower.damage_strike_count} damage strike(s). "
+                "Contact support to request a review."
+            ),
+            commit=False,
+        )
+
     suggest_ban = severity == "severe"
     auto_ban = borrower.damage_severity_score >= AUTO_BAN_SCORE_THRESHOLD
 
@@ -328,11 +341,32 @@ def admin_set_restriction(db: Session, user_id: str, admin: User,
     target.restriction_reason = reason if restricted else None
 
     db.add(DepositAuditLog(
-        order_id="-",  # not tied to an order
+        order_id=None,  # user-level action, not tied to an order
         actor_id=admin.user_id, actor_role="admin",
         action="restrict" if restricted else "unrestrict",
         note=reason or ("Admin manually restricted user." if restricted else "Admin lifted restriction."),
     ))
+
+    # MVP6-1: notify the user so they know they can/cannot borrow
+    if restricted:
+        NotificationService.create(
+            db, user_id=target.user_id,
+            type="USER_RESTRICTED",
+            title="Your account has been restricted",
+            message=(
+                f"Admin has restricted your borrowing. "
+                f"Reason: {reason or 'Contact support for details.'}"
+            ),
+            commit=False,
+        )
+    else:
+        NotificationService.create(
+            db, user_id=target.user_id,
+            type="USER_RESTRICTED",
+            title="Borrowing restriction lifted",
+            message="Admin has lifted your borrowing restriction. You can borrow again.",
+            commit=False,
+        )
 
     db.commit()
     db.refresh(target)

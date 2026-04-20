@@ -338,11 +338,142 @@ def is_database_empty(db) -> bool:
     )
 
 
+def _seed_deposit_demos(db) -> None:
+    """Seed a pending_review deposit demo so /admin/deposits always has a row
+    to arbitrate on a fresh database. Idempotent — keyed off a sentinel
+    payment_id.
+    """
+    import json as _json
+    from models.deposit_evidence import DepositEvidence
+    from models.deposit_audit_log import DepositAuditLog
+    from models.payment_gateway import Payment as PaymentModel
+    from models.system_notification import SystemNotification
+
+    sentinel_payment_id = "pi_mock_deposit_demo001"
+    existing = db.query(PaymentModel).filter(
+        PaymentModel.payment_id == sentinel_payment_id
+    ).first()
+    if existing:
+        print("  Deposit demo data already exists, skipping.")
+        return
+
+    bob = db.query(User).filter(User.email == "bob@example.com").first()
+    carol = db.query(User).filter(User.email == "carol@example.com").first()
+    book = db.query(Book).filter(Book.title_en == "Pride and Prejudice").first()
+    if not (bob and carol and book):
+        print("  Deposit demo skipped: required users or book missing.")
+        return
+
+    created_at = datetime.utcnow() - timedelta(days=20)
+    start_at = created_at + timedelta(days=1)
+    due_at = start_at + timedelta(days=14)
+    returned_at = datetime.utcnow() - timedelta(hours=2)
+
+    # Payment row so the deposit amount can be resolved in cents
+    db.add(PaymentModel(
+        payment_id=sentinel_payment_id,
+        checkout_id="cs_mock_deposit_demo001",
+        user_id=carol.user_id,
+        amount=2000,
+        currency="aud",
+        status="succeeded",
+        deposit=2000,
+        shipping_fee=0,
+        service_fee=0,
+        created_at=created_at,
+        destination="acct_mock_bob",
+        action_type="BORROW",
+    ))
+
+    demo_order_id = uid()
+    order = Order(
+        id=demo_order_id,
+        owner_id=bob.user_id,
+        borrower_id=carol.user_id,
+        status="COMPLETED",
+        action_type="borrow",
+        start_at=start_at,
+        due_at=due_at,
+        returned_at=returned_at,
+        completed_at=returned_at,
+        created_at=created_at,
+        shipping_method="post",
+        deposit_or_sale_amount=20.00,
+        service_fee_amount=2.00,
+        shipping_out_fee_amount=3.00,
+        total_paid_amount=25.00,
+        contact_name="Carol Wang",
+        phone="0422334455",
+        street="45 George Street",
+        city="Sydney",
+        postcode="2000",
+        country="Australia",
+        notes="Seeded deposit demo — damaged return awaiting admin review.",
+        deposit_status="pending_review",
+        deposit_deducted_cents=0,
+        damage_severity_final=None,
+        payment_id=sentinel_payment_id,
+    )
+    db.add(order)
+    db.flush()
+
+    db.add(OrderBook(order_id=demo_order_id, book_id=book.id))
+
+    db.add(DepositEvidence(
+        order_id=demo_order_id,
+        submitter_id=bob.user_id,
+        submitter_role="lender",
+        photos=_json.dumps([]),
+        claimed_severity="medium",
+        note="Back cover has a water stain and one page is torn. Seeded demo.",
+        submitted_at=returned_at,
+    ))
+
+    db.add(DepositAuditLog(
+        order_id=demo_order_id,
+        actor_id=bob.user_id,
+        actor_role="lender",
+        action="evidence_submitted",
+        final_severity="medium",
+        note="Lender reported medium damage (seeded demo).",
+        created_at=returned_at,
+    ))
+
+    # Notifications to both parties (fresh, unread)
+    db.add(SystemNotification(
+        user_id=carol.user_id,
+        order_id=demo_order_id,
+        type="DEPOSIT_UPDATED",
+        title="Deposit Under Review",
+        message=(
+            "The lender reported damage on return. Your deposit is now pending admin review. "
+            "You can upload counter-evidence within 7 days."
+        ),
+    ))
+    db.add(SystemNotification(
+        user_id=bob.user_id,
+        order_id=demo_order_id,
+        type="DEPOSIT_UPDATED",
+        title="Damage Report Submitted",
+        message="Your damage report has been recorded. Admin will arbitrate the deposit.",
+    ))
+
+    db.commit()
+    print(f"  Created pending_review deposit demo: {demo_order_id}")
+
+
 def seed(*, force: bool = False):
     db = SessionLocal()
     try:
         if not force and not is_database_empty(db):
             print("Database is not empty. Skipping auto-seed.")
+            # Still try the deposit demo — it's idempotent and a small addition
+            # for dev DBs that predate MVP6-1.
+            try:
+                _seed_deposit_demos(db)
+            except Exception as exc:
+                db.rollback()
+                print(f"  Deposit demo seed failed: {exc}")
             return
 
         print("Seeding users...")
@@ -565,6 +696,10 @@ def seed(*, force: bool = False):
                 print(f"  Created CANCELED order with refund: {refund_order_id}")
             else:
                 print("  Refund demo data already exists, skipping.")
+
+        # --- Seed a pending_review deposit demo (MVP6-1) ---
+        print("Seeding deposit demo data...")
+        _seed_deposit_demos(db)
 
         print("\nSeed complete!")
         print("\nTest accounts:")
