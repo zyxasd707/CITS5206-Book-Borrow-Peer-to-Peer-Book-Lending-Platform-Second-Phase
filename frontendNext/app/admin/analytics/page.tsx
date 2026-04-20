@@ -1,379 +1,293 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
-    Chart as ChartJS,
-    LineElement,
-    CategoryScale,
-    LinearScale,
-    PointElement,
-    Legend,
-    Tooltip,
-    ArcElement,
-} from "chart.js";
-import { Line, Doughnut } from "react-chartjs-2";
-import { getApiUrl, getToken } from "@/utils/auth";
-import { listBans } from "@/utils/auth";
-import { getBooks } from "@/utils/books";
-import { ErrorState, LoadingState } from "@/app/components/ui/AsyncState";
+    getApiUrl,
+    getCurrentUser,
+    getToken,
+    isAuthenticated,
+} from "@/utils/auth";
 
-ChartJS.register(
-    LineElement,
-    CategoryScale,
-    LinearScale,
-    PointElement,
-    Legend,
-    Tooltip,
-    ArcElement
-);
-
-type AnalyticsData = {
-    total_users: number;
-    total_books: number;
-    active_rentals: number;
-    total_revenue: number;
+type SignupDetail = {
+    name: string | null;
+    email: string;
+    created_at: string | null;
+    city: string | null;
+    state: string | null;
+    country: string | null;
 };
 
-type TransactionPoint = {
-    date: string;
-    count: number;
+type DistributionItem = {
+    label: string;
+    value: number;
 };
 
-const fallbackSummary: AnalyticsData = {
-    total_users: 4,
-    total_books: 8,
-    active_rentals: 3,
-    total_revenue: 64,
+type UserMetricsResponse = {
+    total_registered_users: number;
+    signups_in_selected_period: number;
+    signup_details: SignupDetail[];
+    age_distribution: DistributionItem[];
+    location_distribution: DistributionItem[];
 };
-
-const fallbackTransactions: TransactionPoint[] = [
-    { date: "2026-03-26", count: 2 },
-    { date: "2026-03-27", count: 4 },
-    { date: "2026-03-28", count: 3 },
-    { date: "2026-03-29", count: 5 },
-    { date: "2026-03-30", count: 1 },
-];
-
-const fallbackRecentTransactions = [
-    { user: "Bob Smith", book: "The Great Gatsby", type: "Borrow" },
-    { user: "Carol Wang", book: "To Kill a Mockingbird", type: "Purchase" },
-    { user: "Alice Chen", book: "Pride and Prejudice", type: "Borrow" },
-];
 
 export default function AdminAnalyticsPage() {
-    const [data, setData] = useState<AnalyticsData>(fallbackSummary);
-    const [chartData, setChartData] = useState<any>(null);
-    const [loadingSummary, setLoadingSummary] = useState(false);
-    const [loadingTransactions, setLoadingTransactions] = useState(false);
-    const [summaryError, setSummaryError] = useState<string | null>(null);
-    const [transactionsError, setTransactionsError] = useState<string | null>(null);
-    const [banCount, setBanCount] = useState<number>(0);
-    const [listedBooksCount, setListedBooksCount] = useState<number>(0);
-    const [lentBooksCount, setLentBooksCount] = useState<number>(0);
-    const [soldBooksCount, setSoldBooksCount] = useState<number>(0);
+    const router = useRouter();
 
-    const fetchSummary = async () => {
-            const token = getToken();
-            const apiUrl = getApiUrl();
-            setLoadingSummary(true);
-            setSummaryError(null);
+    const [isLoadingPage, setIsLoadingPage] = useState(true);
+    const [loadingMetrics, setLoadingMetrics] = useState(false);
+    const [error, setError] = useState("");
+
+    const [fromDate, setFromDate] = useState("");
+    const [toDate, setToDate] = useState("");
+
+    const [data, setData] = useState<UserMetricsResponse>({
+        total_registered_users: 0,
+        signups_in_selected_period: 0,
+        signup_details: [],
+        age_distribution: [],
+        location_distribution: [],
+    });
+
+    useEffect(() => {
+        const init = async () => {
             try {
-                const res = await fetch(`${apiUrl}/api/v1/analytics/summary`, {
+                if (!isAuthenticated()) {
+                    router.push("/auth");
+                    return;
+                }
+
+                const me = await getCurrentUser();
+
+                if (!me || !me.is_admin) {
+                    router.push("/");
+                    return;
+                }
+
+                await fetchMetrics();
+            } catch (err) {
+                console.error("Failed to initialize analytics page:", err);
+                setError("Failed to load user metrics.");
+            } finally {
+                setIsLoadingPage(false);
+            }
+        };
+
+        init();
+    }, [router]);
+
+    const fetchMetrics = async () => {
+        try {
+            setLoadingMetrics(true);
+            setError("");
+
+            const apiUrl = getApiUrl();
+            const token = getToken();
+
+            const params = new URLSearchParams();
+            if (fromDate) params.append("from_date", fromDate);
+            if (toDate) params.append("to_date", toDate);
+
+            const response = await fetch(
+                `${apiUrl}/api/v1/analytics/user-metrics?${params.toString()}`,
+                {
                     headers: {
                         Authorization: `Bearer ${token}`,
                     },
-                });
-
-                if (!res.ok) {
-                    throw new Error("Summary fetch failed");
                 }
+            );
 
-                const result = await res.json();
-
-                setData({
-                    total_users: result.total_users ?? fallbackSummary.total_users,
-                    total_books: result.total_books ?? fallbackSummary.total_books,
-                    active_rentals:
-                        result.active_rentals && result.active_rentals > 0
-                            ? result.active_rentals
-                            : fallbackSummary.active_rentals,
-                    total_revenue:
-                        result.total_revenue && result.total_revenue > 0
-                            ? result.total_revenue
-                            : fallbackSummary.total_revenue,
-                });
-            } catch (error) {
-                console.error("Using fallback summary data:", error);
-                setData(fallbackSummary);
-                setSummaryError("Unable to reach analytics summary API. Showing fallback data.");
-            } finally {
-                setLoadingSummary(false);
+            if (!response.ok) {
+                throw new Error("Failed to fetch user metrics");
             }
-        };
 
-        const fetchTransactions = async () => {
-            const token = getToken();
-            const apiUrl = getApiUrl();
-            setLoadingTransactions(true);
-            setTransactionsError(null);
-            try {
-                const res = await fetch(
-                    `${apiUrl}/api/v1/analytics/transactions-over-time`,
-                    {
-                        headers: {
-                            Authorization: `Bearer ${token}`,
-                        },
-                    }
-                );
-
-                if (!res.ok) {
-                    throw new Error("Transactions fetch failed");
-                }
-
-                const result: TransactionPoint[] = await res.json();
-                const finalData = result.length > 0 ? result : fallbackTransactions;
-
-                setChartData({
-                    labels: finalData.map((item) => item.date),
-                    datasets: [
-                        {
-                            label: "Transactions",
-                            data: finalData.map((item) => item.count),
-                            tension: 0.3,
-                        },
-                    ],
-                });
-            } catch (error) {
-                console.error("Using fallback transaction chart:", error);
-                setChartData({
-                    labels: fallbackTransactions.map((item) => item.date),
-                    datasets: [
-                        {
-                            label: "Transactions",
-                            data: fallbackTransactions.map((item) => item.count),
-                            tension: 0.3,
-                        },
-                    ],
-                });
-                setTransactionsError("Transaction timeline API is unavailable. Showing fallback chart.");
-            } finally {
-                setLoadingTransactions(false);
-            }
-        };
-
-        const fetchUserPanelData = async () => {
-            try {
-                const bans = await listBans();
-                setBanCount(bans.filter((b) => b.is_active).length);
-            } catch (error) {
-                console.error("Failed to load ban stats:", error);
-                setBanCount(0);
-            }
-        };
-
-        const fetchBookPanelData = async () => {
-            try {
-                const [listed, lent, sold] = await Promise.all([
-                    getBooks({ status: "listed", pageSize: 100 }),
-                    getBooks({ status: "lent", pageSize: 100 }),
-                    getBooks({ status: "sold", pageSize: 100 }),
-                ]);
-                setListedBooksCount(listed.length);
-                setLentBooksCount(lent.length);
-                setSoldBooksCount(sold.length);
-            } catch (error) {
-                console.error("Failed to load book panel stats:", error);
-                setListedBooksCount(0);
-                setLentBooksCount(0);
-                setSoldBooksCount(0);
-            }
-        };
-
-    useEffect(() => {
-        fetchSummary();
-        fetchTransactions();
-        fetchUserPanelData();
-        fetchBookPanelData();
-    }, []);
-
-    const categoryChartData = {
-        labels: ["Classic Fiction", "Science Fiction", "Fantasy", "Romance"],
-        datasets: [
-            {
-                data: [12, 8, 6, 4],
-                backgroundColor: [
-                    "#6366F1", // Indigo
-                    "#10B981", // Green
-                    "#F59E0B", // Amber
-                    "#EF4444", // Red
-                ],
-                borderWidth: 1,
-            },
-        ],
+            const result = await response.json();
+            setData(result);
+        } catch (err) {
+            console.error("Failed to fetch user metrics:", err);
+            setError("Unable to load user metrics.");
+        } finally {
+            setLoadingMetrics(false);
+        }
     };
 
+    if (isLoadingPage) {
+        return (
+            <div className="flex-1 bg-gray-50 py-8">
+                <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+                    <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-6 text-sm text-gray-500">
+                        Loading user metrics...
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
     return (
-        <div className="min-h-screen bg-gray-50 p-6">
-            <div className="mx-auto max-w-7xl space-y-6">
-                <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-                    <div>
-                        <h1 className="text-3xl font-bold text-gray-900">Analytics Dashboard</h1>
-                        <p className="text-sm text-gray-600">
-                            Monitor platform performance and insights
+        <div className="flex-1 bg-gray-50 py-8">
+            <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
+                <div>
+                    <h1 className="text-2xl font-bold text-gray-900">User Metrics</h1>
+                    <p className="mt-1 text-sm text-gray-500">
+                        View registered users and sign-up insights.
+                    </p>
+                </div>
+
+                {error && (
+                    <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                        {error}
+                    </div>
+                )}
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-6">
+                        <p className="text-sm text-gray-500">Total Registered Users</p>
+                        <p className="mt-2 text-3xl font-bold text-gray-900">
+                            {data.total_registered_users}
                         </p>
                     </div>
 
-                    <div className="flex gap-3">
-                        <select className="rounded-lg border px-3 py-2 text-sm">
-                            <option>Last 7 days</option>
-                            <option>Last 30 days</option>
-                        </select>
+                    <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-6">
+                        <h2 className="text-lg font-semibold text-gray-900">
+                            New User Sign-ups
+                        </h2>
 
-                        <button className="rounded-lg border px-4 py-2 text-sm">
-                            Export CSV
-                        </button>
-
-                        <button className="rounded-lg bg-black px-4 py-2 text-sm text-white">
-                            Export PDF
-                        </button>
-                    </div>
-                </div>
-
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-                    {loadingSummary ? (
-                        <div className="sm:col-span-2 xl:col-span-4">
-                            <LoadingState title="Loading summary..." description="Fetching dashboard totals." />
-                        </div>
-                    ) : (
-                        <>
-                            <Card title="Users" value={data.total_users} />
-                            <Card title="Books" value={data.total_books} />
-                            <Card title="Rentals" value={data.active_rentals} />
-                            <Card title="Revenue" value={`$${data.total_revenue}`} />
-                        </>
-                    )}
-                </div>
-                {summaryError && (
-                    <ErrorState
-                        className="mt-4"
-                        title="Summary API unavailable"
-                        description={summaryError}
-                        onRetry={fetchSummary}
-                    />
-                )}
-
-                <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-                    <div className="rounded-2xl bg-white p-6 shadow-sm">
-                        <h3 className="font-semibold text-gray-900">Transaction Panel</h3>
-                        <p className="text-xs text-gray-500 mt-1">Timeline of order transactions over time</p>
-                        <div className="mt-4 min-h-[16rem]">
-                            {loadingTransactions ? (
-                                <LoadingState title="Loading transaction chart..." />
-                            ) : chartData ? (
-                                <Line data={chartData} />
-                            ) : (
-                                <div className="flex h-64 items-center justify-center rounded-xl border border-dashed border-gray-300 text-gray-500">
-                                    Loading chart...
-                                </div>
-                            )}
-                        </div>
-                        {transactionsError && (
-                            <div className="mt-4">
-                                <ErrorState
-                                    title="Transaction API unavailable"
-                                    description={transactionsError}
-                                    onRetry={fetchTransactions}
+                        <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                                    From
+                                </label>
+                                <input
+                                    type="date"
+                                    value={fromDate}
+                                    onChange={(e) => setFromDate(e.target.value)}
+                                    className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
                                 />
                             </div>
-                        )}
-                    </div>
 
-                    <div className="rounded-2xl bg-white p-6 shadow-sm">
-                        <h3 className="font-semibold text-gray-900">Book Panel</h3>
-                        <p className="text-xs text-gray-500 mt-1">Inventory and category distribution overview</p>
-                        <div className="mt-4 grid grid-cols-3 gap-3">
-                            <div className="rounded-xl border p-3">
-                                <p className="text-xs text-gray-500">Listed</p>
-                                <p className="text-xl font-bold">{listedBooksCount}</p>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                                    To
+                                </label>
+                                <input
+                                    type="date"
+                                    value={toDate}
+                                    onChange={(e) => setToDate(e.target.value)}
+                                    className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                />
                             </div>
-                            <div className="rounded-xl border p-3">
-                                <p className="text-xs text-gray-500">Lent</p>
-                                <p className="text-xl font-bold">{lentBooksCount}</p>
-                            </div>
-                            <div className="rounded-xl border p-3">
-                                <p className="text-xs text-gray-500">Sold</p>
-                                <p className="text-xl font-bold">{soldBooksCount}</p>
+
+                            <div className="flex items-end">
+                                <button
+                                    onClick={fetchMetrics}
+                                    disabled={loadingMetrics}
+                                    className="w-full rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+                                >
+                                    {loadingMetrics ? "Loading..." : "Filter"}
+                                </button>
                             </div>
                         </div>
-                        <div className="mt-4 flex min-h-[12rem] items-center justify-center">
-                            <div className="w-full max-w-xs">
-                                <Doughnut data={categoryChartData} />
-                            </div>
+
+                        <div className="mt-5 border-t border-gray-100 pt-4">
+                            <p className="text-sm text-gray-500">Total Sign-ups in Selected Period</p>
+                            <p className="mt-2 text-3xl font-bold text-gray-900">
+                                {data.signups_in_selected_period}
+                            </p>
                         </div>
                     </div>
                 </div>
 
-                <div className="rounded-2xl bg-white p-6 shadow-sm">
-                    <div className="flex items-center justify-between">
-                        <h3 className="font-semibold text-gray-900">User Panel</h3>
-                        <Link href="/admin/users" className="text-sm underline text-gray-700">
-                            Manage Users
-                        </Link>
-                    </div>
-                    <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
-                        <div className="rounded-xl border p-3">
-                            <p className="text-xs text-gray-500">Total Users</p>
-                            <p className="text-xl font-bold">{data.total_users}</p>
-                        </div>
-                        <div className="rounded-xl border p-3">
-                            <p className="text-xs text-gray-500">Active Bans</p>
-                            <p className="text-xl font-bold">{banCount}</p>
-                        </div>
-                        <div className="rounded-xl border p-3">
-                            <p className="text-xs text-gray-500">Support Cases</p>
-                            <p className="text-xl font-bold">See complaints panel</p>
-                        </div>
-                    </div>
-                </div>
-
-                <div className="rounded-2xl bg-white p-6 shadow-sm">
-                    <div className="flex items-center justify-between">
-                        <h3 className="font-semibold text-gray-900">Recent Transactions</h3>
-                        <Link href="/admin/complaints" className="text-sm underline text-gray-700">
-                            Review Complaints
-                        </Link>
+                <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-6">
+                    <div className="flex items-center justify-between mb-4">
+                        <h2 className="text-lg font-semibold text-gray-900">
+                            User Sign-up Details
+                        </h2>
+                        <span className="text-sm text-gray-500">
+                            {data.signup_details.length} record
+                            {data.signup_details.length === 1 ? "" : "s"}
+                        </span>
                     </div>
 
-                    <table className="mt-4 w-full text-sm">
-                        <thead>
-                            <tr className="border-b text-left text-gray-500">
-                                <th className="py-2">User</th>
-                                <th className="py-2">Book</th>
-                                <th className="py-2">Type</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {fallbackRecentTransactions.map((row, index) => (
-                                <tr key={index} className="border-b">
-                                    <td className="py-2">{row.user}</td>
-                                    <td>{row.book}</td>
-                                    <td>{row.type}</td>
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                            <thead>
+                                <tr className="border-b border-gray-200">
+                                    <th className="py-3 pr-4 text-left font-medium text-gray-600">Name</th>
+                                    <th className="py-3 pr-4 text-left font-medium text-gray-600">Email</th>
+                                    <th className="py-3 pr-4 text-left font-medium text-gray-600">Created Date</th>
+                                    <th className="py-3 pr-4 text-left font-medium text-gray-600">City</th>
+                                    <th className="py-3 pr-4 text-left font-medium text-gray-600">State</th>
+                                    <th className="py-3 text-left font-medium text-gray-600">Country</th>
                                 </tr>
-                            ))}
-                        </tbody>
-                    </table>
+                            </thead>
+                            <tbody>
+                                {data.signup_details.length > 0 ? (
+                                    data.signup_details.map((user, index) => (
+                                        <tr key={index} className="border-b border-gray-100 last:border-b-0">
+                                            <td className="py-3 pr-4 text-gray-900">{user.name || "-"}</td>
+                                            <td className="py-3 pr-4 text-gray-700">{user.email}</td>
+                                            <td className="py-3 pr-4 text-gray-700">
+                                                {user.created_at
+                                                    ? new Date(user.created_at).toLocaleDateString()
+                                                    : "-"}
+                                            </td>
+                                            <td className="py-3 pr-4 text-gray-700">{user.city || "-"}</td>
+                                            <td className="py-3 pr-4 text-gray-700">{user.state || "-"}</td>
+                                            <td className="py-3 text-gray-700">{user.country || "-"}</td>
+                                        </tr>
+                                    ))
+                                ) : (
+                                    <tr>
+                                        <td colSpan={6} className="py-8 text-center text-sm text-gray-500">
+                                            No sign-ups found for the selected period.
+                                        </td>
+                                    </tr>
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-6">
+                        <h2 className="text-lg font-semibold text-gray-900 mb-4">
+                            Age Distribution
+                        </h2>
+
+                        <div className="space-y-3">
+                            {data.age_distribution.length > 0 ? (
+                                data.age_distribution.map((item, index) => (
+                                    <div key={index} className="flex items-center justify-between text-sm">
+                                        <span className="text-gray-700">{item.label}</span>
+                                        <span className="font-medium text-gray-900">{item.value}</span>
+                                    </div>
+                                ))
+                            ) : (
+                                <p className="text-sm text-gray-500">No age data available.</p>
+                            )}
+                        </div>
+                    </div>
+
+                    <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-6">
+                        <h2 className="text-lg font-semibold text-gray-900 mb-4">
+                            Location Distribution
+                        </h2>
+
+                        <div className="space-y-3">
+                            {data.location_distribution.length > 0 ? (
+                                data.location_distribution.map((item, index) => (
+                                    <div key={index} className="flex items-center justify-between text-sm">
+                                        <span className="text-gray-700">{item.label}</span>
+                                        <span className="font-medium text-gray-900">{item.value}</span>
+                                    </div>
+                                ))
+                            ) : (
+                                <p className="text-sm text-gray-500">No location data available.</p>
+                            )}
+                        </div>
+                    </div>
                 </div>
             </div>
-        </div>
-    );
-}
-
-function Card({ title, value }: { title: string; value: string | number }) {
-    return (
-        <div className="rounded-2xl bg-white p-5 shadow-sm">
-            <p className="text-sm text-gray-500">{title}</p>
-            <h2 className="mt-2 text-3xl font-bold text-gray-900">{value}</h2>
         </div>
     );
 }
