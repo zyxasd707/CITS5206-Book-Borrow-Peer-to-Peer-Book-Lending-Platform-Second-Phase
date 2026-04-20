@@ -21,6 +21,7 @@ from routes.blacklists import router as blacklists_router
 from routes.review import router as review_router
 from routes.analytics import router as analytics_router  # Import analytics router
 from routes.notifications import router as notifications_router
+from routes.deposits import router as deposits_router
 
 # update order statuses automatically
 from contextlib import asynccontextmanager
@@ -133,6 +134,9 @@ app.include_router(blacklists_router, prefix="/api/v1")
 #Register the analytics router
 app.include_router(analytics_router, prefix="/api/v1")
 app.include_router(notifications_router, prefix="/api/v1")
+
+# deposits router (MVP6-1)
+app.include_router(deposits_router, prefix="/api/v1")
 
 @app.get("/")
 async def root():

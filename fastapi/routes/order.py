@@ -23,6 +23,26 @@ def create_order(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    # MVP6-1: restricted borrowers cannot start a new borrow. Purchases still allowed.
+    if current_user.is_restricted:
+        from models.checkout import CheckoutItem
+        from sqlalchemy import func as _sa_func
+        has_borrow = (
+            db.query(CheckoutItem)
+            .filter(
+                CheckoutItem.checkout_id == request.checkout_id,
+                _sa_func.lower(CheckoutItem.action_type) == "borrow",
+            )
+            .first()
+        )
+        if has_borrow:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=(
+                    current_user.restriction_reason
+                    or "Your account is restricted from borrowing. Please contact support."
+                ),
+            )
     created_orders = OrderService.create_orders_data_with_validation(db, checkout_id=request.checkout_id, user_id=current_user.user_id, payment_id=request.payment_id)
     return {
         "message": "Orders created successfully",
