@@ -84,6 +84,11 @@ const mapApiUserToUser = (userData: any): User => {
     preferredLanguages: userData.preferredLanguages || undefined,
     stripe_account_id: userData.stripe_account_id || undefined,
     is_admin: userData.is_admin,
+
+    isRestricted: userData.isRestricted,
+    restrictionReason: userData.restrictionReason ?? null,
+    damageStrikeCount: userData.damageStrikeCount,
+    damageSeverityScore: userData.damageSeverityScore,
   };
 };
 

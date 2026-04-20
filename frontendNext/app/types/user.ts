@@ -37,7 +37,13 @@ export interface User {
   bio?: string;
   preferredLanguages?: string[];
 
-  is_admin?: boolean; 
+  is_admin?: boolean;
+
+  // MVP6-1 deposit accountability
+  isRestricted?: boolean;
+  restrictionReason?: string | null;
+  damageStrikeCount?: number;
+  damageSeverityScore?: number;
 }
 
 // rating

@@ -36,6 +36,12 @@ class UserResponse(BaseModel):
     stripe_account_id: Optional[str] = None
     is_admin: Optional[bool] = None
 
+    # MVP6-1: deposit accountability — surfaced so UI can show restrict banner
+    isRestricted: Optional[bool] = None
+    restrictionReason: Optional[str] = None
+    damageStrikeCount: Optional[int] = None
+    damageSeverityScore: Optional[int] = None
+
 
 # DateOfBirth
 class DateOfBirth(BaseModel):
@@ -109,6 +115,11 @@ def _to_user_response(u: User) -> UserResponse:
         createdAt=created_out,
         stripe_account_id=getattr(u, "stripe_account_id", None),
         is_admin=bool(getattr(u, "is_admin", False)),
+
+        isRestricted=bool(getattr(u, "is_restricted", False)),
+        restrictionReason=getattr(u, "restriction_reason", None),
+        damageStrikeCount=int(getattr(u, "damage_strike_count", 0) or 0),
+        damageSeverityScore=int(getattr(u, "damage_severity_score", 0) or 0),
     )
 
 
