@@ -155,3 +155,9 @@ YuxingZhou_CITS5206_Development_Log.md
 testing_Account.txt
 
 
+# User-uploaded message attachments (ignore new uploads; seeded demo files already tracked are kept)
+fastapi/media/messageAttachments/
+
+# Local-only docs/notes
+docs/architecture-diagram.html
+如何测试 测试 账户 普通 管理员Admin.txt
