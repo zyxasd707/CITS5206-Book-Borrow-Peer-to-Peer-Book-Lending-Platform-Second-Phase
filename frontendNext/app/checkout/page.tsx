@@ -12,7 +12,6 @@ import type { User } from "@/app/types/user";
 import { getBookById } from "@/utils/books";
 
 import { getMyCheckouts, rebuildCheckout } from "@/utils/checkout";
-import { listServiceFees } from "@/utils/serviceFee";
 import { getShippingQuotes } from "@/utils/shipping";
 import { Elements, PaymentElement, useElements, useStripe } from "@stripe/react-stripe-js";
 import { hasStripePublishableKey, stripePromise } from "@/utils/stripe";
@@ -46,6 +45,7 @@ interface CheckoutItem {
   actionType: "BORROW" | "PURCHASE";
   price?: number;
   deposit?: number;
+  depositIncomePercentage?: number;
   deliveryMethod?: "post" | "pickup" | "both";
   shippingMethod?: "post" | "pickup";
   shippingQuote?: number;
@@ -125,7 +125,6 @@ export default function CheckoutPage() {
   const [checkouts, setCheckouts] = useState<any[]>([]);
   const [ownersMap, setOwnersMap] = useState<Record<string, { name: string; zipCode: string; stripeAccountId?: string | null }>>({});
   const [ownersMissingZip, setOwnersMissingZip] = useState<string[]>([]);
-  const [serviceRate, setServiceRate] = useState<number>(0);
   const currentCheckout = checkouts.length > 0 ? checkouts[0] : null;
   const items: CheckoutItem[] = currentCheckout?.items || [];
   const [fullItems, setFullItems] = useState<any[]>([]);
@@ -243,9 +242,14 @@ export default function CheckoutPage() {
         items.map(async (it) => {
           try {
             const book = await getBookById(it.bookId);
-            return { ...it, titleOr: book?.titleOr, deliveryMethod: book?.deliveryMethod };
+            return {
+              ...it,
+              titleOr: book?.titleOr,
+              deliveryMethod: book?.deliveryMethod,
+              depositIncomePercentage: book?.depositIncomePercentage ?? 0,
+            };
           } catch {
-            return { ...it, titleOr: "Unknown Book", deliveryMethod: "" };
+            return { ...it, titleOr: "Unknown Book", deliveryMethod: "", depositIncomePercentage: 0 };
           }
         })
       );
@@ -271,15 +275,6 @@ export default function CheckoutPage() {
     if (!items.length || Object.keys(itemShipping).length > 0) return;
     setItemShipping(Object.fromEntries(items.map((b) => [b.bookId, ""])) as Record<string, DeliveryChoice | "">);
   }, [items]);
-
-  // 5. load service fee
-  useEffect(() => {
-    listServiceFees().then((fees) => {
-      const activePercent = fees.find((f: any) => f.feeType === "PERCENT" && f.status);
-      if (activePercent) setServiceRate(Number(activePercent.value));
-    });
-  }, []);
-
 
   // ---------- useEffect initialize shipping ----------
   useEffect(() => {
@@ -603,6 +598,12 @@ export default function CheckoutPage() {
       return acc;
     }, {} as Record<string, CheckoutItem[]>)
   ));
+  const totalEstimatedIncome = fullItems.reduce((sum, item) => {
+    if (item.actionType !== "BORROW") return sum;
+    const deposit = Number(item.deposit ?? 0);
+    const percentage = Number(item.depositIncomePercentage ?? 0);
+    return sum + (deposit * percentage) / 100;
+  }, 0);
 
   return (
     <div className="max-w-6xl mx-auto p-4 sm:p-6 space-y-6">
@@ -670,6 +671,13 @@ export default function CheckoutPage() {
                                 Trading Way: {b.actionType === "BORROW" ? "Borrow" : "Purchase"}
                               </span>
                             </div>
+                            {b.actionType === "BORROW" && (
+                              <div className="text-sm text-amber-700 mt-1">
+                                Estimated Income: ${(
+                                  (Number(b.deposit ?? 0) * Number(b.depositIncomePercentage ?? 0)) / 100
+                                ).toFixed(2)} ({b.depositIncomePercentage ?? 0}% of deposit)
+                              </div>
+                            )}
                           </div>
 
                           {/* Post / Pickup select */}
@@ -790,9 +798,15 @@ export default function CheckoutPage() {
             <span>Shipping Fee</span>
             <span>${checkouts[0]?.shippingFee?.toFixed(2) || "0.00"}</span>
           </div>
-          <div className="flex justify-between text-sm">
-            <span>Platform Service Fees (10%)</span>
-            <span>${checkouts[0]?.serviceFee?.toFixed(2) || "0.00"}</span>
+          <div className="flex justify-between text-sm text-amber-700">
+            <span>Estimated Income from Deposits</span>
+            <span>${Number(checkouts[0]?.ownerIncomeAmount ?? totalEstimatedIncome).toFixed(2)}</span>
+          </div>
+          <div className="mt-2 rounded-md border border-gray-200 bg-gray-50 px-3 py-2">
+            <div className="flex justify-between text-sm font-medium">
+              <span>Platform Fee (5% of all fees above)</span>
+              <span>${checkouts[0]?.serviceFee?.toFixed(2) || "0.00"}</span>
+            </div>
           </div>
           {donationAmount && parseFloat(donationAmount) > 0 && (
             <div className="flex justify-between text-sm text-green-600 font-medium">
@@ -808,6 +822,9 @@ export default function CheckoutPage() {
           </div>
           <p className="text-xs text-gray-500">
             Deposits may be refundable upon return. Shipping is charged per owner based on your selected quote.
+          </p>
+          <p className="text-xs text-amber-700">
+            Estimated income is included in the checkout total.
           </p>
         </div>
       </Card>

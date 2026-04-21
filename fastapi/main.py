@@ -40,6 +40,51 @@ from models.base import Base
 from models.checkout import Base as CheckoutBase
 from models.service_fee import Base as ServiceFeeBase
 
+
+def ensure_book_deposit_income_percentage_column() -> None:
+    with engine.begin() as conn:
+        column_exists = conn.execute(
+            text("SHOW COLUMNS FROM book LIKE 'deposit_income_percentage'")
+        ).first()
+        if column_exists:
+            return
+        conn.execute(
+            text(
+                "ALTER TABLE book ADD COLUMN deposit_income_percentage INTEGER NOT NULL DEFAULT 0"
+            )
+        )
+        print("Added missing book.deposit_income_percentage column")
+
+
+def ensure_checkout_owner_income_amount_column() -> None:
+    with engine.begin() as conn:
+        column_exists = conn.execute(
+            text("SHOW COLUMNS FROM checkout LIKE 'owner_income_amount'")
+        ).first()
+        if column_exists:
+            return
+        conn.execute(
+            text(
+                "ALTER TABLE checkout ADD COLUMN owner_income_amount DECIMAL(10, 2) NOT NULL DEFAULT 0.00"
+            )
+        )
+        print("Added missing checkout.owner_income_amount column")
+
+
+def ensure_order_owner_income_amount_column() -> None:
+    with engine.begin() as conn:
+        column_exists = conn.execute(
+            text("SHOW COLUMNS FROM orders LIKE 'owner_income_amount'")
+        ).first()
+        if column_exists:
+            return
+        conn.execute(
+            text(
+                "ALTER TABLE orders ADD COLUMN owner_income_amount DECIMAL(10, 2) NOT NULL DEFAULT 0.00"
+            )
+        )
+        print("Added missing orders.owner_income_amount column")
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     import time
@@ -59,6 +104,9 @@ async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
     CheckoutBase.metadata.create_all(bind=engine)
     ServiceFeeBase.metadata.create_all(bind=engine)
+    ensure_book_deposit_income_percentage_column()
+    ensure_checkout_owner_income_amount_column()
+    ensure_order_owner_income_amount_column()
     seed_sample_data()
     start_scheduler()
     yield

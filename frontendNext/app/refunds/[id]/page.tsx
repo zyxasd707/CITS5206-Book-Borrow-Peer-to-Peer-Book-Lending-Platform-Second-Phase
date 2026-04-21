@@ -27,6 +27,7 @@ interface OrderInfo {
   totalPaidAmount: number;
   totalRefundedAmount: number;
   depositOrSaleAmount: number;
+  ownerIncomeAmount?: number;
   shippingOutFeeAmount: number;
   serviceFeeAmount: number;
   paymentId: string | null;
@@ -62,13 +63,12 @@ export default function RefundDetailPage() {
         const refundData = await getRefundsForOrder(orderId);
         setRefunds(refundData.refunds);
 
-        // Fetch order details
-        const { getBorrowingOrders } = await import("@/utils/borrowingOrders");
-        const orders = await getBorrowingOrders();
-        const matchedOrder = orders.find((o: any) => o.order_id === orderId);
+        // Fetch full order details so pricing fields stay in sync with borrowing page
+        const { getOrderById } = await import("@/utils/borrowingOrders");
+        const matchedOrder = await getOrderById(orderId);
         if (matchedOrder) {
           setOrder({
-            id: matchedOrder.order_id,
+            id: matchedOrder.id || matchedOrder.order_id,
             status: matchedOrder.status,
             books: matchedOrder.books.map((b: any) => ({
               bookId: b.book_id || b.bookId,
@@ -77,13 +77,14 @@ export default function RefundDetailPage() {
               author: b.author || "",
               coverImgUrl: b.cover || b.coverImgUrl || "",
             })),
-            createdAt: matchedOrder.create_at || matchedOrder.createdAt,
-            canceledAt: matchedOrder.canceled_at || matchedOrder.canceledAt,
-            totalPaidAmount: matchedOrder.total_paid || matchedOrder.totalPaidAmount || 0,
-            totalRefundedAmount: matchedOrder.total_refunded || matchedOrder.totalRefundedAmount || 0,
-            depositOrSaleAmount: matchedOrder.deposit || matchedOrder.depositOrSaleAmount || 0,
-            shippingOutFeeAmount: matchedOrder.shipping_fee || matchedOrder.shippingOutFeeAmount || 0,
-            serviceFeeAmount: matchedOrder.service_fee || matchedOrder.serviceFeeAmount || 0,
+            createdAt: matchedOrder.createdAt || matchedOrder.create_at,
+            canceledAt: matchedOrder.canceledAt || matchedOrder.canceled_at,
+            totalPaidAmount: matchedOrder.totalPaidAmount || matchedOrder.total_paid_amount || matchedOrder.total_paid || 0,
+            totalRefundedAmount: matchedOrder.totalRefundedAmount || matchedOrder.total_refunded_amount || matchedOrder.total_refunded || 0,
+            depositOrSaleAmount: matchedOrder.depositOrSaleAmount || matchedOrder.deposit_or_sale_amount || matchedOrder.deposit || 0,
+            ownerIncomeAmount: matchedOrder.ownerIncomeAmount || matchedOrder.owner_income_amount || matchedOrder.owner_income || 0,
+            shippingOutFeeAmount: matchedOrder.shippingOutFeeAmount || matchedOrder.shipping_out_fee_amount || matchedOrder.shipping_fee || 0,
+            serviceFeeAmount: matchedOrder.serviceFeeAmount || matchedOrder.service_fee_amount || matchedOrder.service_fee || 0,
             paymentId: matchedOrder.payment_id || matchedOrder.paymentId || null,
           });
         }
@@ -325,6 +326,12 @@ export default function RefundDetailPage() {
                         <span>Service Fee</span>
                         <span>{fmtDollars(order.serviceFeeAmount)}</span>
                       </div>
+                      {(order.ownerIncomeAmount || 0) > 0 && (
+                        <div className="flex justify-between text-gray-500 pl-3">
+                          <span>Owner Income</span>
+                          <span>{fmtDollars(order.ownerIncomeAmount || 0)}</span>
+                        </div>
+                      )}
                       <hr className="my-2" />
                     </>
                   )}

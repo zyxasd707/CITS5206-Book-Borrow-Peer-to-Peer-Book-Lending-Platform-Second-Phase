@@ -183,23 +183,35 @@ export async function getRefundsForOrder(orderId: string) {
 
 // MVP6: Cancel order with automatic refund
 export async function cancelOrderWithRefund(orderId: string) {
-  const res = await axios.post(
-    `${API_URL}/api/v1/payment_gateway/payment/refund/cancel/${orderId}`,
-    {},
-    {
-      headers: {
-        Authorization: `Bearer ${localStorage.getItem("access_token")}`,
-      },
-      withCredentials: true,
+  try {
+    const res = await axios.post(
+      `${API_URL}/api/v1/payment_gateway/payment/refund/cancel/${orderId}`,
+      {},
+      {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("access_token")}`,
+        },
+        withCredentials: true,
+      }
+    );
+    return res.data as {
+      order_id: string;
+      refund_id: string;
+      amount: number;
+      currency: string;
+      status: string;
+    };
+  } catch (err) {
+    if (axios.isAxiosError(err)) {
+      console.error("cancelOrderWithRefund failed:", {
+        url: `${API_URL}/api/v1/payment_gateway/payment/refund/cancel/${orderId}`,
+        status: err.response?.status,
+        statusText: err.response?.statusText,
+        data: err.response?.data,
+      });
     }
-  );
-  return res.data as {
-    order_id: string;
-    refund_id: string;
-    amount: number;
-    currency: string;
-    status: string;
-  };
+    throw err;
+  }
 }
 
 // MVP6: Get all refunds for a user

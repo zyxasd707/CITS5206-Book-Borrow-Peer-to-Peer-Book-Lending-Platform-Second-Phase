@@ -199,6 +199,7 @@ export async function searchBooks(params: SearchParams) {
     canRent: b.canRent,
     canSell: b.canSell,
     deposit: b.deposit,
+    depositIncomePercentage: b.depositIncomePercentage ?? 0,
     salePrice: b.salePrice,
     status: b.status,
     tags: b.tags || [],

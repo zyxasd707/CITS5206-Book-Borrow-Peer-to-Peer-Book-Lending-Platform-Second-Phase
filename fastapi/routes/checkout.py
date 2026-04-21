@@ -36,6 +36,7 @@ def _checkout_to_dict(checkout: Checkout) -> dict:
         "state": checkout.state,
         "country": checkout.country,
         "deposit": float(checkout.deposit),
+        "ownerIncomeAmount": float(checkout.owner_income_amount or 0),
         "serviceFee": float(checkout.service_fee),
         "bookFee": float(checkout.book_fee),
         "shippingFee": float(checkout.shipping_fee),

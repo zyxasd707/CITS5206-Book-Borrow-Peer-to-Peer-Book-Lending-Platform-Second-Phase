@@ -5,7 +5,7 @@ export type InputVariant = "default" | "search";
 
 export interface InputProps
   extends React.InputHTMLAttributes<HTMLInputElement> {
-  label?: string;
+  label?: React.ReactNode;
   error?: string;
   variant?: InputVariant;
   leftIcon?: React.ReactNode;

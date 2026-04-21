@@ -629,6 +629,14 @@ export default function OrderDetailPage() {
                 {fmtAUD(order.serviceFeeAmount)}
               </span>
             </div>
+            {(order.ownerIncomeAmount || 0) > 0 && (
+              <div className="flex justify-between">
+                <span>Owner Income</span>
+                <span className="font-medium">
+                  {fmtAUD(order.ownerIncomeAmount)}
+                </span>
+              </div>
+            )}
             {order.shippingOutFeeAmount > 0 && (
               <div className="flex justify-between">
                 <span>Outbound Shipping</span>

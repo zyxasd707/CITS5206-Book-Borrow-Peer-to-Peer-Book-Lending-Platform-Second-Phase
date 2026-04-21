@@ -46,6 +46,7 @@ class OrderDetail(BaseModel):
     
     # price
     depositOrSaleAmount: float
+    ownerIncomeAmount: float = 0.0
     serviceFeeAmount: float
     shippingOutFeeAmount: float
     totalPaidAmount: float
