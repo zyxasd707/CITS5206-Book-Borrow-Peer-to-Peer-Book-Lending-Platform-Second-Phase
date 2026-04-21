@@ -316,6 +316,35 @@ next-frontend    |  ✓ Ready in ...ms
 docker compose -f compose.yaml -f compose.dev.yaml up
 ```
 
+---
+
+### ⚠️ Schema-change startup (after pulling a branch or merging a PR that adds DB columns)
+
+The project uses `Base.metadata.create_all()` (no Alembic). It creates missing tables but **will not add new columns to existing tables**. So whenever a merged/pulled change introduces new columns, your local MySQL volume must be wiped once — otherwise `backend` crashes at startup with `Unknown column '…' in 'field list'`.
+
+**The first time you pull a change that touches the schema (e.g. after MVP6-1 Deposit Management merges to main):**
+
+```bash
+# 1. Sync main
+git checkout main
+git pull origin main
+
+# 2. Rebuild with a CLEAN database (the -v is required, not optional)
+docker compose -f compose.yaml -f compose.dev.yaml down -v
+docker compose -f compose.yaml -f compose.dev.yaml up -d --build
+
+# 3. Verify backend started (wait ~30s first)
+docker compose -f compose.yaml -f compose.dev.yaml logs backend --tail 20
+```
+
+Healthy log tail:
+```
+fastapi-backend  | INFO:     Uvicorn running on http://0.0.0.0:8000
+fastapi-backend  | INFO:     Application startup complete.
+```
+
+Subsequent daily startups don't need `-v` — only re-run it when a new PR adds more columns.
+
 ### Stop the project
 
 ```powershell
@@ -339,6 +368,7 @@ docker compose -f compose.yaml -f compose.dev.yaml down -v
 | `BREVO_SENDER_EMAIL is not configured` | Verification email sender is missing | Add `BREVO_SENDER_EMAIL` and a verified sender in Brevo |
 | `CORS policy blocked` | `ALLOWED_ORIGINS` missing `http://localhost` | Add `http://localhost` to `ALLOWED_ORIGINS` in `.env` |
 | `localhost:3000 refused` | Port 3000 not exposed to host | Access `http://localhost` (no port number) |
+| `Unknown column '…' in 'field list'` / `Application startup failed` in backend logs | Local MySQL volume predates a merged schema change (e.g. MVP6-1 added columns to `users` / `orders`) | `docker compose -f compose.yaml -f compose.dev.yaml down -v && docker compose -f compose.yaml -f compose.dev.yaml up -d --build` |
 
 **Full reset (when nothing else works):**
 
