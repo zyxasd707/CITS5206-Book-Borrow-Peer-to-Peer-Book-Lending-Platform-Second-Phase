@@ -2,7 +2,7 @@
 User model for the API
 """
 
-from sqlalchemy import Boolean, Column, String, DateTime, Enum, Date
+from sqlalchemy import Boolean, Column, String, DateTime, Enum, Date, Integer
 from sqlalchemy.sql import func
 from models.base import Base
 
@@ -34,3 +34,9 @@ class User(Base):
     profile_picture = Column(String(255), nullable=True)
     stripe_account_id = Column(String(255), unique=True, nullable=True)
     is_admin = Column(Boolean, default=False, nullable=False)
+
+    # Deposit accountability (MVP6-1)
+    damage_strike_count = Column(Integer, nullable=False, default=0)
+    damage_severity_score = Column(Integer, nullable=False, default=0)
+    is_restricted = Column(Boolean, nullable=False, default=False)
+    restriction_reason = Column(String(255), nullable=True)

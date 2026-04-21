@@ -6,18 +6,102 @@ import { Search, Filter, BookOpen, MoreHorizontal } from "lucide-react";
 import Card from "../components/ui/Card";
 import Button from "../components/ui/Button";
 import CoverImg from "../components/ui/CoverImg";
+import Modal from "../components/ui/Modal";
 import type { Book } from "@/app/types/book";
-import { getCurrentUser } from "@/utils/auth";
+import { getApiUrl, getCurrentUser, getToken } from "@/utils/auth";
 import { getBooks, updateBook, deleteBook } from "@/utils/books";
+import { getOrderById, getOrdersByBookId } from "@/utils/borrowingOrders";
+import type { ApiOrder } from "@/app/types/order";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 
+const formatDisplayDate = (value?: string | null) =>
+  value ? new Date(value).toLocaleDateString() : null;
+
+const getBookStatusDisplay = (book: Book, order?: ApiOrder) => {
+  if (order) {
+    if (order.status === "OVERDUE") {
+      return {
+        label: "Overdue",
+        className: "text-red-600 font-medium",
+        dateLabel: order.dueAt ? `Due on ${formatDisplayDate(order.dueAt)}` : null,
+      };
+    }
+
+    if (order.status === "RETURNED") {
+      return {
+        label: "Returned",
+        className: "text-amber-700 font-medium",
+        dateLabel: order.returnedAt
+          ? `Returned on ${formatDisplayDate(order.returnedAt)}`
+          : null,
+      };
+    }
+
+    if (order.status === "COMPLETED") {
+      return {
+        label: "Completed",
+        className: "text-emerald-600 font-medium",
+        dateLabel: order.completedAt
+          ? `Completed on ${formatDisplayDate(order.completedAt)}`
+          : null,
+      };
+    }
+
+    if (order.status === "BORROWING") {
+      return {
+        label: book.status === "sold" ? "Sold" : "Lend Out",
+        className: book.status === "sold"
+          ? "text-emerald-600 font-medium"
+          : "text-blue-600 font-medium",
+        dateLabel: order.startAt ? `Started on ${formatDisplayDate(order.startAt)}` : null,
+      };
+    }
+  }
+
+  if (book.status === "listed") {
+    return {
+      label: "Listed",
+      className: "text-green-600 font-medium",
+      dateLabel: `Listed on ${formatDisplayDate(book.dateAdded)}`,
+    };
+  }
+
+  if (book.status === "unlisted") {
+    return {
+      label: "Unlisted",
+      className: "text-red-600 font-medium",
+      dateLabel: `Listed on ${formatDisplayDate(book.dateAdded)}`,
+    };
+  }
+
+  if (book.status === "sold") {
+    return {
+      label: "Sold",
+      className: "text-emerald-600 font-medium",
+      dateLabel: `Listed on ${formatDisplayDate(book.dateAdded)}`,
+    };
+  }
+
+  return {
+    label: "Lend Out",
+    className: "text-blue-600 font-medium",
+    dateLabel: `Listed on ${formatDisplayDate(book.dateAdded)}`,
+  };
+};
 
 export default function LendingListPage() {
   const [items, setItems] = useState<Book[]>([]);
+  const [orderMap, setOrderMap] = useState<Record<string, ApiOrder>>({});
+  const [activeOrderIdByBook, setActiveOrderIdByBook] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [selectedFilter, setSelectedFilter] = useState<"all" | Book["status"]>("all");
+  const [shipModalOpen, setShipModalOpen] = useState(false);
+  const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
+  const [trackingNumber, setTrackingNumber] = useState("");
+  const [carrier, setCarrier] = useState("AUSPOST");
 
   // recode which book openes ...（null means no one）
   const [openId, setOpenId] = useState<string | null>(null);
@@ -55,6 +139,73 @@ export default function LendingListPage() {
     if (openId) document.addEventListener("click", onDocClick);
     return () => document.removeEventListener("click", onDocClick);
   }, [openId]);
+
+  useEffect(() => {
+    let alive = true;
+
+    (async () => {
+      const booksWithOrders = items.filter(
+        (book) => book.status === "lent" || book.status === "sold"
+      );
+
+      if (booksWithOrders.length === 0) {
+        if (alive) {
+          setOrderMap({});
+          setActiveOrderIdByBook({});
+        }
+        return;
+      }
+
+      const resolved = await Promise.all(
+        booksWithOrders.map(async (book) => {
+          try {
+            let orderId = book.currentOrderId;
+
+            if (!orderId) {
+              const candidateOrders = await getOrdersByBookId(book.id);
+              const activeOrder =
+                candidateOrders.find(
+                  (candidate) =>
+                    !["COMPLETED", "CANCELED"].includes(candidate.status)
+                ) || candidateOrders[0];
+
+              orderId = activeOrder?.order_id;
+            }
+
+            if (!orderId) {
+              return null;
+            }
+
+            const order = await getOrderById(orderId);
+            return { bookId: book.id, orderId, order };
+          } catch (error) {
+            console.error("Failed to load order for lending item:", error);
+            return null;
+          }
+        })
+      );
+
+      if (!alive) {
+        return;
+      }
+
+      const validResolved = resolved.filter(
+        (entry): entry is { bookId: string; orderId: string; order: ApiOrder } =>
+          !!entry
+      );
+
+      setOrderMap(
+        Object.fromEntries(validResolved.map((entry) => [entry.orderId, entry.order]))
+      );
+      setActiveOrderIdByBook(
+        Object.fromEntries(validResolved.map((entry) => [entry.bookId, entry.orderId]))
+      );
+    })();
+
+    return () => {
+      alive = false;
+    };
+  }, [items]);
 
   const toggleMenu = (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
@@ -101,6 +252,56 @@ export default function LendingListPage() {
   ] as const;
 
   const router = useRouter();
+
+  const openShipmentModal = (orderId: string, order?: ApiOrder) => {
+    setSelectedOrderId(orderId);
+    setCarrier(order?.shippingOutTrackingNumber ? order.shippingMethod?.toUpperCase() || "AUSPOST" : "AUSPOST");
+    setTrackingNumber(order?.shippingOutTrackingNumber || "");
+    setShipModalOpen(true);
+  };
+
+  const handleConfirmShipment = async () => {
+    if (!selectedOrderId) return;
+
+    try {
+      const token = getToken();
+      if (!token) {
+        toast.error("Authentication required");
+        router.push("/auth");
+        return;
+      }
+
+      const res = await fetch(
+        `${getApiUrl()}/api/v1/orders/${selectedOrderId}/confirm-shipment`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            tracking_number: trackingNumber,
+            carrier,
+          }),
+        }
+      );
+
+      if (!res.ok) {
+        throw new Error("Failed to confirm shipment");
+      }
+
+      const updatedOrder = await getOrderById(selectedOrderId);
+      setOrderMap((prev) => ({
+        ...prev,
+        [selectedOrderId]: updatedOrder,
+      }));
+      setShipModalOpen(false);
+      toast.success("Shipment confirmed successfully");
+    } catch (error) {
+      console.error("Failed to confirm shipment:", error);
+      toast.error("Failed to confirm shipment");
+    }
+  };
 
   return (
     <div className="flex h-full">
@@ -162,8 +363,24 @@ export default function LendingListPage() {
                 </div>
               </Card>
             ) : (
-              filteredBooks.map((book) => (
+              filteredBooks.map((book) => {
+                const activeOrderId = book.currentOrderId || activeOrderIdByBook[book.id];
+                const currentOrder = activeOrderId
+                  ? orderMap[activeOrderId]
+                  : undefined;
+                const canShip = currentOrder?.status === "PENDING_SHIPMENT";
+                const hasBorrowerReceived =
+                  !!currentOrder?.shippingOutTrackingNumber &&
+                  ["BORROWING", "OVERDUE", "RETURNED", "COMPLETED"].includes(
+                    currentOrder?.status ?? ""
+                  );
+                const canMessageBorrower = !!currentOrder?.borrower?.email;
+                const isTransferredBook =
+                  book.status === "lent" || book.status === "sold";
+                const counterpartyLabel = book.status === "sold" ? "Buyer" : "Borrower";
+                const statusDisplay = getBookStatusDisplay(book, currentOrder);
 
+                return (
                 <Card key={book.id} className="relative overflow-visible flex gap-4 p-4 border border-gray-200 rounded-xl hover:shadow-md transition">
 
                   {/* ⋯ more */}
@@ -232,19 +449,8 @@ export default function LendingListPage() {
 
                       {/* status +  createTime */}
                       <p className="text-sm text-gray-600 mt-1">
-                        {book.status === "listed" && (
-                          <span className="text-green-600 font-medium">Listed</span>
-                        )}
-                        {book.status === "unlisted" && (
-                          <span className="text-red-600 font-medium">Unlisted</span>
-                        )}
-                        {book.status === "lent" && (
-                          <span className="text-blue-600 font-medium">Lend Out</span>
-                        )}
-                        {book.status === "sold" && (
-                          <span className="text-gray-500 font-medium">Sold</span>
-                        )}
-                        {" · "}Listed on {new Date(book.dateAdded).toLocaleDateString()}
+                        <span className={statusDisplay.className}>{statusDisplay.label}</span>
+                        {statusDisplay.dateLabel && ` · ${statusDisplay.dateLabel}`}
                       </p>
                     </div>
 
@@ -280,24 +486,58 @@ export default function LendingListPage() {
                           List
                         </Button>
                       )}
-                      {book.status === "lent" && (
+                      {isTransferredBook && (
                         <>
-                          {book.currentOrderId && (
+                          {activeOrderId && (
                             <Button
                               variant="outline"
                               size="sm"
                               className="border-black text-black hover:bg-black hover:text-white"
-                              onClick={() => router.push(`/borrowing/${book.currentOrderId}`)}
+                              onClick={() => router.push(`/borrowing/${activeOrderId}`)}
                             >
-                              Detail
+                              View Detail
+                            </Button>
+                          )}
+
+                          {activeOrderId && (canShip || hasBorrowerReceived) && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="border-black text-black hover:bg-black hover:text-white"
+                              disabled={hasBorrowerReceived}
+                              onClick={() => {
+                                if (!hasBorrowerReceived) {
+                                  openShipmentModal(activeOrderId, currentOrder);
+                                }
+                              }}
+                            >
+                              {hasBorrowerReceived
+                                ? "Shipped"
+                                : currentOrder?.shippingOutTrackingNumber
+                                  ? "Update Shipment"
+                                  : "Ship"}
                             </Button>
                           )}
 
                           <Button
                             size="sm"
                             className="bg-black text-white hover:bg-gray-800"
+                            disabled={!canMessageBorrower}
+                            onClick={() => {
+                              if (!currentOrder?.borrower?.email) {
+                                alert(`${counterpartyLabel} contact is not available yet.`);
+                                return;
+                              }
+
+                              const params = new URLSearchParams({
+                                to: currentOrder.borrower.email,
+                                bookId: book.id,
+                                bookTitle: book.titleOr,
+                              });
+                              router.push(`/message?${params.toString()}`);
+                            }}
                           >
-                            Message Borrower
+                            {`Message ${counterpartyLabel}`}
                           </Button>
 
                           {/* due date info when book lent-out */}
@@ -307,11 +547,57 @@ export default function LendingListPage() {
                     </div>
                   </div>
                 </Card>
-              ))
+                );
+              })
             )}
           </div>
         </div>
       </div>
+
+      <Modal
+        isOpen={shipModalOpen}
+        onClose={() => setShipModalOpen(false)}
+        title="Confirm Outbound Shipment"
+      >
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium mb-1">Carrier</label>
+            <select
+              className="border rounded w-full p-2"
+              value={carrier}
+              onChange={(e) => setCarrier(e.target.value)}
+            >
+              <option value="AUSPOST">AUSPOST</option>
+              <option value="OTHER">OTHER</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium mb-1">
+              Tracking Number
+            </label>
+            <input
+              type="text"
+              className="border rounded w-full p-2"
+              value={trackingNumber}
+              onChange={(e) => setTrackingNumber(e.target.value)}
+              placeholder="Enter tracking number"
+            />
+          </div>
+
+          <div className="flex justify-end gap-2 mt-4">
+            <Button variant="outline" onClick={() => setShipModalOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleConfirmShipment}
+              disabled={!trackingNumber.trim()}
+            >
+              Confirm
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

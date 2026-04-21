@@ -8,8 +8,17 @@ from services.book_service import BookService
 from core.dependencies import get_db, get_current_user
 from models.book import Book
 from models.user import User
+from models.order import Order, OrderBook
 
 router = APIRouter(prefix="/api/v1/books", tags=["books"])
+
+ACTIVE_ORDER_STATUSES = (
+    "PENDING_PAYMENT",
+    "PENDING_SHIPMENT",
+    "BORROWING",
+    "OVERDUE",
+    "RETURNED",
+)
 
 # -------- Helper: Convert to frontend format --------
 def _owner_summary(db: Session, owner_id: str) -> Optional[dict]:
@@ -40,10 +49,22 @@ def _owner_summary(db: Session, owner_id: str) -> Optional[dict]:
 
 
 def _to_read(db: Session, b: Book) -> dict:
+    active_order = (
+        db.query(Order.id)
+        .join(OrderBook, OrderBook.order_id == Order.id)
+        .filter(
+            OrderBook.book_id == b.id,
+            Order.status.in_(ACTIVE_ORDER_STATUSES),
+        )
+        .order_by(Order.updated_at.desc())
+        .first()
+    )
+
     return {
         "id": b.id,
         "ownerId": b.owner_id,
         "owner": _owner_summary(db, b.owner_id),
+        "currentOrderId": active_order[0] if active_order else None,
         "titleOr": b.title_or,
         "titleEn": b.title_en,
         "originalLanguage": b.original_language,
@@ -225,5 +246,4 @@ def delete_book(
 ):
     BookService.delete(db, book_id, user.user_id)
     return None
-
 

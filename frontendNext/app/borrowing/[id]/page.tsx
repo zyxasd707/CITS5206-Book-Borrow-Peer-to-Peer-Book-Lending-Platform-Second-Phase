@@ -3,7 +3,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { Clock, Truck, ArrowLeft, AlertTriangle } from "lucide-react";
+import { Clock, Truck, ArrowLeft, AlertTriangle, ExternalLink } from "lucide-react";
 import CoverImg from "@/app/components/ui/CoverImg";
 import Card from "@/app/components/ui/Card";
 import Button from "@/app/components/ui/Button";
@@ -37,6 +37,13 @@ const TX_STAGE_META = {
   shipped: { label: "Shipped", className: "bg-green-100 text-green-800" },
   canceled: { label: "Canceled", className: "bg-gray-100 text-gray-700" },
 } as const;
+
+const getDisplayedStatusMeta = (order: ApiOrder) => {
+  if (order.status === "PENDING_SHIPMENT" && order.shippingOutTrackingNumber) {
+    return { label: "Shipped", className: "text-green-600" };
+  }
+  return STATUS_META[order.status];
+};
 
 const fetchOrderDetails = async (orderId: string): Promise<ApiOrder | null> => {
   try {
@@ -72,6 +79,19 @@ export default function OrderDetailPage() {
   const [trackingNumber, setTrackingNumber] = useState(""); // input tracking number
   const [carrier, setCarrier] = useState("AUSPOST"); // default carrier="AUSPOST"
   const [confirmReceiveModalOpen, setConfirmReceiveModalOpen] = useState(false);
+  const [borrowerConfirmReceiveModalOpen, setBorrowerConfirmReceiveModalOpen] = useState(false);
+
+  // MVP6-1: lender damage report state
+  const [damageSeverity, setDamageSeverity] = useState<"none" | "light" | "medium" | "severe">("none");
+  const [damageNote, setDamageNote] = useState("");
+  const [damagePhotos, setDamagePhotos] = useState<File[]>([]);
+  const [confirmSubmitting, setConfirmSubmitting] = useState(false);
+
+  const resetDamageForm = () => {
+    setDamageSeverity("none");
+    setDamageNote("");
+    setDamagePhotos([]);
+  };
 
   // MVP6: refund state
   const [refunds, setRefunds] = useState<Array<{
@@ -138,7 +158,7 @@ export default function OrderDetailPage() {
   }, [id]);
 
   const statusMeta = useMemo(
-    () => (order ? STATUS_META[order.status] : null),
+    () => (order ? getDisplayedStatusMeta(order) : null),
     [order]
   );
 
@@ -179,8 +199,8 @@ export default function OrderDetailPage() {
     if (!order) return "pending";
     if (order.status === "CANCELED") return "canceled";
     if (order.status === "PENDING_PAYMENT") return "pending";
-    if (order.status === "PENDING_SHIPMENT") return "paid";
     if (order.shippingOutTrackingNumber) return "shipped";
+    if (order.status === "PENDING_SHIPMENT") return "paid";
     if (["BORROWING", "OVERDUE", "RETURNED", "COMPLETED"].includes(order.status)) {
       return "shipped";
     }
@@ -217,6 +237,8 @@ export default function OrderDetailPage() {
           // Refresh refund data
           const refundData = await getRefundsForOrder(id);
           setRefunds(refundData.refunds || []);
+          // Trigger notification badge refresh in Header
+          window.dispatchEvent(new Event("notif-update"));
           return;
         } catch (refundErr) {
           console.error("Refund-cancel failed, falling back:", refundErr);
@@ -242,6 +264,8 @@ export default function OrderDetailPage() {
       if (updatedOrder) {
         setOrder(updatedOrder);
       }
+      // Trigger notification badge refresh in Header
+      window.dispatchEvent(new Event("notif-update"));
     } catch (err) {
       console.error("Cancel order error:", err);
       toast.error("Failed to cancel order");
@@ -258,6 +282,77 @@ export default function OrderDetailPage() {
   };
 
   const handleConfirmReceive = async (orderId: string) => {
+    const token = getToken();
+    if (!token) {
+      toast.error("Please login first");
+      router.push("/auth");
+      return;
+    }
+
+    setConfirmSubmitting(true);
+    try {
+      // Upload evidence photos first (only if damage was reported)
+      let uploadedPaths: string[] = [];
+      if (damageSeverity !== "none" && damagePhotos.length > 0) {
+        const uploads = await Promise.all(
+          damagePhotos.map(async (file) => {
+            const fd = new FormData();
+            fd.append("file", file);
+            fd.append("scene", "deposit_evidence");
+            const up = await fetch(`${getApiUrl()}/api/v1/upload/image`, {
+              method: "POST",
+              headers: { Authorization: `Bearer ${token}` },
+              body: fd,
+            });
+            if (!up.ok) throw new Error(`Upload failed for ${file.name}`);
+            const data = await up.json();
+            return data.path as string;
+          })
+        );
+        uploadedPaths = uploads;
+      }
+
+      const res = await fetch(
+        `${getApiUrl()}/api/v1/orders/${orderId}/owner-confirm-received`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            damage_severity: damageSeverity,
+            note: damageNote.trim() || null,
+            evidence_photos: uploadedPaths,
+          }),
+        }
+      );
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: "Failed to confirm receive" }));
+        throw new Error(err.detail || "Failed to confirm receive");
+      }
+
+      if (damageSeverity === "none") {
+        toast.success("Book received. Deposit refund will be processed.");
+      } else {
+        toast.success("Damage report submitted. Deposit is now pending admin review.");
+      }
+
+      resetDamageForm();
+
+      const updatedOrder = await fetchOrderDetails(orderId);
+      if (updatedOrder) setOrder(updatedOrder);
+      window.dispatchEvent(new Event("notif-update"));
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err?.message || "Failed to confirm receive");
+    } finally {
+      setConfirmSubmitting(false);
+    }
+  };
+
+  const handleBorrowerConfirmReceive = async (orderId: string) => {
     try {
       const token = getToken();
       if (!token) {
@@ -267,7 +362,7 @@ export default function OrderDetailPage() {
       }
 
       const res = await fetch(
-        `${getApiUrl()}/api/v1/orders/${orderId}/owner-confirm-received`,
+        `${getApiUrl()}/api/v1/orders/${orderId}/borrower-confirm-received`,
         {
           method: "PUT",
           headers: {
@@ -323,6 +418,8 @@ export default function OrderDetailPage() {
       if (updatedOrder) {
         setOrder(updatedOrder);
       }
+      // Trigger notification badge refresh in Header
+      window.dispatchEvent(new Event("notif-update"));
 
       setShipModalOpen(false); // close Modal
     } catch (err) {
@@ -402,6 +499,16 @@ export default function OrderDetailPage() {
                 Transaction: {TX_STAGE_META[txStage].label}
               </span>
             </div>
+            <div>
+              Payment Method:{" "}
+              <span className="text-black font-medium">
+                {order.paymentMethod || "Card via Stripe"}
+              </span>
+            </div>
+            <div>
+              Payment Time:{" "}
+              <span className="text-black font-medium">{fmtDate(order.paymentTime)}</span>
+            </div>
           </div>
         </Card>
 
@@ -425,6 +532,12 @@ export default function OrderDetailPage() {
               <div>
                 Phone:{" "}
                 <span className="font-medium text-black">{order.phone}</span>
+              </div>
+              <div>
+                Email:{" "}
+                <span className="font-medium text-black">
+                  {order.contactEmail || order.borrower.email}
+                </span>
               </div>
               <div>
                 Address:{" "}
@@ -636,6 +749,18 @@ export default function OrderDetailPage() {
               </p>
             </div>
           )}
+
+          <div className="border-t p-4">
+            <Button
+              variant="outline"
+              size="sm"
+              className="flex items-center gap-2 border-black text-black hover:bg-black hover:text-white"
+              onClick={() => router.push(`/refunds/${id}`)}
+            >
+              <ExternalLink className="w-4 h-4" />
+              View Refund Details
+            </Button>
+          </div>
         </Card>
       )}
 
@@ -680,9 +805,10 @@ export default function OrderDetailPage() {
             <Button
               variant="outline"
               className="border-black text-black hover:bg-black hover:text-white"
-              onClick={() =>
-                handleAuthRequired(`/messages?orderId=${order.id}`)
-              }
+              onClick={() => {
+                const otherEmail = isBorrower ? order.owner.email : order.borrower.email;
+                handleAuthRequired(`/message?to=${encodeURIComponent(otherEmail)}`);
+              }}
             >
               Message
             </Button>
@@ -728,6 +854,16 @@ export default function OrderDetailPage() {
               Confirm Receive Book
             </Button>
           )}
+          {isBorrower &&
+            order.status === "PENDING_SHIPMENT" &&
+            order.shippingOutTrackingNumber && (
+              <Button
+                className="bg-green-600 text-white hover:bg-green-700"
+                onClick={() => setBorrowerConfirmReceiveModalOpen(true)}
+              >
+                Confirm Receive
+              </Button>
+            )}
         </div>
       </Card>
 
@@ -741,7 +877,7 @@ export default function OrderDetailPage() {
           <div>
             Status:{" "}
             <span className="font-medium">
-              {STATUS_META[order.status].label}
+              {getDisplayedStatusMeta(order).label}
             </span>
           </div>
           <div>
@@ -839,25 +975,141 @@ export default function OrderDetailPage() {
 
       <Modal
         isOpen={confirmReceiveModalOpen}
-        onClose={() => setConfirmReceiveModalOpen(false)}
+        onClose={() => {
+          if (confirmSubmitting) return;
+          setConfirmReceiveModalOpen(false);
+          resetDamageForm();
+        }}
         title="Confirm Receive Book"
       >
         <div className="space-y-4">
+          <p className="text-sm text-gray-700">
+            Mark the returned book as received. If the book arrived damaged,
+            select a severity and upload evidence so an admin can decide the
+            deposit deduction.
+          </p>
+
+          <div>
+            <label className="block text-sm font-medium mb-2">Book condition</label>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              {([
+                { value: "none", label: "No damage", sub: "Full refund" },
+                { value: "light", label: "Light", sub: "~25% deduction" },
+                { value: "medium", label: "Medium", sub: "~50% deduction" },
+                { value: "severe", label: "Severe", sub: "Full forfeit" },
+              ] as const).map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  disabled={confirmSubmitting}
+                  onClick={() => setDamageSeverity(opt.value)}
+                  className={`rounded-lg border p-3 text-left text-sm transition-colors ${
+                    damageSeverity === opt.value
+                      ? "border-blue-500 bg-blue-50 text-blue-700"
+                      : "border-gray-200 hover:bg-gray-50"
+                  }`}
+                >
+                  <div className="font-medium">{opt.label}</div>
+                  <div className="text-xs text-gray-500">{opt.sub}</div>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {damageSeverity !== "none" && (
+            <>
+              <div>
+                <label className="block text-sm font-medium mb-2">
+                  Damage photos <span className="text-gray-500">(up to 6)</span>
+                </label>
+                <input
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  disabled={confirmSubmitting}
+                  onChange={(e) => {
+                    const files = Array.from(e.target.files || []).slice(0, 6);
+                    setDamagePhotos(files);
+                  }}
+                  className="block w-full text-sm text-gray-700 file:mr-3 file:rounded-md file:border-0 file:bg-blue-600 file:text-white file:px-3 file:py-1.5 file:text-sm hover:file:bg-blue-700"
+                />
+                {damagePhotos.length > 0 && (
+                  <p className="text-xs text-gray-500 mt-1">
+                    {damagePhotos.length} file{damagePhotos.length === 1 ? "" : "s"} selected
+                  </p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-2">
+                  Note <span className="text-gray-500">(optional)</span>
+                </label>
+                <textarea
+                  value={damageNote}
+                  onChange={(e) => setDamageNote(e.target.value)}
+                  disabled={confirmSubmitting}
+                  rows={3}
+                  placeholder="Describe the damage you observed..."
+                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                />
+              </div>
+
+              <div className="rounded-md bg-amber-50 border border-amber-200 p-3 text-xs text-amber-800">
+                The borrower will be notified and has 7 days to upload counter-evidence.
+                An admin will review both sides and decide the final deduction.
+              </div>
+            </>
+          )}
+
+          <div className="flex justify-end gap-2 pt-2">
+            <Button
+              variant="outline"
+              disabled={confirmSubmitting}
+              onClick={() => {
+                setConfirmReceiveModalOpen(false);
+                resetDamageForm();
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              disabled={confirmSubmitting}
+              onClick={async () => {
+                await handleConfirmReceive(order!.id);
+                setConfirmReceiveModalOpen(false);
+              }}
+            >
+              {confirmSubmitting
+                ? "Submitting..."
+                : damageSeverity === "none"
+                ? "Confirm & Release Deposit"
+                : "Submit Damage Report"}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        isOpen={borrowerConfirmReceiveModalOpen}
+        onClose={() => setBorrowerConfirmReceiveModalOpen(false)}
+        title="Confirm Receive"
+      >
+        <div className="space-y-4">
           <p>
-            Are you sure you have received the returned books? This action will
-            mark the order as COMPLETED and trigger refund if applicable.
+            Are you sure you have received this shipment? This action will start
+            the borrowing period for the order.
           </p>
           <div className="flex justify-end gap-2 mt-4">
             <Button
               variant="outline"
-              onClick={() => setConfirmReceiveModalOpen(false)}
+              onClick={() => setBorrowerConfirmReceiveModalOpen(false)}
             >
               Cancel
             </Button>
             <Button
               onClick={() => {
-                handleConfirmReceive(order!.id);
-                setConfirmReceiveModalOpen(false);
+                handleBorrowerConfirmReceive(order!.id);
+                setBorrowerConfirmReceiveModalOpen(false);
               }}
             >
               Confirm

@@ -31,6 +31,12 @@ SHIPPING_METHOD_ENUM = ("post", "pickup")
 CARRIER_ENUM = ("AUSPOST", "OTHER")
  
 ORDER_TYPE_ENUM = ("borrow", "purchase")
+
+# Deposit lifecycle (MVP6-1)
+DEPOSIT_STATUS_ENUM = (
+    "held", "pending_review", "released", "partially_deducted", "forfeited"
+)
+DAMAGE_SEVERITY_ENUM = ("none", "light", "medium", "severe")
  
 class Order(Base):
     """
@@ -87,7 +93,18 @@ class Order(Base):
     # Post-return adjustments
     late_fee_amount = Column(DECIMAL(10, 2), nullable=True)
     damage_fee_amount = Column(DECIMAL(10, 2), nullable=True)
-    
+
+    # Deposit lifecycle (MVP6-1 Deposit Management)
+    deposit_status = Column(
+        Enum(*DEPOSIT_STATUS_ENUM, name="deposit_status_enum"),
+        nullable=False, default="held", index=True
+    )
+    deposit_deducted_cents = Column(Integer, nullable=False, default=0)
+    damage_severity_final = Column(
+        Enum(*DAMAGE_SEVERITY_ENUM, name="damage_severity_final_enum"),
+        nullable=True
+    )
+
     # payment id
     payment_id = Column(String(255), ForeignKey("payments.payment_id", ondelete="SET NULL"), nullable=True)
 
@@ -131,10 +148,12 @@ class Order(Base):
             "owner": {
                 "id": self.owner.user_id if self.owner else None,
                 "name": self.owner.name if self.owner else None,
+                "email": self.owner.email if self.owner else None,
             },
             "borrower": {
                 "id": self.borrower.user_id if self.borrower else None,
                 "name": self.borrower.name if self.borrower else None,
+                "email": self.borrower.email if self.borrower else None,
             },
             "status": self.status,
             "actionType": self.action_type,
@@ -143,7 +162,14 @@ class Order(Base):
             "serviceFeeAmount": float(self.service_fee_amount or 0),
             "shippingOutFeeAmount": float(self.shipping_out_fee_amount or 0),
             "totalPaidAmount": float(self.total_paid_amount or 0),
+            "paymentMethod": "Card via Stripe" if self.payment_id else None,
+            "paymentTime": (
+                self.payment.created_at.isoformat()
+                if self.payment and self.payment.created_at
+                else (self.created_at.isoformat() if self.created_at else None)
+            ),
             "contactName": self.contact_name,
+            "contactEmail": self.borrower.email if self.borrower else None,
             "phone": self.phone,
             "street": self.street,
             "city": self.city,
@@ -168,6 +194,10 @@ class Order(Base):
             "lateFeeAmount": float(self.late_fee_amount or 0),
             "damageFeeAmount": float(self.damage_fee_amount or 0),
             "totalRefundedAmount": float(self.total_refunded_amount or 0),
+
+            "depositStatus": self.deposit_status,
+            "depositDeductedCents": int(self.deposit_deducted_cents or 0),
+            "damageSeverityFinal": self.damage_severity_final,
         }
  
 class OrderBook(Base):

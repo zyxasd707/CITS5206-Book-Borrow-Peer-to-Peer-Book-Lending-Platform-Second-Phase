@@ -59,6 +59,13 @@ export type TrackingNumberItem = {
   order_id: string;
   shipping_out_tracking_number?: string | null;
   shipping_return_tracking_number?: string | null;
+  book_title?: string | null;
+  counterpart_name?: string | null;
+  counterpart_role?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  start_at?: string | null;
+  returned_at?: string | null;
 };
 
 /**

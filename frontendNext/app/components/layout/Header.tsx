@@ -8,9 +8,8 @@ import Input from "../ui/Input";
 import ProfileIncompleteModal from "../ui/ProfileIncompleteModal";
 import { isProfileComplete } from "@/utils/profileValidation";
 
-import { User as UserIcon, LogOut, Plus, Truck, Mail, LifeBuoy, ShoppingBag, ShieldCheck } from "lucide-react";
+import { User as UserIcon, LogOut, Plus, Truck, Mail, LifeBuoy, ShoppingBag, ShieldCheck, Wallet } from "lucide-react";
 import { logoutUser, isAuthenticated, getCurrentUser, getApiUrl, getToken } from "@/utils/auth";
-import { getRefundsForOrder } from "@/utils/payments";
 
 import Avatar from "@/app/components/ui/Avatar";
 import { useCartStore } from "@/app/store/cartStore";
@@ -84,10 +83,17 @@ const Header: React.FC = () => {
     };
     window.addEventListener("notif-read", handleNotifRead);
 
+    // Listen for notification-update event (e.g. after order cancel/refund)
+    const handleNotifUpdate = () => {
+      fetchSystemNotifCount();
+    };
+    window.addEventListener("notif-update", handleNotifUpdate);
+
     return () => {
       window.removeEventListener("auth-changed", handleAuthChange);
       window.removeEventListener("storage", checkAuthStatus);
       window.removeEventListener("notif-read", handleNotifRead);
+      window.removeEventListener("notif-update", handleNotifUpdate);
     };
   }, [fetchCart]);
 
@@ -118,38 +124,17 @@ const Header: React.FC = () => {
     router.push("/register");
   };
 
-  // Fetch system notification count (new refunds since last viewed)
+  // Fetch system notification count from notifications API
   const fetchSystemNotifCount = async () => {
     try {
       const apiUrl = getApiUrl();
       const token = getToken();
-      const lastSeen = localStorage.getItem("notif_last_seen") || "0";
-
-      const res = await fetch(`${apiUrl}/api/v1/orders/?status=CANCELED`, {
+      const res = await fetch(`${apiUrl}/api/v1/notifications/unread-count`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) return;
-
       const data = await res.json();
-      const orders = Array.isArray(data) ? data : (data.value || data.items || []);
-
-      let count = 0;
-      for (const order of orders) {
-        const oid = order.order_id || order.id;
-        try {
-          const refundData = await getRefundsForOrder(oid);
-          if (refundData.refunds) {
-            for (const r of refundData.refunds) {
-              if (new Date(r.created_at).getTime() > Number(lastSeen)) {
-                count++;
-              }
-            }
-          }
-        } catch {
-          // skip
-        }
-      }
-      setSystemNotifCount(count);
+      setSystemNotifCount(data.unread_count || 0);
     } catch {
       // silent fail
     }
@@ -220,9 +205,15 @@ const Header: React.FC = () => {
               )}
 
 
-              {/* Lend Books button - mobile version (icon only) */}
+              {/* Lend Books button - mobile version */}
               {isLoggedIn && (
-                <Button variant="outline" size="sm" className="sm:hidden p-2">
+                <Button variant="outline" size="sm" className="sm:hidden p-2" onClick={async () => {
+                  if (!currentUser || !isProfileComplete(currentUser)) {
+                    setIsProfileModalOpen(true);
+                    return;
+                  }
+                  router.push("/lending/add");
+                }}>
                   <Plus className="w-4 h-4" />
                 </Button>
               )}
@@ -300,6 +291,14 @@ const Header: React.FC = () => {
                       </Link>
 
                       <Link
+                        href="/deposits"
+                        className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                        onClick={() => setShowProfileMenu(false)}
+                      >
+                        <Wallet className="w-4 h-4 mr-3" />My Deposits
+                      </Link>
+
+                      <Link
                         href="/complain"
                         className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
                         onClick={() => setShowProfileMenu(false)}
@@ -309,7 +308,7 @@ const Header: React.FC = () => {
 
                       {isAdminLikeUser(currentUser) && (
                         <Link
-                          href="/admin/analytics"
+                          href="/admin/user-metrics"
                           className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
                           onClick={() => setShowProfileMenu(false)}
                         >

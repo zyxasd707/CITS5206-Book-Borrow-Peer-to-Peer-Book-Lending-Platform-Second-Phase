@@ -114,7 +114,7 @@ export async function uploadFile (file: File, scene: string): Promise<string> {
   formData.append("file", file);
   formData.append("scene", scene);
 
-  const res = await axios.post(`${API_URL}/upload/image`, formData, {
+  const res = await axios.post(`${API_URL}/api/v1/upload/image`, formData, {
   headers: {
     "Content-Type": "multipart/form-data",
     Authorization: `Bearer ${token}`,

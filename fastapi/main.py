@@ -20,6 +20,8 @@ from routes.bans import router as bans_router
 from routes.blacklists import router as blacklists_router
 from routes.review import router as review_router
 from routes.analytics import router as analytics_router  # Import analytics router
+from routes.notifications import router as notifications_router
+from routes.deposits import router as deposits_router
 
 # update order statuses automatically
 from contextlib import asynccontextmanager
@@ -32,6 +34,8 @@ from seed import seed as seed_sample_data
 import models.user, models.book, models.order, models.cart, models.message
 import models.complaint, models.ban, models.blacklist, models.review
 import models.payment_gateway, models.payment_split, models.mail
+import models.system_notification
+import models.deposit_evidence, models.deposit_audit_log
 from models.base import Base
 from models.checkout import Base as CheckoutBase
 from models.service_fee import Base as ServiceFeeBase
@@ -94,7 +98,7 @@ MEDIA_ROOT = Path(__file__).parent / "media"
 MEDIA_ROOT.mkdir(parents=True, exist_ok=True)
 app.mount("/media", StaticFiles(directory=str(MEDIA_ROOT)), name="media")
 
-app.include_router(upload_router)
+app.include_router(upload_router, prefix="/api/v1")
 
 # Include auth router
 app.include_router(auth_router, prefix="/api/v1")
@@ -113,7 +117,7 @@ app.include_router(cart_router, prefix="/api/v1")
 app.include_router(complaints_router, prefix="/api/v1")
 
 # mail router
-app.include_router(mail_router) 
+app.include_router(mail_router, prefix="/api/v1") 
 
 # payment gateway router
 app.include_router(payment_gateway_router, prefix="/api/v1") 
@@ -129,6 +133,10 @@ app.include_router(blacklists_router, prefix="/api/v1")
 
 #Register the analytics router
 app.include_router(analytics_router, prefix="/api/v1")
+app.include_router(notifications_router, prefix="/api/v1")
+
+# deposits router (MVP6-1)
+app.include_router(deposits_router, prefix="/api/v1")
 
 @app.get("/")
 async def root():

@@ -29,7 +29,10 @@ export const useCartStore = create<CartState>((set, get) => ({
     set({ loading: true });
     try {
       const data = await getMyCart();
-      if (!data?.items) return;
+      if (!data?.items) {
+        set({ cart: [] });
+        return;
+      }
 
       // 对每个 cart item 去补全 book 信息
       const items: CartItem[] = await Promise.all(
@@ -48,6 +51,7 @@ export const useCartStore = create<CartState>((set, get) => ({
       set({ cart: items });
     } catch (err) {
       console.error("Failed to fetch cart:", err);
+      set({ cart: [] });
     } finally {
       set({ loading: false });
     }

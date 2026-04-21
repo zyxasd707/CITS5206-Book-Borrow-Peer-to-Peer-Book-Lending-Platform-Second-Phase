@@ -2,8 +2,9 @@ from sqlalchemy import Column, String, Text, DateTime, Enum, ForeignKey
 from sqlalchemy.sql import func
 from models.base import Base
 
-COMPLAINT_STATUS_ENUM = ("pending", "investigating", "resolved", "closed")
-COMPLAINT_TYPE_ENUM   = ("book-condition", "delivery", "user-behavior", "other", "overdue")
+COMPLAINT_STATUS_ENUM   = ("pending", "investigating", "resolved", "closed")
+COMPLAINT_TYPE_ENUM     = ("book-condition", "delivery", "user-behavior", "other", "overdue")
+COMPLAINT_SEVERITY_ENUM = ("none", "light", "medium", "severe")
 
 class Complaint(Base):
     __tablename__ = "complaint"
@@ -19,6 +20,10 @@ class Complaint(Base):
 
     status          = Column(Enum(*COMPLAINT_STATUS_ENUM, name="complaint_status_enum"), nullable=False, default="pending", index=True)
     admin_response  = Column(Text, nullable=True)
+
+    # Damage escalation (MVP6-1) — used when type == "book-condition"
+    damage_severity = Column(Enum(*COMPLAINT_SEVERITY_ENUM, name="complaint_damage_severity_enum"), nullable=True)
+    evidence_photos = Column(Text, nullable=True)  # JSON array of relative media paths
 
     created_at      = Column(DateTime, server_default=func.now(), nullable=False, index=True)
     updated_at      = Column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)

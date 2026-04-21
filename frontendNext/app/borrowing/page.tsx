@@ -3,13 +3,14 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Search, Filter, Clock, AlertTriangle, ArrowDownCircle, ArrowUpCircle, User as UserIcon } from "lucide-react";
+import { Search, Filter, Package, Clock, AlertTriangle, ArrowDownCircle, ArrowUpCircle, User as UserIcon, RefreshCw } from "lucide-react";
+import { toast } from "sonner";
 import CoverImg from "../components/ui/CoverImg";
 import Card from "../components/ui/Card";
 import Button from "../components/ui/Button";
 import { EmptyState, ErrorState, LoadingState } from "../components/ui/AsyncState";
 import type { OrderStatus } from "@/app/types/order";
-import { getBorrowingOrders, type Order } from "@/utils/borrowingOrders";
+import { confirmBorrowerReceived, getBorrowingOrders, type Order } from "@/utils/borrowingOrders";
 import { getCurrentUser } from "@/utils/auth";
 
 const STATUS_META: Record<OrderStatus, { label: string; className: string }> = {
@@ -29,11 +30,36 @@ const TX_STAGE_META = {
   canceled: { label: "Canceled", className: "bg-gray-100 text-gray-700" },
 } as const;
 
-function getTransactionStage(status: OrderStatus): keyof typeof TX_STAGE_META {
+function getTransactionStage(
+  status: OrderStatus,
+  shippingOutTrackingNumber?: string | null
+): keyof typeof TX_STAGE_META {
   if (status === "PENDING_PAYMENT") return "pending";
+  if (shippingOutTrackingNumber) return "shipped";
   if (status === "PENDING_SHIPMENT") return "paid";
   if (status === "CANCELED") return "canceled";
   return "shipped";
+}
+
+function getDisplayedStatusMeta(
+  status: OrderStatus,
+  shippingOutTrackingNumber?: string | null
+) {
+  if (status === "PENDING_SHIPMENT" && shippingOutTrackingNumber) {
+    return { label: "Shipped", className: "text-green-600" };
+  }
+  return STATUS_META[status];
+}
+
+function getEffectiveStatus(order: Order): OrderStatus {
+  if (
+    order.action_type === "borrow" &&
+    order.status === "PENDING_SHIPMENT" &&
+    order.shipping_out_tracking_number
+  ) {
+    return "BORROWING";
+  }
+  return order.status;
 }
 
 export default function OrderListPage() {
@@ -44,6 +70,7 @@ export default function OrderListPage() {
   const [search, setSearch] = useState("");
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [usersCache, setUsersCache] = useState<Record<string, any>>({});
+  const [confirmingOrderId, setConfirmingOrderId] = useState<string | null>(null);
   const router = useRouter();
 
   useEffect(() => {
@@ -91,7 +118,7 @@ export default function OrderListPage() {
   const filteredOrders = useMemo(() => {
     let list = orders;
     if (statusFilter !== "all") {
-      list = list.filter((o) => o.status === statusFilter);
+      list = list.filter((o) => getEffectiveStatus(o) === statusFilter);
     }
     if (search) {
       const q = search.toLowerCase();
@@ -106,7 +133,22 @@ export default function OrderListPage() {
   }, [orders, statusFilter, search]);
 
   const countBy = (s: OrderStatus) =>
-    orders.filter((o) => o.status === s).length;
+    orders.filter((o) => getEffectiveStatus(o) === s).length;
+
+  const handleConfirmReceive = async (orderId: string) => {
+    try {
+      setConfirmingOrderId(orderId);
+      await confirmBorrowerReceived(orderId);
+      const refreshedOrders = await getBorrowingOrders();
+      setOrders(refreshedOrders);
+      toast.success("Book received successfully");
+    } catch (error) {
+      console.error("Failed to confirm receipt:", error);
+      toast.error("Failed to confirm receive");
+    } finally {
+      setConfirmingOrderId(null);
+    }
+  };
 
   const filterOptions = [
     {
@@ -151,6 +193,14 @@ export default function OrderListPage() {
                 View and manage your borrowing orders
               </p>
             </div>
+            <Button
+              variant="outline"
+              className="flex items-center gap-2 border-black text-black hover:bg-black hover:text-white"
+              onClick={() => router.push("/refunds")}
+            >
+              <RefreshCw className="w-4 h-4" />
+              My Refunds
+            </Button>
           </div>
 
           {/* Search & Filters */}
@@ -216,8 +266,20 @@ export default function OrderListPage() {
                 filteredOrders.map((order) => {
                   const firstBook = order.books[0];
                   const extra = Math.max(0, order.books.length - 1);
-                  const meta = STATUS_META[order.status];
-                  const txStage = getTransactionStage(order.status);
+                  const isBorrower =
+                    currentUserId !== null && order.borrower_id === currentUserId;
+                  const canConfirmReceive =
+                    isBorrower &&
+                    order.status === "PENDING_SHIPMENT" &&
+                    !!order.shipping_out_tracking_number;
+                  const meta = getDisplayedStatusMeta(
+                    order.status,
+                    order.shipping_out_tracking_number
+                  );
+                  const txStage = getTransactionStage(
+                    order.status,
+                    order.shipping_out_tracking_number
+                  );
                   const txMeta = TX_STAGE_META[txStage];
                   const isOverdue =
                     order.status === "BORROWING" &&
@@ -359,6 +421,18 @@ export default function OrderListPage() {
 
                         {/* Actions */}
                         <div className="flex gap-2 mt-3 flex-wrap">
+                          {canConfirmReceive && (
+                            <Button
+                              size="sm"
+                              className="bg-green-600 text-white hover:bg-green-700"
+                              disabled={confirmingOrderId === order.order_id}
+                              onClick={() => handleConfirmReceive(order.order_id)}
+                            >
+                              {confirmingOrderId === order.order_id
+                                ? "Confirming..."
+                                : "Confirm Receive"}
+                            </Button>
+                          )}
                           <Button
                             variant="outline"
                             size="sm"

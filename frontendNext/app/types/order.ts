@@ -73,10 +73,12 @@ export interface ApiOrder {
   owner: {
     id: string;
     name: string;
+    email: string;
   };
   borrower: {
     id: string;
     name: string;
+    email: string;
   };
   status: OrderStatus;
   actionType: string;
@@ -85,7 +87,10 @@ export interface ApiOrder {
   serviceFeeAmount: number;
   shippingOutFeeAmount: number;
   totalPaidAmount: number;
+  paymentMethod: string | null;
+  paymentTime: string | null;
   contactName: string;
+  contactEmail: string | null;
   phone: string;
   street: string;
   city: string;

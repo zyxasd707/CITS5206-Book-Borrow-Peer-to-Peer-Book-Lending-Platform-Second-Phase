@@ -7,7 +7,10 @@ const API_URL = getApiUrl();
 export type Order = {
   order_id: string;
   status: OrderStatus;
+  action_type: "borrow" | "purchase";
   total_paid_amount: number;
+  shipping_out_tracking_number?: string | null;
+  shipping_return_tracking_number?: string | null;
   books: Array<{
     id: string;
     title: string;
@@ -51,8 +54,9 @@ export async function listMyOrders(params?: {
 }
 
 export async function getOrderById(orderId: string) {
+  const token = getToken();
   const res = await axios.get(`${API_URL}/api/v1/orders/${orderId}`, {
-    withCredentials: true,
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
   });
   return res.data;
 }
@@ -77,6 +81,18 @@ export async function getOrdersByBookId(bookId: string): Promise<Order[]> {
   console.log('Sample order books:', allOrders[0]?.books);
 
   return filtered;
+}
+
+export async function confirmBorrowerReceived(orderId: string) {
+  const token = getToken();
+  const response = await axios.put(
+    `${API_URL}/api/v1/orders/${orderId}/borrower-confirm-received`,
+    {},
+    {
+      headers: { Authorization: `Bearer ${token}` },
+    }
+  );
+  return response.data;
 }
 
 // Alias functions for different contexts

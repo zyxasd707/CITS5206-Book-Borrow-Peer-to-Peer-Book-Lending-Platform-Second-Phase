@@ -12,9 +12,8 @@ type LookupResult = {
   isAdmin?: boolean;
 };
 
-function isAdminLikeUser(user: { email?: string; is_admin?: boolean } | null) {
-  if (!user) return false;
-  return Boolean(user.is_admin) || Boolean(user.email?.toLowerCase().includes("admin"));
+function isAdminLikeUser(user: { is_admin?: boolean } | null) {
+  return Boolean(user?.is_admin);
 }
 
 export default function AdminUsersPage() {
@@ -134,7 +133,7 @@ export default function AdminUsersPage() {
           <h1 className="text-2xl font-bold">User Management</h1>
           <p className="text-gray-600">Manage user bans and moderation actions.</p>
         </div>
-        <Link href="/admin/analytics" className="text-sm underline">
+        <Link href="/admin" className="text-sm underline">
           Back to Dashboard
         </Link>
       </div>

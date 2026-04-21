@@ -11,11 +11,13 @@ class BookSummary(BaseModel):
 
 class UserSummary(BaseModel):
     id: str
-    name: str   
+    name: str
+    email: Optional[str] = None
 
 class OrderSummary(BaseModel):
     order_id: str
     status: str
+    action_type: str
     total_paid_amount: float
     books: List[BookSummary]
     create_at: datetime = None
@@ -23,6 +25,8 @@ class OrderSummary(BaseModel):
     completed_at: Optional[datetime] = None
     owner_id: str
     borrower_id: str
+    shipping_out_tracking_number: Optional[str] = None
+    shipping_return_tracking_number: Optional[str] = None
 
 class BookDetail(BaseModel):
     bookId: str
@@ -45,9 +49,12 @@ class OrderDetail(BaseModel):
     serviceFeeAmount: float
     shippingOutFeeAmount: float
     totalPaidAmount: float
+    paymentMethod: Optional[str] = None
+    paymentTime: Optional[datetime] = None
     
     # address
     contactName: str
+    contactEmail: Optional[str] = None
     phone: Optional[str]
     street: str
     city: str
@@ -87,6 +94,13 @@ class TrackingNumberItem(BaseModel):
     order_id: str
     shipping_out_tracking_number: Optional[str]
     shipping_return_tracking_number: Optional[str]
+    book_title: Optional[str] = None
+    counterpart_name: Optional[str] = None
+    counterpart_role: Optional[str] = None
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+    start_at: Optional[datetime] = None
+    returned_at: Optional[datetime] = None
 
 class ConfirmShipmentRequest(BaseModel):
     tracking_number: str

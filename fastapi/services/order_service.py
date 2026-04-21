@@ -13,9 +13,13 @@ from services.cart_service import remove_cart_items_by_book_ids
 from models.complaint import Complaint
 from sqlalchemy import or_
 from services.complaint_service import ComplaintService
+from services.notification_service import NotificationService
 from typing import Set
 import logging
-from services.email_service import send_order_confirmation_receipt_email
+from services.email_service import (
+    send_order_confirmation_receipt_email,
+    send_shipment_status_email,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -344,6 +348,7 @@ class OrderService:
             result.append({
                 "order_id": order.id,
                 "status": order.status,
+                "action_type": order.action_type,
                 "total_paid_amount": float(order.total_paid_amount),
                 "books": books_info,
                 "create_at": order.created_at,
@@ -351,6 +356,8 @@ class OrderService:
                 "completed_at": order.completed_at,
                 "owner_id": order.owner_id,
                 "borrower_id": order.borrower_id,
+                "shipping_out_tracking_number": order.shipping_out_tracking_number,
+                "shipping_return_tracking_number": order.shipping_return_tracking_number,
             })
         return result
     
@@ -403,10 +410,39 @@ class OrderService:
                 detail=f"Cannot cancel order with status '{order.status}'. Only orders with status {cancellable_statuses} can be cancelled."
             )
         
+        # MVP6: If order is PENDING_SHIPMENT with payment, trigger refund first
+        # refund_on_cancel() handles: CANCELED status, book restore, CANCELED + REFUND notifications, commit
+        if order.status == "PENDING_SHIPMENT":
+            try:
+                from services.payment_gateway_service import refund_on_cancel
+                refund_on_cancel(db=db, order_id=order_id, actor=current_user.user_id)
+                return True
+            except Exception as e:
+                logger.warning(f"Refund on cancel failed for order {order_id}, proceeding with plain cancel: {e}")
+                db.refresh(order)
+                if order.status == "CANCELED":
+                    return True  # refund_on_cancel already cancelled it
+
         # Update order status to CANCELED
         order.status = "CANCELED"
         order.canceled_at = datetime.now(timezone.utc)
-        
+
+        # Notify both parties
+        NotificationService.create(
+            db, user_id=order.borrower_id, order_id=order.id,
+            type="CANCELED",
+            title="Order Cancelled",
+            message=f"Your order has been cancelled. If payment was made, a refund will be processed.",
+            commit=False,
+        )
+        NotificationService.create(
+            db, user_id=order.owner_id, order_id=order.id,
+            type="CANCELED",
+            title="Order Cancelled",
+            message=f"An order for your book has been cancelled by the borrower.",
+            commit=False,
+        )
+
         # Restore book availability - set books back to 'listed' status
         for order_book in order.books:
             if order_book.book:
@@ -414,7 +450,7 @@ class OrderService:
                 # Restore to listed if it was unlisted, lent, or sold due to this order
                 if book.status in ["unlisted", "lent", "sold"]:
                     book.status = "listed"
-        
+
         db.commit()
         return True
 
@@ -452,6 +488,17 @@ class OrderService:
         for order in orders:
             out_num = order.shipping_out_tracking_number if order.shipping_out_carrier == "AUSPOST" else None
             return_num = order.shipping_return_tracking_number if order.shipping_return_carrier == "AUSPOST" else None
+            first_book = next((ob.book for ob in order.books if ob.book), None)
+            book_title = None
+            if first_book:
+                book_title = first_book.title_or or first_book.title_en
+
+            if order.owner_id == user_id:
+                counterpart_name = order.borrower.name if order.borrower else None
+                counterpart_role = "Borrower"
+            else:
+                counterpart_name = order.owner.name if order.owner else None
+                counterpart_role = "Owner"
 
             # Only include if at least one AUPOST tracking number exists
             if out_num or return_num:
@@ -459,6 +506,13 @@ class OrderService:
                     "order_id": order.id,
                     "shipping_out_tracking_number": out_num,
                     "shipping_return_tracking_number": return_num,
+                    "book_title": book_title,
+                    "counterpart_name": counterpart_name,
+                    "counterpart_role": counterpart_role,
+                    "created_at": order.created_at,
+                    "updated_at": order.updated_at,
+                    "start_at": order.start_at,
+                    "returned_at": order.returned_at,
                 })
 
         return result
@@ -486,6 +540,24 @@ class OrderService:
             )
         
         order.status = "PENDING_SHIPMENT"
+
+        # Notify borrower: payment confirmed
+        NotificationService.create(
+            db, user_id=order.borrower_id, order_id=order.id,
+            type="PAYMENT_CONFIRMED",
+            title="Payment Confirmed",
+            message=f"Your payment of ${float(order.total_paid_amount):.2f} has been confirmed. Waiting for the lender to ship.",
+            commit=False,
+        )
+        # Notify owner: new order received
+        NotificationService.create(
+            db, user_id=order.owner_id, order_id=order.id,
+            type="PAYMENT_CONFIRMED",
+            title="New Order Received",
+            message=f"A borrower has paid for your book. Please ship within 3 days.",
+            commit=False,
+        )
+
         db.commit()
         db.refresh(order)
         return True
@@ -541,6 +613,45 @@ class OrderService:
             )
             order.due_at = order.start_at + timedelta(days=max_lending_days)
 
+            estimated_delivery_date = order.start_at.strftime("%d/%m/%Y") if order.start_at else "TBD"
+
+            # Notify borrower: book shipped
+            NotificationService.create(
+                db, user_id=order.borrower_id, order_id=order.id,
+                type="SHIPMENT_SENT",
+                title="Book Shipped",
+                message=f"The lender has shipped your book. Tracking: {tracking_number} ({carrier_upper}).",
+                commit=False,
+            )
+
+            try:
+                borrower_name = (order.borrower.name if order.borrower and order.borrower.name else "there")
+                owner_name = (order.owner.name if order.owner and order.owner.name else "there")
+
+                if order.borrower and order.borrower.email:
+                    send_shipment_status_email(
+                        email=order.borrower.email,
+                        username=borrower_name,
+                        order_id=order.id,
+                        tracking_number=tracking_number,
+                        courier_name=carrier_upper,
+                        estimated_delivery_date=estimated_delivery_date,
+                        recipient_role="borrower",
+                    )
+
+                if order.owner and order.owner.email:
+                    send_shipment_status_email(
+                        email=order.owner.email,
+                        username=owner_name,
+                        order_id=order.id,
+                        tracking_number=tracking_number,
+                        courier_name=carrier_upper,
+                        estimated_delivery_date=estimated_delivery_date,
+                        recipient_role="owner",
+                    )
+            except Exception as e:
+                logger.warning("Failed to send shipment status emails: %s", e)
+
             # implement distribute shipping fee function
             try:
                 payment_id = order.payment_id
@@ -564,6 +675,23 @@ class OrderService:
             # Update status to RETURNED
             order.status = "RETURNED"
             order.returned_at = datetime.now(timezone.utc)
+
+            # Notify owner: book returned
+            NotificationService.create(
+                db, user_id=order.owner_id, order_id=order.id,
+                type="RETURNED",
+                title="Book Returned",
+                message=f"The borrower has shipped your book back. Tracking: {tracking_number} ({carrier_upper}).",
+                commit=False,
+            )
+            # Notify borrower: return confirmed
+            NotificationService.create(
+                db, user_id=order.borrower_id, order_id=order.id,
+                type="RETURNED",
+                title="Return Shipment Confirmed",
+                message=f"Your return shipment has been recorded. Waiting for the lender to confirm receipt.",
+                commit=False,
+            )
                 
         else:
             raise HTTPException(
@@ -596,10 +724,104 @@ class OrderService:
         count = 0
         for order in orders:
             order.status = "BORROWING"
+            NotificationService.create(
+                db, user_id=order.borrower_id, order_id=order.id,
+                type="BORROWING",
+                title="Borrowing Started",
+                message=f"Your book has been delivered. The borrowing period has started. Due date: {order.due_at.strftime('%d/%m/%Y') if order.due_at else 'N/A'}.",
+                commit=False,
+            )
+            NotificationService.create(
+                db, user_id=order.owner_id, order_id=order.id,
+                type="BORROWING",
+                title="Book Delivered",
+                message=f"Your book has been delivered to the borrower. Borrowing period started.",
+                commit=False,
+            )
             count += 1
-        
+
         db.commit()
         return count
+
+    @staticmethod
+    def borrower_confirm_received(db: Session, order_id: str, current_user: User) -> bool:
+        order = db.query(Order).filter(Order.id == order_id).first()
+
+        if not order:
+            raise HTTPException(status_code=404, detail="Order not found")
+
+        if order.borrower_id != current_user.user_id and not current_user.is_admin:
+            raise HTTPException(status_code=403, detail="Only borrower can confirm receipt")
+
+        if order.status != "PENDING_SHIPMENT":
+            raise HTTPException(
+                status_code=400,
+                detail=f"Cannot confirm receipt for order with status '{order.status}'",
+            )
+
+        if not order.shipping_out_tracking_number:
+            raise HTTPException(
+                status_code=400,
+                detail="Outbound tracking must be recorded before confirming receipt",
+            )
+
+        now = datetime.now(timezone.utc)
+        if order.action_type == "purchase":
+            order.status = "COMPLETED"
+            order.completed_at = now
+
+            NotificationService.create(
+                db,
+                user_id=order.borrower_id,
+                order_id=order.id,
+                type="COMPLETED",
+                title="Order Completed",
+                message="You confirmed receipt of the purchased book. The order is now complete.",
+                commit=False,
+            )
+            NotificationService.create(
+                db,
+                user_id=order.owner_id,
+                order_id=order.id,
+                type="COMPLETED",
+                title="Order Completed",
+                message="The buyer confirmed receiving the book. The order is now complete.",
+                commit=False,
+            )
+        else:
+            from datetime import timedelta
+
+            order.status = "BORROWING"
+            order.start_at = now
+
+            max_lending_days = max(
+                (ob.book.max_lending_days for ob in order.books if ob.book and ob.book.max_lending_days),
+                default=20,
+            )
+            order.due_at = now + timedelta(days=max_lending_days)
+
+            NotificationService.create(
+                db,
+                user_id=order.borrower_id,
+                order_id=order.id,
+                type="BORROWING",
+                title="Book Received",
+                message="You confirmed receipt of the shipped book. The borrowing period has started.",
+                commit=False,
+            )
+            NotificationService.create(
+                db,
+                user_id=order.owner_id,
+                order_id=order.id,
+                type="BORROWING",
+                title="Borrower Confirmed Receipt",
+                message="The borrower confirmed receiving the book. The borrowing period has started.",
+                commit=False,
+            )
+
+        db.commit()
+        db.refresh(order)
+        return True
 
 
 
@@ -654,6 +876,20 @@ class OrderService:
                     )
                     
                 order.status = "OVERDUE"
+                NotificationService.create(
+                    db, user_id=order.borrower_id, order_id=order.id,
+                    type="OVERDUE",
+                    title="Order Overdue",
+                    message=f"Your borrowing order is overdue (due: {order.due_at.strftime('%d/%m/%Y') if order.due_at else 'N/A'}). Please return the book as soon as possible.",
+                    commit=False,
+                )
+                NotificationService.create(
+                    db, user_id=order.owner_id, order_id=order.id,
+                    type="OVERDUE",
+                    title="Order Overdue",
+                    message=f"A borrower has not returned your book on time. A complaint has been filed automatically.",
+                    commit=False,
+                )
                 count += 1
                 
             db.commit()
@@ -689,8 +925,6 @@ class OrderService:
                 order.completed_at = now
 
                 # Restore book availability for borrowed books
-                # For borrow orders: set books back to 'listed'
-                # For purchase orders: books stay as 'sold'
                 if order.action_type == "borrow":
                     for order_book in order.books:
                         if order_book.book:
@@ -698,33 +932,61 @@ class OrderService:
                             if book and book.status == "lent":
                                 book.status = "listed"
 
+                NotificationService.create(
+                    db, user_id=order.borrower_id, order_id=order.id,
+                    type="COMPLETED",
+                    title="Order Completed",
+                    message=f"Your order has been completed. The deposit refund will be processed.",
+                    commit=False,
+                )
+                NotificationService.create(
+                    db, user_id=order.owner_id, order_id=order.id,
+                    type="COMPLETED",
+                    title="Order Completed",
+                    message=f"The borrowing order has been completed. The book has been returned.",
+                    commit=False,
+                )
                 count += 1
 
         db.commit()
         return count
     
     @staticmethod
-    def owner_confirm_received(db: Session, order_id: str, current_user: User) -> bool:
+    def owner_confirm_received(
+        db: Session,
+        order_id: str,
+        current_user: User,
+        damage_severity: Optional[str] = None,
+        note: Optional[str] = None,
+        evidence_photos: Optional[List[str]] = None,
+    ) -> bool:
         """
-        Owner manually confirms that returned books are received
+        Owner manually confirms that returned books are received.
+
+        MVP6-1: accepts optional damage report. severity='none' (or omitted)
+        keeps the existing flow (auto deposit release). severity in
+        {light, medium, severe} puts the deposit in 'pending_review' for
+        admin arbitration and records the lender's evidence.
         """
         order = db.query(Order).filter(Order.id == order_id).first()
         if not order:
             raise HTTPException(status_code=404, detail="Order not found")
-        
+
         if order.status != "RETURNED":
             raise HTTPException(status_code=400, detail="Order is not in RETURNED status")
-        
+
         if order.owner_id != current_user.user_id and not current_user.is_admin:
             raise HTTPException(status_code=403, detail="Only owner can confirm received books")
-        
-        # Upate order status
+
+        severity = (damage_severity or "none").lower()
+        if severity not in {"none", "light", "medium", "severe"}:
+            raise HTTPException(status_code=400, detail="Invalid damage_severity")
+
+        # Order lifecycle: always advance to COMPLETED. Deposit lifecycle is tracked separately.
         order.status = "COMPLETED"
         order.completed_at = datetime.now(timezone.utc)
 
-        # Restore book availability for borrowed books
-        # For borrow orders: set books back to 'listed'
-        # For purchase orders: books stay as 'sold'
+        # Restore book availability for borrow orders
         if order.action_type == "borrow":
             for order_book in order.books:
                 if order_book.book:
@@ -732,15 +994,99 @@ class OrderService:
                     if book and book.status == "lent":
                         book.status = "listed"
 
-        db.commit()
-        db.refresh(order)
+        # Deferred imports to avoid circular refs
+        from models.deposit_evidence import DepositEvidence
+        from models.deposit_audit_log import DepositAuditLog
+        import json
 
-        # Trigger refund
-        if order.payment_id:
-            try:
-                refund_data = {"reason": "Books returned and received"}
-                from services.payment_gateway_service import refund_payment
-                refund_payment(order.payment_id, refund_data, db=db)
-            except Exception as e:
-                print(f"[WARN] refund_payment failed: {e}")  
+        if severity == "none":
+            # Clean return → auto release
+            order.deposit_status = "released"
+            order.deposit_deducted_cents = 0
+            order.damage_severity_final = "none"
+
+            NotificationService.create(
+                db, user_id=order.borrower_id, order_id=order.id,
+                type="COMPLETED",
+                title="Order Completed",
+                message="The lender has confirmed receipt of the returned book. Your deposit refund will be processed.",
+                commit=False,
+            )
+            NotificationService.create(
+                db, user_id=order.owner_id, order_id=order.id,
+                type="COMPLETED",
+                title="Order Completed",
+                message="You have confirmed receipt of the returned book. Order is now complete.",
+                commit=False,
+            )
+
+            db.add(DepositAuditLog(
+                order_id=order.id,
+                actor_id=order.owner_id,
+                actor_role="lender",
+                action="release",
+                amount_cents=0,
+                final_severity="none",
+                note="Clean return confirmed by lender.",
+            ))
+
+            db.commit()
+            db.refresh(order)
+
+            # Trigger refund (existing flow)
+            if order.payment_id:
+                try:
+                    refund_data = {"reason": "Books returned and received"}
+                    from services.payment_gateway_service import refund_payment
+                    refund_payment(order.payment_id, refund_data, db=db)
+                except Exception as e:
+                    print(f"[WARN] refund_payment failed: {e}")
+        else:
+            # Damaged return → lender evidence on record, admin arbitrates later
+            order.deposit_status = "pending_review"
+            order.damage_severity_final = None  # cleared until admin rules
+
+            db.add(DepositEvidence(
+                order_id=order.id,
+                submitter_id=order.owner_id,
+                submitter_role="lender",
+                photos=json.dumps(evidence_photos or []),
+                claimed_severity=severity,
+                note=note,
+            ))
+            db.add(DepositAuditLog(
+                order_id=order.id,
+                actor_id=order.owner_id,
+                actor_role="lender",
+                action="evidence_submitted",
+                final_severity=severity,
+                note=(note or "").strip() or f"Lender reported damage: {severity}",
+            ))
+
+            NotificationService.create(
+                db, user_id=order.borrower_id, order_id=order.id,
+                type="DEPOSIT_UPDATED",
+                title="Damage Reported — Admin Review Pending",
+                message=(
+                    f"The lender reported damage (severity: {severity}) to the returned book. "
+                    "An admin will review and decide the deposit deduction. "
+                    "You can upload counter-evidence within 7 days if you disagree."
+                ),
+                commit=False,
+            )
+            NotificationService.create(
+                db, user_id=order.owner_id, order_id=order.id,
+                type="DEPOSIT_UPDATED",
+                title="Damage Report Submitted",
+                message=(
+                    f"Your damage report (severity: {severity}) has been recorded. "
+                    "An admin will review the evidence and determine the deduction."
+                ),
+                commit=False,
+            )
+
+            db.commit()
+            db.refresh(order)
+            # NO automatic refund — admin will trigger partial/full via /deposits/admin endpoints
+
         return True
