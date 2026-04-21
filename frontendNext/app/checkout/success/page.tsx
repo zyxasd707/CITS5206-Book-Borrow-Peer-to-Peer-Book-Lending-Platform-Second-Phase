@@ -4,7 +4,6 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { hasStripePublishableKey, stripePromise } from "@/utils/stripe";
-import { createOrder } from "@/utils/borrowingOrders";
 import { getApiUrl } from "@/utils/auth";
 import { useCartStore } from "@/app/store/cartStore";
 import { ErrorState, LoadingState } from "@/app/components/ui/AsyncState";
@@ -121,22 +120,9 @@ export default function CheckoutSuccessPage() {
         switch (piObj?.status) {
           case "succeeded":
             setStatus("succeeded");
-            if (piObj?.id && checkoutId) {
-              try {
-                const createdKey = `order_created_for_${checkoutId}`;
-                if (!sessionStorage.getItem(createdKey)) {
-                  await createOrder(checkoutId, piObj.id);
-                  sessionStorage.setItem(createdKey, "1");
-                }
-                setOrderCreated(true);
-              } catch (orderError: any) {
-                console.error("[success] createOrder failed ->", orderError?.response?.data || orderError);
-                if (finalPiId) {
-                  await confirmOrder(finalPiId);
-                }
-              }
-            } else if (finalPiId) {
+            if (finalPiId) {
               await confirmOrder(finalPiId);
+              setOrderCreated(true);
             }
             break;
           case "processing":

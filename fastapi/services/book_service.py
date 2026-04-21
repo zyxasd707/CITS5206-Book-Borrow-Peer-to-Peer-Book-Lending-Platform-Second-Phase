@@ -10,6 +10,17 @@ from sqlalchemy import select, func, or_, and_
 
 from models.book import Book
 
+ALLOWED_DEPOSIT_INCOME_PERCENTAGES = {0, 5, 10, 15, 20}
+
+
+def _normalize_deposit_income_percentage(value: Any) -> int:
+    try:
+        percentage = int(0 if value is None else value)
+    except (TypeError, ValueError):
+        percentage = 0
+    return percentage if percentage in ALLOWED_DEPOSIT_INCOME_PERCENTAGES else 0
+
+
 class BookService:
     # ---------- Create ----------
     @staticmethod
@@ -43,6 +54,9 @@ class BookService:
             tags=payload.get("tags") or [],
             publish_year=payload.get("publish_year"),
             max_lending_days=int(payload.get("max_lending_days", 14)),
+            deposit_income_percentage=_normalize_deposit_income_percentage(
+                payload.get("deposit_income_percentage", 0)
+            ),
 
             delivery_method=payload.get("delivery_method", "both"),
             sale_price=payload.get("sale_price"),
@@ -112,10 +126,12 @@ class BookService:
             "title_or", "title_en", "original_language", "author", "category", "description",
             "cover_img_url", "condition_img_urls", "status", "condition",
             "can_rent", "can_sell", "isbn", "tags", "publish_year",
-            "max_lending_days", "delivery_method", "sale_price", "deposit"
+            "max_lending_days", "deposit_income_percentage", "delivery_method", "sale_price", "deposit"
         }
         for k, v in payload.items():
             if k in updatable:
+                if k == "deposit_income_percentage":
+                    v = _normalize_deposit_income_percentage(v)
                 setattr(book, k, v)
 
         # Make update_date reflect the update
@@ -238,6 +254,9 @@ class BookService:
                 "canRent": b.can_rent,
                 "canSell": b.can_sell,
                 "deposit": float(b.deposit) if b.deposit is not None else None,
+                "depositIncomePercentage": int(
+                    b.deposit_income_percentage if b.deposit_income_percentage is not None else 0
+                ),
                 "salePrice": float(b.sale_price) if b.sale_price is not None else None,
                 "deliveryMethod": b.delivery_method,
                 "ownerId": b.owner_id,

@@ -25,6 +25,7 @@ class Checkout(Base):
 
     # Fee summary
     deposit = Column(Numeric(10, 2), default=0.00)
+    owner_income_amount = Column(Numeric(10, 2), default=0.00)
     service_fee = Column(Numeric(10, 2), default=0.00)
     book_fee = Column(Numeric(10, 2), default=0.00) 
     shipping_fee = Column(Numeric(10, 2), default=0.00)
@@ -100,6 +101,7 @@ class CheckoutBase(BaseModel):
     country: str
     state : str
     deposit: Optional[float] = 0.00
+    ownerIncomeAmount: Optional[float] = 0.00
     serviceFee: Optional[float] = 0.00
     bookFee: Optional[float] = 0.00  
     shippingFee: Optional[float] = 0.00

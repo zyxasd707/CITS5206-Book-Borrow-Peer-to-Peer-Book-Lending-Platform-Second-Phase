@@ -1363,7 +1363,7 @@ def auto_cancel_failed_payments(db: Session):
 def refund_on_cancel(db: Session, order_id: str, actor: str = "system"):
     """
     B1-3: Refund when user (or system) cancels an order in PENDING_SHIPMENT stage.
-    Action: Full refund (deposit + shipping) via Stripe → Order → CANCELED.
+    Action: Full refund (total paid) via Stripe → Order → CANCELED.
     Returns refund details dict.
     """
     from models.book import Book
@@ -1382,7 +1382,7 @@ def refund_on_cancel(db: Session, order_id: str, actor: str = "system"):
     if not sp:
         raise HTTPException(status_code=404, detail="Payment split not found for this order")
 
-    refund_amount = int(sp.deposit_cents or 0) + int(sp.shipping_cents or 0)
+    refund_amount = to_cents(order.total_paid_amount or 0)
     if refund_amount <= 0:
         raise HTTPException(status_code=400, detail="No refundable amount for this order")
 

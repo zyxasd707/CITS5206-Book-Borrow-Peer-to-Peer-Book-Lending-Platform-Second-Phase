@@ -41,6 +41,8 @@ export default function BookDetailPage() {
   const [book, setBook] = useState<Book | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const depositIncome =
+    ((Number(book?.deposit) || 0) * (Number(book?.depositIncomePercentage) || 0)) / 100;
 
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [owner, setOwner] = useState<User | null>(null);
@@ -433,6 +435,9 @@ const [ownerRating, setOwnerRating] = useState<RatingStats>({
                           </div>
                           <p className="text-xs text-gray-500 mt-1">
                             * Deposit is refundable upon timely return of the book in good condition.
+                          </p>
+                          <p className="text-xs text-amber-700 mt-1">
+                            Estimated Income: ${depositIncome.toFixed(2)} ({book.depositIncomePercentage ?? 0}% of deposit fee)
                           </p>
                         </div>
                       )}

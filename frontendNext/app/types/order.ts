@@ -84,6 +84,7 @@ export interface ApiOrder {
   actionType: string;
   shippingMethod: string;
   depositOrSaleAmount: number;
+  ownerIncomeAmount?: number;
   serviceFeeAmount: number;
   shippingOutFeeAmount: number;
   totalPaidAmount: number;

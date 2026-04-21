@@ -8,7 +8,6 @@ from typing import List, Dict, Optional
 from pydantic import BaseModel
 from datetime import datetime, timezone
 from collections import defaultdict
-from models.service_fee import ServiceFee
 from services.cart_service import remove_cart_items_by_book_ids
 from models.complaint import Complaint
 from sqlalchemy import or_
@@ -22,6 +21,7 @@ from services.email_service import (
 )
 
 logger = logging.getLogger(__name__)
+PLATFORM_SERVICE_FEE_RATE = 0.05
 
 class OrderService:
     """
@@ -100,30 +100,14 @@ class OrderService:
         return orders_data
 
     @staticmethod
-    def _calculate_service_fee(db: Session, base_amount: float) -> float:
-        """
-        Calculate service fee
-        """
-        fee_rule = (
-            db.query(ServiceFee)
-            .filter(ServiceFee.status == True)
-            .order_by(ServiceFee.created_at.desc())
-            .first()
-        )
-        if not fee_rule:
-            return 0.0
+    def _calculate_service_fee(base_amount: float) -> float:
+        """Platform service fee = 5% of the provided subtotal."""
+        return float(base_amount or 0) * PLATFORM_SERVICE_FEE_RATE
 
     @staticmethod
     def _is_post_shipping(shipping_method: Optional[str]) -> bool:
         method = (shipping_method or "").strip().lower()
         return method in {"post", "delivery"}
-
-        if fee_rule.fee_type.upper() == "FIXED":
-            return float(fee_rule.value)
-        elif fee_rule.fee_type.upper() == "PERCENT":
-            return base_amount * float(fee_rule.value) / 100.0
-        else:
-            return 0.0
 
     
     @staticmethod
@@ -133,6 +117,7 @@ class OrderService:
         and return a dict that contains:
             - items: List[CheckoutItem]
             - deposit_or_sale_amount
+            - owner_income_amount
             - service_fee_amount
             - shipping_out_fee_amount
             - order_total
@@ -142,9 +127,10 @@ class OrderService:
                 {
                     "items": [CheckoutItem(ci1), CheckoutItem(ci2)],  # borrow, owner1
                     "deposit_or_sale_amount": 25.0,                   # 10 + 15
+                    "owner_income_amount": 2.5,
                     "service_fee_amount": 5.0,                        # checkout.service_fee
                     "shipping_out_fee_amount": 3.0,                   # first post shipping_quote
-                    "order_total": 33.0                                # 25 + 5 + 3
+                    "order_total": 35.5                               # 25 + 2.5 + 5 + 3
                 },
                 {
                     "items": [CheckoutItem(ci3)],                     # purchase, owner1
@@ -169,6 +155,7 @@ class OrderService:
                 continue
 
             deposit_or_sale_amount = 0
+            owner_income_amount = 0
             shipping_out_fee_amount = 0
 
             # Calculate deposit or sale price
@@ -179,6 +166,12 @@ class OrderService:
                 elif item.action_type.lower() == "borrow":
                     # for borrowing, use deposit
                     deposit_or_sale_amount += float(item.deposit or 0)
+                    book = db.query(Book).filter(Book.id == item.book_id).first()
+                    owner_income_amount += (
+                        float(item.deposit or 0)
+                        * float(getattr(book, "deposit_income_percentage", 0) or 0)
+                        / 100.0
+                    )
 
             # Calculate shipping fee
             post_items = [item for item in order_items if OrderService._is_post_shipping(item.shipping_method)]
@@ -187,16 +180,18 @@ class OrderService:
                 # if pickup, shipping_out_fee_amount = 0
                 shipping_out_fee_amount = float(post_items[0].shipping_quote or 0)
 
-            # Calculate service fee for each order
-            service_fee_amount = OrderService._calculate_service_fee(db, deposit_or_sale_amount)
+            # Platform service fee = (item total incl. shipping) * 5%
+            service_fee_base = deposit_or_sale_amount + owner_income_amount + shipping_out_fee_amount
+            service_fee_amount = OrderService._calculate_service_fee(service_fee_base)
 
             # keep original item
             results.append({
                 "items": order_items,  # Keep CheckoutItem 
                 "deposit_or_sale_amount": deposit_or_sale_amount,
+                "owner_income_amount": owner_income_amount,
                 "service_fee_amount": service_fee_amount,
                 "shipping_out_fee_amount": shipping_out_fee_amount,
-                "order_total": deposit_or_sale_amount + service_fee_amount + shipping_out_fee_amount
+                "order_total": deposit_or_sale_amount + owner_income_amount + service_fee_amount + shipping_out_fee_amount
             })
 
         return results
@@ -224,6 +219,7 @@ class OrderService:
                 action_type = first_item.action_type.lower(),
                 shipping_method = "post" if OrderService._is_post_shipping(first_item.shipping_method) else "pickup",
                 deposit_or_sale_amount = order_info["deposit_or_sale_amount"],
+                owner_income_amount = order_info["owner_income_amount"],
                 service_fee_amount = order_info["service_fee_amount"],
                 shipping_out_fee_amount = order_info["shipping_out_fee_amount"],
                 total_paid_amount = order_info["order_total"],
@@ -294,6 +290,7 @@ class OrderService:
                             "action_type": order.action_type,
                             "shipping_method": order.shipping_method,
                             "deposit_or_sale_amount": float(order.deposit_or_sale_amount or 0),
+                            "owner_income_amount": float(order.owner_income_amount or 0),
                             "shipping_fee_amount": float(order.shipping_out_fee_amount or 0),
                             "service_fee_amount": float(order.service_fee_amount or 0),
                             "total_paid_amount": float(order.total_paid_amount or 0),

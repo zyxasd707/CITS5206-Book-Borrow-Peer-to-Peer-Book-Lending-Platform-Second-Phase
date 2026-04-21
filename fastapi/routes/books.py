@@ -83,6 +83,7 @@ def _to_read(db: Session, b: Book) -> dict:
         "tags": b.tags or [],
         "publishYear": b.publish_year,
         "maxLendingDays": b.max_lending_days,
+        "depositIncomePercentage": int(b.deposit_income_percentage if b.deposit_income_percentage is not None else 0),
         "deliveryMethod": b.delivery_method,
         "salePrice": b.sale_price,
         "deposit": b.deposit,
@@ -106,6 +107,7 @@ class BookCreate(BaseModel):
     tags: Optional[List[str]] = None
     publishYear: Optional[int] = None
     maxLendingDays: int = 14
+    depositIncomePercentage: int = Field(0, ge=0, le=20)
     deliveryMethod: Literal["post","pickup","both"] = "both"
     salePrice: Optional[float] = None
     deposit: Optional[float] = None
@@ -127,6 +129,7 @@ class BookUpdate(BaseModel):
     tags: Optional[List[str]] = None
     publishYear: Optional[int] = None
     maxLendingDays: Optional[int] = None
+    depositIncomePercentage: Optional[int] = Field(None, ge=0, le=20)
     deliveryMethod: Optional[Literal["post","pickup","both"]] = None
     salePrice: Optional[float] = None
     deposit: Optional[float] = None
@@ -156,6 +159,7 @@ def create_book(
         "tags": payload.tags,
         "publish_year": payload.publishYear,
         "max_lending_days": payload.maxLendingDays,
+        "deposit_income_percentage": payload.depositIncomePercentage,
         "delivery_method": payload.deliveryMethod,
         "sale_price": payload.salePrice,
         "deposit": payload.deposit,
@@ -230,6 +234,7 @@ def update_book(
         "coverImgUrl":"cover_img_url","conditionImgURLs":"condition_img_urls",
         "canRent":"can_rent","canSell":"can_sell",
         "publishYear":"publish_year","maxLendingDays":"max_lending_days",
+        "depositIncomePercentage":"deposit_income_percentage",
         "deliveryMethod":"delivery_method","salePrice":"sale_price"
     }
     data = {mapping.get(k, k): v for k, v in payload.dict(exclude_unset=True).items()}
@@ -246,4 +251,3 @@ def delete_book(
 ):
     BookService.delete(db, book_id, user.user_id)
     return None
-

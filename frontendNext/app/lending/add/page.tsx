@@ -2,6 +2,7 @@
 "use client";
 
 import { useState } from "react";
+import { CircleHelp } from "lucide-react";
 import Input from "@/app/components/ui/Input";
 import Button from "@/app/components/ui/Button";
 import Select from "@/app/components/ui/Select";
@@ -21,6 +22,12 @@ type FormState = Omit<Book, "id" | "ownerId" | "dateAdded" | "updateDate"> & {
   conditionFiles: UploadedFile[];
 };
 
+const depositTooltipText =
+  "Deposit is refundable upon timely return of the book in good condition.";
+const estimatedIncomeTooltipText =
+  "This is the owner's optional extra income. It can be 0.";
+const depositIncomePercentages = [0, 5, 10, 15, 20];
+
 export default function AddBook() {
   const [form, setForm] = useState<FormState>({
     titleOr: "",
@@ -34,6 +41,7 @@ export default function AddBook() {
     deposit: undefined,
     salePrice: undefined,
     maxLendingDays: 14,
+    depositIncomePercentage: 5,
     condition: "like-new",
     conditionImgURLs: [],
     isbn: "",
@@ -59,6 +67,8 @@ export default function AddBook() {
 
   const [showErrors, setShowErrors] = useState(false);
   const router = useRouter();
+  const estimatedDepositIncome =
+    ((Number(form.deposit) || 0) * (Number(form.depositIncomePercentage) || 0)) / 100;
 
   const handleChange = (
   e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
@@ -110,7 +120,7 @@ export default function AddBook() {
     }
 
     // 数字字段
-    if (["deposit", "salePrice", "publishYear", "maxLendingDays"].includes(name)) {
+    if (["deposit", "salePrice", "publishYear", "maxLendingDays", "depositIncomePercentage"].includes(name)) {
       (updated as any)[name] = value ? Number(value) : undefined;
       return updated;
     }
@@ -219,6 +229,7 @@ export default function AddBook() {
       publishYear: form.publishYear ? Number(form.publishYear) : undefined,
       tags: tagsInput.split(",").map((t) => t.trim()).filter(Boolean),
       maxLendingDays: Number(form.maxLendingDays) || 14,
+      depositIncomePercentage: Number(form.depositIncomePercentage ?? 0),
 
       deliveryMethod: form.deliveryMethod as Book["deliveryMethod"],
       canRent: form.canRent,
@@ -540,9 +551,24 @@ export default function AddBook() {
 
                   {/* canRent = true */}
                   {form.canRent && (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-3">
+                      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
                       <Input
-                        label="Deposit Fee*"
+                        label={
+                          <span className="flex items-center gap-1.5">
+                            <span>Deposit Fee*</span>
+                            <span className="group relative inline-flex items-center">
+                              <CircleHelp
+                                className="h-4 w-4 cursor-help text-gray-400"
+                                aria-label={depositTooltipText}
+                                title={depositTooltipText}
+                              />
+                              <span className="pointer-events-none absolute left-1/2 top-full z-10 mt-2 w-64 -translate-x-1/2 rounded-md bg-gray-900 px-3 py-2 text-xs font-normal leading-5 text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100">
+                                {depositTooltipText}
+                              </span>
+                            </span>
+                          </span>
+                        }
                         name="deposit"
                         value={form.deposit}
                         onChange={handleChange}
@@ -557,6 +583,35 @@ export default function AddBook() {
                         placeholder="Days"
                         required={form.canRent}
                       />
+                      <Select
+                        label="Income Percentage*"
+                        name="depositIncomePercentage"
+                        value={form.depositIncomePercentage}
+                        onChange={handleChange}
+                        required={form.canRent}
+                      >
+                        {depositIncomePercentages.map((percentage) => (
+                          <option key={percentage} value={percentage}>
+                            {percentage}%
+                          </option>
+                        ))}
+                      </Select>
+                      </div>
+                      <p className="text-sm text-amber-700 flex items-center gap-1.5">
+                        <span>
+                          Estimated Income: AU${estimatedDepositIncome.toFixed(2)} ({form.depositIncomePercentage}% of deposit fee)
+                        </span>
+                        <span className="group relative inline-flex items-center">
+                          <CircleHelp
+                            className="h-4 w-4 cursor-help text-gray-400"
+                            aria-label={estimatedIncomeTooltipText}
+                            title={estimatedIncomeTooltipText}
+                          />
+                          <span className="pointer-events-none absolute left-1/2 top-full z-10 mt-2 w-60 -translate-x-1/2 rounded-md bg-gray-900 px-3 py-2 text-xs font-normal leading-5 text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100">
+                            {estimatedIncomeTooltipText}
+                          </span>
+                        </span>
+                      </p>
                     </div>
                   )}
                 </div>
