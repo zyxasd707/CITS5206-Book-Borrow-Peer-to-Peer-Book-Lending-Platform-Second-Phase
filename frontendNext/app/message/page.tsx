@@ -88,6 +88,18 @@ const NOTIF_ICON_MAP: Record<string, { bg: string; color: string; icon: JSX.Elem
     bg: "bg-amber-100", color: "text-amber-700",
     icon: <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>,
   },
+  DEPOSIT_UPDATED: {
+    bg: "bg-orange-100", color: "text-orange-700",
+    icon: <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>,
+  },
+  DEPOSIT_EVIDENCE_RECEIVED: {
+    bg: "bg-blue-100", color: "text-blue-700",
+    icon: <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>,
+  },
+  USER_RESTRICTED: {
+    bg: "bg-red-100", color: "text-red-700",
+    icon: <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>,
+  },
 };
 
 const getNotifIcon = (type: string) => {
@@ -109,6 +121,9 @@ const getStatusBadge = (type: string) => {
     COMPLETED: { bg: "bg-green-100", text: "text-green-800", label: "Completed" },
     CANCELED: { bg: "bg-gray-100", text: "text-gray-800", label: "Cancelled" },
     REFUND: { bg: "bg-amber-100", text: "text-amber-800", label: "Refund" },
+    DEPOSIT_UPDATED: { bg: "bg-orange-100", text: "text-orange-800", label: "Deposit" },
+    DEPOSIT_EVIDENCE_RECEIVED: { bg: "bg-blue-100", text: "text-blue-800", label: "Evidence" },
+    USER_RESTRICTED: { bg: "bg-red-100", text: "text-red-800", label: "Restricted" },
   };
   const config = map[type] || { bg: "bg-gray-100", text: "text-gray-800", label: type };
   return (

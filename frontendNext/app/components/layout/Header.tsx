@@ -8,7 +8,7 @@ import Input from "../ui/Input";
 import ProfileIncompleteModal from "../ui/ProfileIncompleteModal";
 import { isProfileComplete } from "@/utils/profileValidation";
 
-import { User as UserIcon, LogOut, Plus, Truck, Mail, LifeBuoy, ShoppingBag, ShieldCheck } from "lucide-react";
+import { User as UserIcon, LogOut, Plus, Truck, Mail, LifeBuoy, ShoppingBag, ShieldCheck, Wallet } from "lucide-react";
 import { logoutUser, isAuthenticated, getCurrentUser, getApiUrl, getToken } from "@/utils/auth";
 
 import Avatar from "@/app/components/ui/Avatar";
@@ -288,6 +288,14 @@ const Header: React.FC = () => {
                         onClick={() => setShowProfileMenu(false)}
                       >
                         <Truck className="w-4 h-4 mr-3" />Shipping
+                      </Link>
+
+                      <Link
+                        href="/deposits"
+                        className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                        onClick={() => setShowProfileMenu(false)}
+                      >
+                        <Wallet className="w-4 h-4 mr-3" />My Deposits
                       </Link>
 
                       <Link

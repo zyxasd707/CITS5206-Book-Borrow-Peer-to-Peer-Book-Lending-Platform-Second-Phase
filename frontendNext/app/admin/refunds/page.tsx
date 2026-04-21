@@ -236,7 +236,7 @@ export default function AdminRefundsPage() {
           >
             <Plus className="w-4 h-4" /> Manual Refund
           </button>
-          <Link href="/admin/analytics" className="text-sm underline self-center">
+          <Link href="/admin" className="text-sm underline self-center">
             Back to Dashboard
           </Link>
         </div>
