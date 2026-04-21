@@ -11,6 +11,7 @@ import {
   MessageSquareWarning,
   DollarSign,
   Wallet,
+  BarChart3,
 } from "lucide-react";
 
 type MenuItem = {
