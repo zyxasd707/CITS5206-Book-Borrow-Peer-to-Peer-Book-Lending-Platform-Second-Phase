@@ -15,6 +15,80 @@ import type { ApiOrder } from "@/app/types/order";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
+const formatDisplayDate = (value?: string | null) =>
+  value ? new Date(value).toLocaleDateString() : null;
+
+const getBookStatusDisplay = (book: Book, order?: ApiOrder) => {
+  if (order) {
+    if (order.status === "OVERDUE") {
+      return {
+        label: "Overdue",
+        className: "text-red-600 font-medium",
+        dateLabel: order.dueAt ? `Due on ${formatDisplayDate(order.dueAt)}` : null,
+      };
+    }
+
+    if (order.status === "RETURNED") {
+      return {
+        label: "Returned",
+        className: "text-amber-700 font-medium",
+        dateLabel: order.returnedAt
+          ? `Returned on ${formatDisplayDate(order.returnedAt)}`
+          : null,
+      };
+    }
+
+    if (order.status === "COMPLETED") {
+      return {
+        label: "Completed",
+        className: "text-emerald-600 font-medium",
+        dateLabel: order.completedAt
+          ? `Completed on ${formatDisplayDate(order.completedAt)}`
+          : null,
+      };
+    }
+
+    if (order.status === "BORROWING") {
+      return {
+        label: book.status === "sold" ? "Sold" : "Lend Out",
+        className: book.status === "sold"
+          ? "text-emerald-600 font-medium"
+          : "text-blue-600 font-medium",
+        dateLabel: order.startAt ? `Started on ${formatDisplayDate(order.startAt)}` : null,
+      };
+    }
+  }
+
+  if (book.status === "listed") {
+    return {
+      label: "Listed",
+      className: "text-green-600 font-medium",
+      dateLabel: `Listed on ${formatDisplayDate(book.dateAdded)}`,
+    };
+  }
+
+  if (book.status === "unlisted") {
+    return {
+      label: "Unlisted",
+      className: "text-red-600 font-medium",
+      dateLabel: `Listed on ${formatDisplayDate(book.dateAdded)}`,
+    };
+  }
+
+  if (book.status === "sold") {
+    return {
+      label: "Sold",
+      className: "text-emerald-600 font-medium",
+      dateLabel: `Listed on ${formatDisplayDate(book.dateAdded)}`,
+    };
+  }
+
+  return {
+    label: "Lend Out",
+    className: "text-blue-600 font-medium",
+    dateLabel: `Listed on ${formatDisplayDate(book.dateAdded)}`,
+  };
+};
 
 export default function LendingListPage() {
   const [items, setItems] = useState<Book[]>([]);
@@ -70,11 +144,11 @@ export default function LendingListPage() {
     let alive = true;
 
     (async () => {
-      const lentBooks = items.filter(
-        (book) => book.status === "lent"
+      const booksWithOrders = items.filter(
+        (book) => book.status === "lent" || book.status === "sold"
       );
 
-      if (lentBooks.length === 0) {
+      if (booksWithOrders.length === 0) {
         if (alive) {
           setOrderMap({});
           setActiveOrderIdByBook({});
@@ -83,7 +157,7 @@ export default function LendingListPage() {
       }
 
       const resolved = await Promise.all(
-        lentBooks.map(async (book) => {
+        booksWithOrders.map(async (book) => {
           try {
             let orderId = book.currentOrderId;
 
@@ -295,7 +369,16 @@ export default function LendingListPage() {
                   ? orderMap[activeOrderId]
                   : undefined;
                 const canShip = currentOrder?.status === "PENDING_SHIPMENT";
+                const hasBorrowerReceived =
+                  !!currentOrder?.shippingOutTrackingNumber &&
+                  ["BORROWING", "OVERDUE", "RETURNED", "COMPLETED"].includes(
+                    currentOrder?.status ?? ""
+                  );
                 const canMessageBorrower = !!currentOrder?.borrower?.email;
+                const isTransferredBook =
+                  book.status === "lent" || book.status === "sold";
+                const counterpartyLabel = book.status === "sold" ? "Buyer" : "Borrower";
+                const statusDisplay = getBookStatusDisplay(book, currentOrder);
 
                 return (
                 <Card key={book.id} className="relative overflow-visible flex gap-4 p-4 border border-gray-200 rounded-xl hover:shadow-md transition">
@@ -366,19 +449,8 @@ export default function LendingListPage() {
 
                       {/* status +  createTime */}
                       <p className="text-sm text-gray-600 mt-1">
-                        {book.status === "listed" && (
-                          <span className="text-green-600 font-medium">Listed</span>
-                        )}
-                        {book.status === "unlisted" && (
-                          <span className="text-red-600 font-medium">Unlisted</span>
-                        )}
-                        {book.status === "lent" && (
-                          <span className="text-blue-600 font-medium">Lend Out</span>
-                        )}
-                        {book.status === "sold" && (
-                          <span className="text-gray-500 font-medium">Sold</span>
-                        )}
-                        {" · "}Listed on {new Date(book.dateAdded).toLocaleDateString()}
+                        <span className={statusDisplay.className}>{statusDisplay.label}</span>
+                        {statusDisplay.dateLabel && ` · ${statusDisplay.dateLabel}`}
                       </p>
                     </div>
 
@@ -414,7 +486,7 @@ export default function LendingListPage() {
                           List
                         </Button>
                       )}
-                      {book.status === "lent" && (
+                      {isTransferredBook && (
                         <>
                           {activeOrderId && (
                             <Button
@@ -427,14 +499,23 @@ export default function LendingListPage() {
                             </Button>
                           )}
 
-                          {activeOrderId && canShip && (
+                          {activeOrderId && (canShip || hasBorrowerReceived) && (
                             <Button
                               variant="outline"
                               size="sm"
                               className="border-black text-black hover:bg-black hover:text-white"
-                              onClick={() => openShipmentModal(activeOrderId, currentOrder)}
+                              disabled={hasBorrowerReceived}
+                              onClick={() => {
+                                if (!hasBorrowerReceived) {
+                                  openShipmentModal(activeOrderId, currentOrder);
+                                }
+                              }}
                             >
-                              {currentOrder?.shippingOutTrackingNumber ? "Update Shipment" : "Ship"}
+                              {hasBorrowerReceived
+                                ? "Shipped"
+                                : currentOrder?.shippingOutTrackingNumber
+                                  ? "Update Shipment"
+                                  : "Ship"}
                             </Button>
                           )}
 
@@ -444,7 +525,7 @@ export default function LendingListPage() {
                             disabled={!canMessageBorrower}
                             onClick={() => {
                               if (!currentOrder?.borrower?.email) {
-                                alert("Borrower contact is not available yet.");
+                                alert(`${counterpartyLabel} contact is not available yet.`);
                                 return;
                               }
 
@@ -456,7 +537,7 @@ export default function LendingListPage() {
                               router.push(`/message?${params.toString()}`);
                             }}
                           >
-                            Message Borrower
+                            {`Message ${counterpartyLabel}`}
                           </Button>
 
                           {/* due date info when book lent-out */}
