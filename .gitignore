@@ -164,3 +164,6 @@ fastapi/media/*/deposit_evidence/
 # Local-only docs/notes
 docs/architecture-diagram.html
 如何测试 测试 账户 普通 管理员Admin.txt
+
+# AI assistant local state (per-user, never committed)
+.claude/
