@@ -1,18 +1,15 @@
-from fastapi import APIRouter, Depends
+from datetime import date, datetime, timedelta
+from collections import Counter
+
+from fastapi import APIRouter, Depends, Query, HTTPException
+from sqlalchemy import func, text
 from sqlalchemy.orm import Session
-from sqlalchemy import func
 
 from core.dependencies import get_db, get_current_admin
 from models.user import User
 from models.book import Book
 from models.order import Order
-from datetime import datetime, timedelta
-from collections import Counter
-from datetime import date
-from datetime import datetime
-from fastapi import Query
-from fastapi import APIRouter, Depends, Query
-from fastapi import APIRouter, Depends, Query, HTTPException
+
 router = APIRouter(prefix="/analytics", tags=["Analytics"])
 
 
@@ -309,9 +306,7 @@ def get_transactions_over_time(
         .all()
     )
 
-<<<<<<< HEAD
     return [{"date": r.date, "count": r.count} for r in results]
-
 
 @router.get("/financial-metrics")
 def get_financial_metrics(
@@ -481,6 +476,3 @@ def get_financial_metrics(
             for row in recent_transactions
         ],
     }
-=======
-    return [{"date": r.date, "count": r.count} for r in results]
->>>>>>> origin/main
