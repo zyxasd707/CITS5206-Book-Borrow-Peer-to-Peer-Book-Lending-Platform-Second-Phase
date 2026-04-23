@@ -118,7 +118,7 @@ def get_complaint(
     """
 
     c = ComplaintService.get(db, complaint_id)
-    if user.user_id not in (c.complainant_id, c.respondent_id) and user.user_id != "admin":  # TODO: Change the admin to a proper judging logic
+    if user.user_id not in (c.complainant_id, c.respondent_id) and not user.is_admin:  # TODO: Change the admin to a proper judging logic
         raise HTTPException(status_code=403, detail="Forbidden")
     msgs = ComplaintService.list_messages(db, complaint_id=complaint_id)
     return {"complaint": _to_read(c), "messages": [_msg_to_read(m) for m in msgs]}
