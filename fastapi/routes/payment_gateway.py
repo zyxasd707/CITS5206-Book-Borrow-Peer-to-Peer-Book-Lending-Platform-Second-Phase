@@ -178,7 +178,7 @@ def get_refunds_for_order(order_id: str, db: Session = Depends(get_db)):
 @router.post("/payment/refund/cancel/{order_id}", status_code=status.HTTP_200_OK)
 def cancel_order_with_refund(order_id: str, db: Session = Depends(get_db)):
     """
-    Cancel an order and trigger automatic full refund (deposit + shipping).
+    Cancel an order and trigger automatic full refund (total paid).
     Only works for orders in PENDING_SHIPMENT status.
     """
     result = payment_gateway_service.refund_on_cancel(db=db, order_id=order_id, actor="user")

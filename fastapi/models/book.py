@@ -45,6 +45,7 @@ class Book(Base):
     tags = Column(JSON, nullable=True)                           # tags: string[]（MySQL JSON）
     publish_year = Column(Integer, nullable=True)
     max_lending_days = Column(Integer, nullable=False, default=14)
+    deposit_income_percentage = Column(Integer, nullable=False, default=0)
 
     # delivery
     delivery_method = Column(Enum(*DELIVERY_METHOD_ENUM, name="delivery_method_enum"), nullable=False, default="both")

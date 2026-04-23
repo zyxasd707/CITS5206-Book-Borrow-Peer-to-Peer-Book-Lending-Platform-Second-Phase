@@ -83,6 +83,7 @@ class Order(Base):
     # Pricing
     # Core pricing
     deposit_or_sale_amount = Column(DECIMAL(10, 2), nullable=False, default=0.00)
+    owner_income_amount = Column(DECIMAL(10, 2), nullable=False, default=0.00)
     service_fee_amount = Column(DECIMAL(10, 2), nullable=False, default=0.00)
     shipping_out_fee_amount = Column(DECIMAL(10, 2), nullable=True)  # Optional
     
@@ -159,6 +160,7 @@ class Order(Base):
             "actionType": self.action_type,
             "shippingMethod": self.shipping_method,
             "depositOrSaleAmount": float(self.deposit_or_sale_amount or 0),
+            "ownerIncomeAmount": float(self.owner_income_amount or 0),
             "serviceFeeAmount": float(self.service_fee_amount or 0),
             "shippingOutFeeAmount": float(self.shipping_out_fee_amount or 0),
             "totalPaidAmount": float(self.total_paid_amount or 0),

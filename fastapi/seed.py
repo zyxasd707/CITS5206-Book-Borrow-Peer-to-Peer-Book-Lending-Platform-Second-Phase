@@ -83,7 +83,7 @@ USERS = [
         "name": "Admin User",
         "first_name": "Admin",
         "last_name": "User",
-        "email": "admin@bookhive.com",
+        "email": "admin@bookborrow.com",
         "password": "Admin123!",
         "location": "Perth, WA",
         "country": "Australia",

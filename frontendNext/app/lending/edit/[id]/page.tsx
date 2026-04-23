@@ -2,8 +2,10 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { CircleHelp } from "lucide-react";
 import Input from "@/app/components/ui/Input";
 import Button from "@/app/components/ui/Button";
+import Select from "@/app/components/ui/Select";
 import { Book } from "@/app/types/book";
 import { getBookById, updateBook, uploadFile } from "@/utils/books";
 import { getCurrentUser } from "@/utils/auth";
@@ -18,6 +20,12 @@ type FormState = Omit<Book, "id" | "ownerId" | "dateAdded" | "updateDate"> & {
   coverFile: UploadedFile | null;
   conditionFiles: UploadedFile[];
 };
+
+const depositTooltipText =
+  "Deposit is refundable upon timely return of the book in good condition.";
+const estimatedIncomeTooltipText =
+  "This is the owner's optional extra income. It can be 0.";
+const depositIncomePercentages = [0, 5, 10, 15, 20];
 
 export default function EditBookPage() {
   const { id: bookId } = useParams<{ id: string }>();
@@ -54,6 +62,7 @@ export default function EditBookPage() {
         tags: b.tags ?? [],
         publishYear: b.publishYear,
         maxLendingDays: b.maxLendingDays,
+        depositIncomePercentage: b.depositIncomePercentage ?? 0,
         deliveryMethod: b.deliveryMethod,
         salePrice: b.salePrice,
         deposit: b.deposit,
@@ -79,12 +88,14 @@ export default function EditBookPage() {
     setForm((prev) => {
       if (!prev) return prev;
 
-      if (["deposit", "salePrice", "publishYear", "maxLendingDays"].includes(name)) {
+      if (["deposit", "salePrice", "publishYear", "maxLendingDays", "depositIncomePercentage"].includes(name)) {
         return { ...prev, [name]: value ? Number(value) : undefined };
       }
       return { ...prev, [name]: type === "checkbox" ? checked : value };
     });
   };
+  const estimatedDepositIncome =
+    ((Number(form.deposit) || 0) * (Number(form.depositIncomePercentage) || 0)) / 100;
 
   // upload cover
   const handleCoverFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -172,6 +183,7 @@ export default function EditBookPage() {
       tags: tagsInput.split(",").map((t) => t.trim()).filter(Boolean),
       publishYear: form.publishYear,
       maxLendingDays: form.maxLendingDays,
+      depositIncomePercentage: Number(form.depositIncomePercentage ?? 0),
       deliveryMethod: form.deliveryMethod,
       salePrice: form.salePrice,
       deposit: form.deposit,
@@ -471,9 +483,24 @@ export default function EditBookPage() {
 
                   {/* when canRent = true */}
                   {form.canRent && (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-3">
+                      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
                       <Input
-                        label="Deposit Fee*"
+                        label={
+                          <span className="flex items-center gap-1.5">
+                            <span>Deposit Fee*</span>
+                            <span className="group relative inline-flex items-center">
+                              <CircleHelp
+                                className="h-4 w-4 cursor-help text-gray-400"
+                                aria-label={depositTooltipText}
+                                title={depositTooltipText}
+                              />
+                              <span className="pointer-events-none absolute left-1/2 top-full z-10 mt-2 w-64 -translate-x-1/2 rounded-md bg-gray-900 px-3 py-2 text-xs font-normal leading-5 text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100">
+                                {depositTooltipText}
+                              </span>
+                            </span>
+                          </span>
+                        }
                         name="deposit"
                         value={form.deposit}
                         onChange={handleChange}
@@ -482,12 +509,41 @@ export default function EditBookPage() {
                       />
                       <Input
                         label="Lend Duration*"
-                        name="lendDuration"
+                        name="maxLendingDays"
                         value={form.maxLendingDays}
                         onChange={handleChange}
                         placeholder="Days"
                         required={form.canRent}
                       />
+                      <Select
+                        label="Income Percentage*"
+                        name="depositIncomePercentage"
+                        value={form.depositIncomePercentage}
+                        onChange={handleChange}
+                        required={form.canRent}
+                      >
+                        {depositIncomePercentages.map((percentage) => (
+                          <option key={percentage} value={percentage}>
+                            {percentage}%
+                          </option>
+                        ))}
+                      </Select>
+                      </div>
+                      <p className="text-sm text-amber-700 flex items-center gap-1.5">
+                        <span>
+                          Estimated Income: AU${estimatedDepositIncome.toFixed(2)} ({form.depositIncomePercentage}% of deposit fee)
+                        </span>
+                        <span className="group relative inline-flex items-center">
+                          <CircleHelp
+                            className="h-4 w-4 cursor-help text-gray-400"
+                            aria-label={estimatedIncomeTooltipText}
+                            title={estimatedIncomeTooltipText}
+                          />
+                          <span className="pointer-events-none absolute left-1/2 top-full z-10 mt-2 w-60 -translate-x-1/2 rounded-md bg-gray-900 px-3 py-2 text-xs font-normal leading-5 text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100">
+                            {estimatedIncomeTooltipText}
+                          </span>
+                        </span>
+                      </p>
                     </div>
                   )}
                 </div>

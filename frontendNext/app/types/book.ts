@@ -43,6 +43,7 @@ export interface Book {
   tags: string[];
   publishYear?: number;
   maxLendingDays: number;
+  depositIncomePercentage?: number;
 
   // 配送
   deliveryMethod: "post" | "pickup" | "both";

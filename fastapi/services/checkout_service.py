@@ -5,11 +5,12 @@ import os
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 from models.checkout import Checkout, CheckoutItem, CheckoutCreate
-from models.service_fee import ServiceFee
+from models.book import Book
 from models.user import User 
 
 BASE_URL = "https://digitalapi.auspost.com.au/postage/parcel/domestic/calculate.json"
 AUSPOST_API_KEY = os.getenv("AUSPOST_CALCULATE_API_KEY")
+PLATFORM_SERVICE_FEE_RATE = 0.05
 
 
 # -------- Shipping fee calculator --------
@@ -129,6 +130,7 @@ async def update_checkout(db: Session, checkout_id: str, checkoutIn: CheckoutCre
 
 async def _apply_checkout_data(db: Session, checkout: Checkout, checkoutIn: CheckoutCreate):
     depositTotal = 0.0
+    ownerIncomeTotal = 0.0
     priceTotal = 0.0
     ownerData = {}
 
@@ -139,10 +141,16 @@ async def _apply_checkout_data(db: Session, checkout: Checkout, checkoutIn: Chec
     # Step B: ownerData + items
     for itemIn in checkoutIn.items:
         user = db.query(User).filter(User.user_id == itemIn.ownerId).first()
+        book = db.query(Book).filter(Book.id == itemIn.bookId).first()
         if not user or not user.zip_code:
             raise HTTPException(
                 status_code=400,
                 detail=f"Zipcode not found for owner {itemIn.ownerId}"
+            )
+        if not book:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Book not found for checkout item {itemIn.bookId}"
             )
 
         ownerData[itemIn.ownerId] = {
@@ -154,6 +162,11 @@ async def _apply_checkout_data(db: Session, checkout: Checkout, checkoutIn: Chec
             priceTotal += float(itemIn.price)
         elif itemIn.actionType.upper() == "BORROW" and itemIn.deposit:
             depositTotal += float(itemIn.deposit)
+            ownerIncomeTotal += (
+                float(itemIn.deposit)
+                * float(getattr(book, "deposit_income_percentage", 0) or 0)
+                / 100.0
+            )
 
         item = CheckoutItem(
             item_id=str(uuid.uuid4()),
@@ -182,24 +195,17 @@ async def _apply_checkout_data(db: Session, checkout: Checkout, checkoutIn: Chec
                 shippingFeeTotal += float(item.shipping_quote)
                 processedOwners.add(item.owner_id)
 
-
-    # Step D: service fee
-    serviceFeeRate = (
-        db.query(ServiceFee)
-        .filter(ServiceFee.status == True, ServiceFee.fee_type == "PERCENT")
-        .order_by(ServiceFee.created_at.desc())
-        .first()
-    )
-    serviceFeeAmount = 0.0
-    if serviceFeeRate:
-        serviceFeeAmount = (priceTotal + depositTotal) * float(serviceFeeRate.value) / 100.0
+    # Step D: platform service fee = (item total incl. shipping) * 5%
+    subtotalBeforeServiceFee = depositTotal + ownerIncomeTotal + priceTotal + shippingFeeTotal
+    serviceFeeAmount = subtotalBeforeServiceFee * PLATFORM_SERVICE_FEE_RATE
 
     # Step E: update checkout totals
     checkout.deposit = depositTotal
+    checkout.owner_income_amount = ownerIncomeTotal
     checkout.book_fee = priceTotal
     checkout.service_fee = serviceFeeAmount
     checkout.shipping_fee = shippingFeeTotal
-    checkout.total_due = depositTotal + priceTotal + serviceFeeAmount + shippingFeeTotal
+    checkout.total_due = depositTotal + ownerIncomeTotal + priceTotal + serviceFeeAmount + shippingFeeTotal
 
     return checkout
 
@@ -230,4 +236,3 @@ def delete_checkout(db: Session, checkout_id: str) -> bool:
     db.delete(checkout)
     db.commit()
     return True
-
