@@ -1,6 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
+import { getCurrentUser } from "@/utils/auth";
+import { getFinancialMetrics, FinancialMetricsData } from "@/utils/analytics";
 
 type DistributionItem = {
     label: string;
@@ -59,58 +62,30 @@ export default function FinancialMetricsPage() {
     const [filterLoading, setFilterLoading] = useState(false);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
+    const [dateError, setDateError] = useState("");
 
     const token =
         typeof window !== "undefined"
             ? localStorage.getItem("access_token")
             : null;
 
+    const [meAdmin, setMeAdmin] = useState(false);
+
+    function isAdminLikeUser(user: { is_admin?: boolean } | null) {
+        return Boolean(user?.is_admin);
+    }
+
     const fetchFinancialMetrics = async (useFilter = false) => {
-        if (!token) {
-            setError("No access token found. Please log in as admin.");
-            setLoading(false);
-            return;
-        }
-
-        if (useFilter) {
-            setFilterLoading(true);
-        }
-
+        if (useFilter) setFilterLoading(true);
         setError("");
 
         try {
-            const params = new URLSearchParams();
-            if (fromDate) params.append("from_date", fromDate);
-            if (toDate) params.append("to_date", toDate);
+            const params: { from_date?: string; to_date?: string } = {};
+            if (fromDate) params.from_date = fromDate;
+            if (toDate) params.to_date = toDate;
 
-            const res = await fetch(
-                `http://localhost:8000/api/v1/analytics/financial-metrics?${params.toString()}`,
-                {
-                    headers: {
-                        Authorization: `Bearer ${token}`,
-                    },
-                }
-            );
-
-            if (!res.ok) {
-                throw new Error("Failed to fetch financial metrics");
-            }
-
-            const result = await res.json();
-            setMetrics({
-                total_transactions: result.total_transactions ?? 0,
-                gross_transaction_value: result.gross_transaction_value ?? 0,
-                platform_revenue: result.platform_revenue ?? 0,
-                average_transaction_value: result.average_transaction_value ?? 0,
-                borrow_transactions: result.borrow_transactions ?? 0,
-                purchase_transactions: result.purchase_transactions ?? 0,
-                payment_method_distribution: result.payment_method_distribution ?? [],
-                total_refunds: result.total_refunds ?? 0,
-                total_refund_amount: result.total_refund_amount ?? 0,
-                refund_rate: result.refund_rate ?? 0,
-                top_earning_users: result.top_earning_users ?? [],
-                recent_transactions: result.recent_transactions ?? [],
-            });
+            const result = await getFinancialMetrics(params);
+            setMetrics(result as FinancialMetricsData);
         } catch (err) {
             console.error(err);
             setError("Could not load financial metrics.");
@@ -120,9 +95,44 @@ export default function FinancialMetricsPage() {
         }
     };
 
+    // Validate date range: if both present, ensure fromDate <= toDate
     useEffect(() => {
-        fetchFinancialMetrics();
-    }, [token]);
+        if (!fromDate || !toDate) {
+            setDateError("");
+            return;
+        }
+
+        try {
+            const f = new Date(fromDate);
+            const t = new Date(toDate);
+            if (isNaN(f.getTime()) || isNaN(t.getTime())) {
+                setDateError("Invalid date format.");
+            } else if (f > t) {
+                setDateError("From date must be before or equal to To date.");
+            } else {
+                setDateError("");
+            }
+        } catch {
+            setDateError("Invalid date.");
+        }
+    }, [fromDate, toDate]);
+
+    useEffect(() => {
+        (async () => {
+            try {
+                const me = await getCurrentUser();
+                setMeAdmin(isAdminLikeUser(me));
+            } catch {
+                setMeAdmin(false);
+            } finally {
+                setLoading(false);
+            }
+        })();
+    }, []);
+
+    useEffect(() => {
+        if (meAdmin) fetchFinancialMetrics();
+    }, [meAdmin]);
 
     const handleFilter = async () => {
         await fetchFinancialMetrics(true);
@@ -132,9 +142,27 @@ export default function FinancialMetricsPage() {
         return <p className="text-gray-600">Loading financial metrics...</p>;
     }
 
+    if (!meAdmin) {
+        return (
+            <div className="max-w-4xl mx-auto p-6">
+                <h1 className="text-3xl font-bold mb-6">Financial Metrics</h1>
+                <p className="text-red-600">Admin access required.</p>
+            </div>
+        );
+    }
+
     return (
-        <div>
-            <h1 className="text-3xl font-bold mb-6">Financial Metrics</h1>
+        <div className="max-w-7xl mx-auto p-6 space-y-6">
+            {/* Header */}
+            <div className="flex items-center justify-between">
+                <div>
+                    <h1 className="text-2xl font-bold">Financial Metrics</h1>
+                    <p className="text-gray-600">Platform financial overview and transactions.</p>
+                </div>
+                <Link href="/admin" className="text-sm underline self-center">
+                    Back to Dashboard
+                </Link>
+            </div>
 
             {error && (
                 <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -169,16 +197,19 @@ export default function FinancialMetricsPage() {
                     <div>
                         <button
                             onClick={handleFilter}
-                            disabled={filterLoading}
+                            disabled={filterLoading || !!dateError}
                             className="w-full rounded-lg bg-blue-600 text-white px-4 py-2 font-medium hover:bg-blue-700 disabled:opacity-60"
                         >
                             {filterLoading ? "Loading..." : "Filter"}
                         </button>
+                        {dateError && (
+                            <p className="text-sm text-red-600 mt-2">{dateError}</p>
+                        )}
                     </div>
                 </div>
             </div>
 
-            <div className="grid grid-cols-1 xl:grid-cols-4 gap-6 mb-8">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
                 <div className="bg-white rounded-xl shadow-sm border p-5">
                     <p className="text-sm text-gray-500">Total Transactions</p>
                     <h2 className="text-2xl font-bold mt-2">{metrics.total_transactions}</h2>

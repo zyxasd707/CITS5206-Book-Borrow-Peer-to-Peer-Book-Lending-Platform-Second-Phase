@@ -21,7 +21,6 @@ type MenuItem = {
 };
 
 const menuItems: MenuItem[] = [
-  { label: "Dashboard", href: "/admin", icon: LayoutDashboard },
   { label: "User Metrics", href: "/admin/user-metrics", icon: Users },
   { label: "Book Metrics", href: "/admin/book-metrics", icon: BookOpen },
   { label: "View Orders", href: "/admin/view-orders", icon: ClipboardList },

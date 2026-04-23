@@ -369,13 +369,21 @@ def get_financial_metrics(
         where_clauses.append("o.created_at <= :end_date")
         params["end_date"] = end_date
 
-    where_sql = ""
-    if where_clauses:
-        where_sql = "WHERE " + " AND ".join(where_clauses)
+    where_sql = f"WHERE {' AND '.join(where_clauses)}" if where_clauses else ""
 
-    order_filter_sql = ""
-    if where_clauses:
-        order_filter_sql = " AND " + " AND ".join(where_clauses)
+    # Refunds should be filtered by the refund timestamp, not the order timestamp.
+    refund_where_clauses = []
+    if start_date:
+        refund_where_clauses.append("r.created_at >= :start_date")
+
+    if end_date:
+        refund_where_clauses.append("r.created_at <= :end_date")
+
+    refund_where_sql = ""
+    if refund_where_clauses:
+        refund_where_sql = "WHERE " + " AND ".join(refund_where_clauses)
+
+    order_filter_sql = f" AND {' AND '.join(where_clauses)}" if where_clauses else ""
 
     summary_sql = text(f"""
         SELECT
@@ -392,11 +400,11 @@ def get_financial_metrics(
     refund_sql = text(f"""
         SELECT
             COUNT(r.id) AS total_refunds,
-            COALESCE(SUM(r.amount), 0) AS total_refund_amount
+            COALESCE(SUM(r.amount), 0) / 100.0 AS total_refund_amount
         FROM refunds r
         JOIN payments p ON p.payment_id = r.payment_id
         JOIN orders o ON o.payment_id = p.payment_id
-        {where_sql}
+        {refund_where_sql}
     """)
 
     payment_distribution_sql = text(f"""
@@ -409,6 +417,12 @@ def get_financial_metrics(
         GROUP BY COALESCE(p.action_type, 'unknown')
         ORDER BY value DESC
     """)
+
+    # Top earning users:
+    # 1. Find all successful borrow/purchase orders
+    # 2. Get the owner of each order
+    # 3. Sum the transferred amount paid to each owner
+    # 4. Rank owners by highest total earnings
 
     top_earners_sql = text(f"""
         SELECT
@@ -453,13 +467,6 @@ def get_financial_metrics(
     total_transactions = int(summary["total_transactions"] or 0)
     total_refunds = int(refunds["total_refunds"] or 0)
     refund_rate = round((total_refunds / total_transactions) * 100, 2) if total_transactions else 0
-
-
-# Top earning users:
-# 1. Find all successful borrow/purchase orders
-# 2. Get the owner of each order
-# 3. Sum the transferred amount paid to each owner
-# 4. Rank owners by highest total earnings
 
     return {
         "total_transactions": total_transactions,

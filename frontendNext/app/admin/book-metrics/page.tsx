@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import {
     Chart as ChartJS,
     ArcElement,
@@ -267,12 +268,19 @@ export default function BookMetricsPage() {
     };
 
     return (
-        <div>
-            <h1 className="text-3xl font-bold mb-6">
-                Book Inventory & Activity Metrics
-            </h1>
+        <div className="max-w-7xl mx-auto p-6 space-y-6">
+            {/* Header */}
+            <div className="flex items-center justify-between">
+                <div>
+                    <h1 className="text-2xl font-bold">Book Inventory & Activity Metrics</h1>
+                    <p className="text-gray-600">Overview of book listings, categories, and user activity.</p>
+                </div>
+                <Link href="/admin" className="text-sm underline self-center">
+                    Back to Dashboard
+                </Link>
+            </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 mb-8">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
                 {cards.map((card) => (
                     <div
                         key={card.title}
