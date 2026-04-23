@@ -223,7 +223,7 @@ export default function FinancialMetricsPage() {
                 </div>
 
                 <div className="bg-white rounded-xl shadow-sm border p-5">
-                    <p className="text-sm text-gray-500">Platform Revenue (5%)</p>
+                    <p className="text-sm text-gray-500">Platform Revenue ($2 per transaction)</p>
                     <h2 className="text-2xl font-bold mt-2">
                         ${metrics.platform_revenue.toFixed(2)}
                     </h2>

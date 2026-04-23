@@ -363,7 +363,7 @@ def get_financial_metrics(
             COUNT(o.id) AS total_transactions,
             COALESCE(SUM(o.total_paid_amount), 0) AS gross_transaction_value,
             COALESCE(AVG(o.total_paid_amount), 0) AS average_transaction_value,
-            COALESCE(SUM(o.total_paid_amount) * 0.05, 0) AS platform_revenue,
+            COALESCE(COUNT(o.id) * 2, 0) AS platform_revenue,
             SUM(CASE WHEN LOWER(o.action_type) = 'borrow' THEN 1 ELSE 0 END) AS borrow_transactions,
             SUM(CASE WHEN LOWER(o.action_type) = 'purchase' THEN 1 ELSE 0 END) AS purchase_transactions
         FROM orders o

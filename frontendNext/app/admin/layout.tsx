@@ -27,6 +27,7 @@ const menuItems: MenuItem[] = [
   { label: "Complaints", href: "/admin/complaints", icon: MessageSquareWarning },
   { label: "Refunds", href: "/admin/refunds", icon: DollarSign },
   { label: "Deposits", href: "/admin/deposits", icon: Wallet },
+  { label: "Financial Metrics", href: "/admin/financial-metrics", icon: Wallet },
 ];
 
 export default function AdminLayout({
@@ -51,11 +52,10 @@ export default function AdminLayout({
               <Link
                 key={item.href}
                 href={item.href}
-                className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
-                  active
+                className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${active
                     ? "bg-blue-100 text-blue-700"
                     : "text-gray-700 hover:bg-gray-100"
-                }`}
+                  }`}
               >
                 <Icon className="w-4 h-4" />
                 <span>{item.label}</span>
