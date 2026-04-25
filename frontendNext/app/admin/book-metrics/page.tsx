@@ -8,6 +8,7 @@ import {
     Tooltip,
     Legend,
 } from "chart.js";
+import { BookOpen, LibraryBig, Repeat, Tags } from "lucide-react";
 import { Pie } from "react-chartjs-2";
 
 ChartJS.register(ArcElement, Tooltip, Legend);
@@ -225,12 +226,29 @@ export default function BookMetricsPage() {
     }
 
     const cards = [
-        { title: "Total Books Listed", value: metrics.total_books },
-        { title: "Books Available for Loan", value: metrics.books_for_loan },
-        { title: "Books Available for Sale", value: metrics.books_for_sale },
+        {
+            title: "Total Books Listed",
+            value: metrics.total_books,
+            icon: LibraryBig,
+            className: "text-blue-600",
+        },
+        {
+            title: "Books Available for Loan",
+            value: metrics.books_for_loan,
+            icon: Repeat,
+            className: "text-green-600",
+        },
+        {
+            title: "Books Available for Sale",
+            value: metrics.books_for_sale,
+            icon: Tags,
+            className: "text-orange-600",
+        },
         {
             title: "Books Listed Per User (Average)",
             value: averageData.average_books_per_user,
+            icon: BookOpen,
+            className: "text-violet-600",
         },
     ];
 
@@ -281,15 +299,20 @@ export default function BookMetricsPage() {
             </div>
 
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-                {cards.map((card) => (
+                {cards.map((card) => {
+                    const Icon = card.icon;
+                    return (
                     <div
                         key={card.title}
                         className="bg-white rounded-xl shadow-sm border p-5"
                     >
-                        <p className="text-sm text-gray-500">{card.title}</p>
+                        <div className={`flex items-center gap-2 text-sm mb-1 ${card.className}`}>
+                            <Icon className="w-4 h-4" /> {card.title}
+                        </div>
                         <h2 className="text-2xl font-bold mt-2">{card.value}</h2>
                     </div>
-                ))}
+                    );
+                })}
             </div>
 
             <div className="grid grid-cols-1 xl:grid-cols-2 gap-8 mb-8">

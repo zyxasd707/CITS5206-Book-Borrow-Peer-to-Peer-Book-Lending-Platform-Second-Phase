@@ -11,6 +11,7 @@ import {
   MessageSquareWarning,
   DollarSign,
   Wallet,
+  Truck,
 } from "lucide-react";
 
 type MenuItem = {
@@ -28,6 +29,7 @@ const menuItems: MenuItem[] = [
   { label: "Refunds", href: "/admin/refunds", icon: DollarSign },
   { label: "Deposits", href: "/admin/deposits", icon: Wallet },
   { label: "Financial Metrics", href: "/admin/financial-metrics", icon: Wallet },
+  { label: "Shipping Dashboard", href: "/admin/shipping-dashboard", icon: Truck },
 ];
 
 export default function AdminLayout({

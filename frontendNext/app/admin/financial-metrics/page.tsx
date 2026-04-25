@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { getCurrentUser } from "@/utils/auth";
+import { BarChart3, CircleDollarSign, ReceiptText, TrendingUp } from "lucide-react";
 import {
     getFinancialMetrics,
     getPlatformFeeSetting,
@@ -251,28 +252,35 @@ export default function FinancialMetricsPage() {
 
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
                 <div className="bg-white rounded-xl shadow-sm border p-5">
-                    <p className="text-sm text-gray-500">Total Transactions</p>
+                    <div className="flex items-center gap-2 text-blue-600 text-sm mb-1">
+                        <ReceiptText className="w-4 h-4" /> Total Transactions
+                    </div>
                     <h2 className="text-2xl font-bold mt-2">{metrics.total_transactions}</h2>
                 </div>
 
                 <div className="bg-white rounded-xl shadow-sm border p-5">
-                    <p className="text-sm text-gray-500">Gross Transaction Value</p>
+                    <div className="flex items-center gap-2 text-green-600 text-sm mb-1">
+                        <CircleDollarSign className="w-4 h-4" /> Gross Transaction Value
+                    </div>
                     <h2 className="text-2xl font-bold mt-2">
                         ${metrics.gross_transaction_value.toFixed(2)}
                     </h2>
                 </div>
 
                 <div className="bg-white rounded-xl shadow-sm border p-5">
-                    <p className="text-sm text-gray-500">
+                    <div className="flex items-center gap-2 text-violet-600 text-sm mb-1">
+                        <TrendingUp className="w-4 h-4" />
                         Platform Revenue (${platformFee.toFixed(2)} per transaction)
-                    </p>
+                    </div>
                     <h2 className="text-2xl font-bold mt-2">
                         ${metrics.platform_revenue.toFixed(2)}
                     </h2>
                 </div>
 
                 <div className="bg-white rounded-xl shadow-sm border p-5">
-                    <p className="text-sm text-gray-500">Average Transaction Value</p>
+                    <div className="flex items-center gap-2 text-orange-600 text-sm mb-1">
+                        <BarChart3 className="w-4 h-4" /> Average Transaction Value
+                    </div>
                     <h2 className="text-2xl font-bold mt-2">
                         ${metrics.average_transaction_value.toFixed(2)}
                     </h2>

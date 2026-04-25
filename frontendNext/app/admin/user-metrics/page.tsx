@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Wallet } from "lucide-react";
+import { BookMarked, MapPin, UserPlus, Users } from "lucide-react";
 
 type UserMetricsData = {
     total_users: number;
@@ -162,22 +162,30 @@ export default function UserMetricsPage() {
             {/* KPI Cards */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div className="rounded-xl border bg-white p-4">
-                    <div className="text-sm text-gray-500 mb-1">Total Registered Users</div>
+                    <div className="flex items-center gap-2 text-blue-600 text-sm mb-1">
+                        <Users className="w-4 h-4" /> Total Registered Users
+                    </div>
                     <div className="text-2xl font-bold">{metrics.total_users}</div>
                 </div>
 
                 <div className="rounded-xl border bg-white p-4">
-                    <div className="text-sm text-gray-500 mb-1">Sign-ups (selected)</div>
+                    <div className="flex items-center gap-2 text-green-600 text-sm mb-1">
+                        <UserPlus className="w-4 h-4" /> Sign-ups Selected
+                    </div>
                     <div className="text-2xl font-bold">{totalSignups}</div>
                 </div>
 
                 <div className="rounded-xl border bg-white p-4">
-                    <div className="text-sm text-gray-500 mb-1">Reading Prefs</div>
+                    <div className="flex items-center gap-2 text-violet-600 text-sm mb-1">
+                        <BookMarked className="w-4 h-4" /> Reading Prefs
+                    </div>
                     <div className="text-2xl font-bold">{demographics.reading_preferences.length}</div>
                 </div>
 
                 <div className="rounded-xl border bg-white p-4">
-                    <div className="text-sm text-gray-500 mb-1">Locations</div>
+                    <div className="flex items-center gap-2 text-orange-600 text-sm mb-1">
+                        <MapPin className="w-4 h-4" /> Locations
+                    </div>
                     <div className="text-2xl font-bold">{Object.keys(demographics.locations).length}</div>
                 </div>
             </div>

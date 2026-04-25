@@ -501,6 +501,156 @@ def get_platform_fee_setting(
         "max_value": float(setting.max_value) if setting else 2.00,
     }
 
+
+@router.get("/shipping-metrics")
+def get_shipping_metrics(
+    from_date: str | None = Query(None),
+    to_date: str | None = Query(None),
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_current_admin),
+):
+    start_date = None
+    end_date = None
+
+    try:
+        if from_date:
+            start_date = datetime.strptime(from_date, "%Y-%m-%d")
+        if to_date:
+            end_date = datetime.strptime(to_date, "%Y-%m-%d").replace(
+                hour=23, minute=59, second=59
+            )
+    except ValueError:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid date format. Use YYYY-MM-DD"
+        )
+
+    where_clauses = []
+    params = {}
+
+    if start_date:
+        where_clauses.append("o.created_at >= :start_date")
+        params["start_date"] = start_date
+
+    if end_date:
+        where_clauses.append("o.created_at <= :end_date")
+        params["end_date"] = end_date
+
+    where_sql = f"WHERE {' AND '.join(where_clauses)}" if where_clauses else ""
+
+    summary_sql = text(f"""
+        SELECT
+            COUNT(o.id) AS total_orders,
+            SUM(CASE WHEN o.shipping_method = 'post' THEN 1 ELSE 0 END) AS delivery_orders,
+            SUM(CASE WHEN o.shipping_method = 'pickup' THEN 1 ELSE 0 END) AS pickup_orders,
+            SUM(
+                CASE
+                    WHEN o.shipping_method = 'post'
+                         AND (
+                            o.shipping_out_tracking_number IS NULL
+                            OR TRIM(o.shipping_out_tracking_number) = ''
+                         )
+                    THEN 1
+                    ELSE 0
+                END
+            ) AS missing_tracking_orders,
+            SUM(
+                CASE
+                    WHEN o.shipping_out_tracking_number IS NOT NULL
+                         AND TRIM(o.shipping_out_tracking_number) <> ''
+                    THEN 1
+                    ELSE 0
+                END
+            ) AS outbound_tracking_orders,
+            SUM(
+                CASE
+                    WHEN o.shipping_return_tracking_number IS NOT NULL
+                         AND TRIM(o.shipping_return_tracking_number) <> ''
+                    THEN 1
+                    ELSE 0
+                END
+            ) AS return_tracking_orders,
+            COALESCE(AVG(o.estimated_delivery_time), 0) AS average_estimated_delivery_time,
+            COALESCE(SUM(o.shipping_out_fee_amount), 0) AS shipping_fee_total
+        FROM orders o
+        {where_sql}
+    """)
+
+    checkout_summary_sql = text("""
+        SELECT
+            COUNT(ci.item_id) AS checkout_items,
+            SUM(CASE WHEN LOWER(ci.shipping_method) = 'delivery' THEN 1 ELSE 0 END) AS checkout_delivery_items,
+            SUM(CASE WHEN LOWER(ci.shipping_method) = 'pickup' THEN 1 ELSE 0 END) AS checkout_pickup_items,
+            COALESCE(SUM(ci.shipping_quote), 0) AS checkout_shipping_quote_total,
+            COALESCE(AVG(ci.estimated_delivery_time), 0) AS checkout_average_estimated_delivery_time
+        FROM checkout_item ci
+    """)
+
+    recent_shipments_sql = text(f"""
+        SELECT
+            o.id,
+            o.status,
+            o.shipping_method,
+            o.shipping_out_tracking_number,
+            o.shipping_return_tracking_number,
+            o.estimated_delivery_time,
+            o.shipping_out_fee_amount,
+            o.created_at,
+            COALESCE(owner_user.name, '-') AS owner_name,
+            COALESCE(borrower_user.name, '-') AS borrower_name
+        FROM orders o
+        LEFT JOIN users owner_user ON owner_user.user_id = o.owner_id
+        LEFT JOIN users borrower_user ON borrower_user.user_id = o.borrower_id
+        {where_sql}
+        ORDER BY o.created_at DESC
+        LIMIT 20
+    """)
+
+    summary = db.execute(summary_sql, params).mappings().first()
+    checkout_summary = db.execute(checkout_summary_sql).mappings().first()
+    recent_shipments = db.execute(recent_shipments_sql, params).mappings().all()
+
+    total_orders = int(summary["total_orders"] or 0)
+    delivery_orders = int(summary["delivery_orders"] or 0)
+    pickup_orders = int(summary["pickup_orders"] or 0)
+
+    return {
+        "total_orders": total_orders,
+        "delivery_orders": delivery_orders,
+        "pickup_orders": pickup_orders,
+        "delivery_ratio": round((delivery_orders / total_orders) * 100, 2) if total_orders else 0,
+        "pickup_ratio": round((pickup_orders / total_orders) * 100, 2) if total_orders else 0,
+        "missing_tracking_orders": int(summary["missing_tracking_orders"] or 0),
+        "outbound_tracking_orders": int(summary["outbound_tracking_orders"] or 0),
+        "return_tracking_orders": int(summary["return_tracking_orders"] or 0),
+        "average_estimated_delivery_time": float(summary["average_estimated_delivery_time"] or 0),
+        "shipping_fee_total": float(summary["shipping_fee_total"] or 0),
+        "checkout_summary": {
+            "checkout_items": int(checkout_summary["checkout_items"] or 0),
+            "delivery_items": int(checkout_summary["checkout_delivery_items"] or 0),
+            "pickup_items": int(checkout_summary["checkout_pickup_items"] or 0),
+            "shipping_quote_total": float(checkout_summary["checkout_shipping_quote_total"] or 0),
+            "average_estimated_delivery_time": float(
+                checkout_summary["checkout_average_estimated_delivery_time"] or 0
+            ),
+        },
+        "recent_shipments": [
+            {
+                "id": row["id"],
+                "status": row["status"],
+                "shipping_method": row["shipping_method"],
+                "shipping_out_tracking_number": row["shipping_out_tracking_number"],
+                "shipping_return_tracking_number": row["shipping_return_tracking_number"],
+                "estimated_delivery_time": row["estimated_delivery_time"],
+                "shipping_out_fee_amount": float(row["shipping_out_fee_amount"] or 0),
+                "created_at": row["created_at"].isoformat() if row["created_at"] else None,
+                "owner_name": row["owner_name"],
+                "borrower_name": row["borrower_name"],
+            }
+            for row in recent_shipments
+        ],
+    }
+
 @router.put("/platform-fee-setting")
 def update_platform_fee_setting(
     max_value: float = Query(...),
