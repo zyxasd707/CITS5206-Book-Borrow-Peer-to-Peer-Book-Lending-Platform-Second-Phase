@@ -9,6 +9,7 @@ from core.dependencies import get_db, get_current_admin
 from models.user import User
 from models.book import Book
 from models.order import Order
+from models.admin_setting import AdminSetting
 
 router = APIRouter(prefix="/analytics", tags=["Analytics"])
 
@@ -358,12 +359,19 @@ def get_financial_metrics(
 
     order_filter_sql = f" AND {' AND '.join(where_clauses)}" if where_clauses else ""
 
+    setting = db.query(AdminSetting).filter(
+        AdminSetting.key == "platform_fee_per_transaction"
+    ).first()
+
+    platform_fee = float(setting.max_value) if setting else 2.00
+    params["platform_fee"] = platform_fee
+
     summary_sql = text(f"""
         SELECT
             COUNT(o.id) AS total_transactions,
             COALESCE(SUM(o.total_paid_amount), 0) AS gross_transaction_value,
             COALESCE(AVG(o.total_paid_amount), 0) AS average_transaction_value,
-            COALESCE(COUNT(o.id) * 2, 0) AS platform_revenue,
+            COALESCE(COUNT(o.id) * :platform_fee, 0) AS platform_revenue,
             SUM(CASE WHEN LOWER(o.action_type) = 'borrow' THEN 1 ELSE 0 END) AS borrow_transactions,
             SUM(CASE WHEN LOWER(o.action_type) = 'purchase' THEN 1 ELSE 0 END) AS purchase_transactions
         FROM orders o
@@ -445,6 +453,7 @@ def get_financial_metrics(
         "total_transactions": total_transactions,
         "gross_transaction_value": float(summary["gross_transaction_value"] or 0),
         "platform_revenue": float(summary["platform_revenue"] or 0),
+        "platform_fee_per_transaction": platform_fee,
         "average_transaction_value": float(summary["average_transaction_value"] or 0),
         "borrow_transactions": int(summary["borrow_transactions"] or 0),
         "purchase_transactions": int(summary["purchase_transactions"] or 0),
@@ -475,4 +484,46 @@ def get_financial_metrics(
             }
             for row in recent_transactions
         ],
+    }
+
+
+@router.get("/platform-fee-setting")
+def get_platform_fee_setting(
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_current_admin),
+):
+    setting = db.query(AdminSetting).filter(
+        AdminSetting.key == "platform_fee_per_transaction"
+    ).first()
+
+    return {
+        "key": "platform_fee_per_transaction",
+        "max_value": float(setting.max_value) if setting else 2.00,
+    }
+
+@router.put("/platform-fee-setting")
+def update_platform_fee_setting(
+    max_value: float = Query(...),
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_current_admin),
+):
+    setting = db.query(AdminSetting).filter(
+        AdminSetting.key == "platform_fee_per_transaction"
+    ).first()
+
+    if not setting:
+        setting = AdminSetting(
+            key="platform_fee_per_transaction",
+            max_value=max_value
+        )
+        db.add(setting)
+    else:
+        setting.max_value = max_value
+
+    db.commit()
+    db.refresh(setting)
+
+    return {
+        "key": setting.key,
+        "max_value": float(setting.max_value),
     }

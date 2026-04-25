@@ -36,6 +36,7 @@ import models.complaint, models.ban, models.blacklist, models.review
 import models.payment_gateway, models.payment_split, models.mail
 import models.system_notification
 import models.deposit_evidence, models.deposit_audit_log
+import models.admin_setting
 from models.base import Base
 from models.checkout import Base as CheckoutBase
 from models.service_fee import Base as ServiceFeeBase
