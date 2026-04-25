@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
+import { getApiUrl } from "@/utils/auth";
 
 type OrderItem = {
     id: string;
@@ -36,6 +38,8 @@ export default function ViewOrdersPage() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
 
+    const API_URL = getApiUrl();
+
     const token =
         typeof window !== "undefined"
             ? localStorage.getItem("access_token")
@@ -53,7 +57,7 @@ export default function ViewOrdersPage() {
             }
 
             const res = await fetch(
-                `http://localhost:8000/api/v1/analytics/orders?status=${status}`,
+                `${API_URL}/api/v1/analytics/orders?status=${status}`,
                 {
                     headers: {
                         Authorization: `Bearer ${token}`,
@@ -81,31 +85,61 @@ export default function ViewOrdersPage() {
         fetchOrders(selectedStatus);
     }, [selectedStatus]);
 
-    return (
-        <div>
-            <h1 className="text-3xl font-bold mb-6">View Orders</h1>
+    const completedCount = orders.filter((o) => o.status === "COMPLETED").length;
+    const overdueCount = orders.filter((o) => o.status === "OVERDUE").length;
+    const borrowingCount = orders.filter((o) => o.status === "BORROWING").length;
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-                <div className="bg-white rounded-xl shadow-sm border p-5">
-                    <p className="text-sm text-gray-500">Total Orders</p>
-                    <h2 className="text-2xl font-bold mt-2">{totalOrders}</h2>
+    return (
+        <div className="max-w-7xl mx-auto p-6 space-y-6">
+            {/* Header */}
+            <div className="flex items-center justify-between">
+                <div>
+                    <h1 className="text-2xl font-bold">View Orders</h1>
+                    <p className="text-gray-600">Browse and filter platform orders.</p>
+                </div>
+                <Link href="/admin" className="text-sm underline self-center">
+                    Back to Dashboard
+                </Link>
+            </div>
+
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                <div className="rounded-xl border bg-white p-4">
+                    <div className="text-sm text-gray-500 mb-1">Total Orders</div>
+                    <div className="text-2xl font-bold">{totalOrders}</div>
                 </div>
 
-                <div className="bg-white rounded-xl shadow-sm border p-5">
-                    <label className="block text-sm font-medium mb-2">
-                        Filter by Status
-                    </label>
-                    <select
-                        value={selectedStatus}
-                        onChange={(e) => setSelectedStatus(e.target.value)}
-                        className="w-full rounded-lg border px-3 py-2"
-                    >
-                        {FILTER_OPTIONS.map((option) => (
-                            <option key={option} value={option}>
-                                {option === "ALL" ? "All Orders" : option}
-                            </option>
-                        ))}
-                    </select>
+                <div className="rounded-xl border bg-white p-4">
+                    <div className="text-sm text-gray-500 mb-1">Completed</div>
+                    <div className="text-2xl font-bold">{completedCount}</div>
+                </div>
+
+                <div className="rounded-xl border bg-white p-4">
+                    <div className="text-sm text-gray-500 mb-1">Overdue</div>
+                    <div className="text-2xl font-bold">{overdueCount}</div>
+                </div>
+
+                <div className="rounded-xl border bg-white p-4">
+                    <div className="text-sm text-gray-500 mb-1">Borrowing</div>
+                    <div className="text-2xl font-bold">{borrowingCount}</div>
+                </div>
+            </div>
+
+            <div className="bg-white rounded-xl shadow-sm border p-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+                    <div>
+                        <label className="block text-sm font-medium mb-2">Filter by Status</label>
+                        <select
+                            value={selectedStatus}
+                            onChange={(e) => setSelectedStatus(e.target.value)}
+                            className="w-full rounded-lg border px-3 py-2"
+                        >
+                            {FILTER_OPTIONS.map((option) => (
+                                <option key={option} value={option}>
+                                    {option === "ALL" ? "All Orders" : option}
+                                </option>
+                            ))}
+                        </select>
+                    </div>
                 </div>
             </div>
 
