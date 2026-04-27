@@ -288,12 +288,14 @@ const ComplainPage: React.FC = () => {
     const orderId = complaint.orderId?.toLowerCase() || "";
 
     // Get user names from cache
-    const complainantName = userCache[complaint.complainantId]
-      ? [userCache[complaint.complainantId].firstName, userCache[complaint.complainantId].lastName]
+    const complainant = userCache[complaint.complainantId];
+    const respondent = complaint.respondentId ? userCache[complaint.respondentId] : undefined;
+    const complainantName = complainant
+      ? [complainant.firstName, complainant.lastName]
           .filter(Boolean).join(" ").toLowerCase()
       : "";
-    const respondentName = userCache[complaint.respondentId]
-      ? [userCache[complaint.respondentId].firstName, userCache[complaint.respondentId].lastName]
+    const respondentName = respondent
+      ? [respondent.firstName, respondent.lastName]
           .filter(Boolean).join(" ").toLowerCase()
       : "";
 
