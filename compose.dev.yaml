@@ -1,3 +1,4 @@
+version: "3.9"
 services:
   db:             # Local MySQL database for development only;
     image: mysql:8.0
@@ -31,12 +32,6 @@ services:
     command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
     volumes:
       - ./fastapi:/app
-    healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=2)"]
-      interval: 5s
-      timeout: 5s
-      retries: 12
-      start_period: 10s
     depends_on:
       db:
         condition: service_healthy    # Wait for MySQL to be ready before starting backend
@@ -56,17 +51,10 @@ services:
       - ./frontendNext:/app
       - frontend_node_modules:/app/node_modules
       - frontend_next_cache:/app/.next
-    healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://localhost:3000').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
-      interval: 5s
-      timeout: 5s
-      retries: 20
-      start_period: 20s
     expose:
       - "3000"
     depends_on:
-      backend:
-        condition: service_healthy
+      - backend
     networks:
       - mynetwork
 
@@ -79,10 +67,8 @@ services:
       - ./nginx/nginx.dev.conf:/etc/nginx/nginx.conf:ro
       - ./nginx/logs:/var/log/nginx
     depends_on:
-      frontend:
-        condition: service_healthy
-      backend:
-        condition: service_healthy
+      - frontend
+      - backend
     networks:
       - mynetwork
 
