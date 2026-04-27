@@ -276,6 +276,37 @@ const ComplaintDetailPage: React.FC = () => {
               <div className="bg-gray-50 p-4 rounded-lg text-gray-700">{complaint.description}</div>
             </div>
 
+            {/* Evidence Photos */}
+            {complaint.evidencePhotos && complaint.evidencePhotos.length > 0 && (
+              <div>
+                <h4 className="font-medium text-gray-900 mb-2">Evidence Photos</h4>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  {complaint.evidencePhotos.map((photoPath, idx) => (
+                    <div key={idx} className="relative w-full aspect-square bg-gray-100 rounded-lg overflow-hidden">
+                      <img
+                        src={photoPath}
+                        alt={`Evidence ${idx + 1}`}
+                        className="w-full h-full object-cover"
+                        onError={(e) => {
+                          e.currentTarget.src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='%23d1d5db' viewBox='0 0 24 24'%3E%3Cpath d='M12 9a3 3 0 100 6 3 3 0 000-6zm0-2a5 5 0 110 10 5 5 0 010-10zm6.5-1a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0zM2 6.5A4.5 4.5 0 016.5 2h11A4.5 4.5 0 0122 6.5v11a4.5 4.5 0 01-4.5 4.5h-11A4.5 4.5 0 012 17.5v-11z'/%3E%3C/svg%3E";
+                        }}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Damage Severity */}
+            {complaint.damageSeverity && complaint.damageSeverity !== "none" && (
+              <div>
+                <h4 className="font-medium text-gray-900 mb-2">Damage Severity</h4>
+                <div className="inline-block px-3 py-1 text-sm font-medium rounded-full bg-orange-100 text-orange-800">
+                  {complaint.damageSeverity.charAt(0).toUpperCase() + complaint.damageSeverity.slice(1)}
+                </div>
+              </div>
+            )}
+
             {/* Admin Response */}
             {complaint.adminResponse && (
               <div className="mt-6">
@@ -359,7 +390,7 @@ const ComplaintDetailPage: React.FC = () => {
                     }}
                   >
                     <XCircle className="w-4 h-4 mr-2" />
-                    Close Complaint
+                    Cancel Complaint
                   </Button>
 
                   <Button

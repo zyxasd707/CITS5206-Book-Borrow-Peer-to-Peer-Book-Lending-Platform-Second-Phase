@@ -40,7 +40,8 @@ const ComplainPage: React.FC = () => {
     subject: "",
     description: "",
     orderId: "",
-    respondentId: ""
+    respondentId: "",
+    damageSeverity: "none" as const
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [userCache, setUserCache] = useState<Record<string, User>>({});
@@ -199,6 +200,8 @@ const ComplainPage: React.FC = () => {
       description: newComplaint.description,
       orderId: newComplaint.orderId || undefined,
       respondentId: respondentId || undefined,
+      evidencePhotos: evidenceFiles.length > 0 ? evidenceFiles.map(e => e.url) : undefined,
+      damageSeverity: newComplaint.type === "book-condition" ? newComplaint.damageSeverity : undefined,
     };
 
     console.log("Creating complaint with data:", complaintData);
@@ -496,6 +499,24 @@ const ComplainPage: React.FC = () => {
                   </select>
                 </div>
 
+                {newComplaint.type === "book-condition" && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Damage Severity
+                    </label>
+                    <select
+                      value={newComplaint.damageSeverity}
+                      onChange={(e) => setNewComplaint({ ...newComplaint, damageSeverity: e.target.value as any })}
+                      className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    >
+                      <option value="none">None</option>
+                      <option value="light">Light</option>
+                      <option value="medium">Medium</option>
+                      <option value="severe">Severe</option>
+                    </select>
+                  </div>
+                )}
+
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Related Order ID (Optional)
@@ -588,7 +609,7 @@ const ComplainPage: React.FC = () => {
                   variant="outline"
                   onClick={() => {
                     setIsCreateModalOpen(false);
-                    setNewComplaint({ type: "other", subject: "", description: "", orderId: "", respondentId: "" });
+                    setNewComplaint({ type: "other", subject: "", description: "", orderId: "", respondentId: "", damageSeverity: "none" });
                     setEvidenceFiles([]);
                   }}
                   disabled={isSubmitting}
