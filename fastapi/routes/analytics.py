@@ -1,18 +1,16 @@
-from fastapi import APIRouter, Depends
+from datetime import date, datetime, timedelta
+from collections import Counter
+
+from fastapi import APIRouter, Depends, Query, HTTPException
+from sqlalchemy import func, text
 from sqlalchemy.orm import Session
-from sqlalchemy import func
 
 from core.dependencies import get_db, get_current_admin
 from models.user import User
 from models.book import Book
 from models.order import Order
-from datetime import datetime, timedelta
-from collections import Counter
-from datetime import date
-from datetime import datetime
-from fastapi import Query
-from fastapi import APIRouter, Depends, Query
-from fastapi import APIRouter, Depends, Query, HTTPException
+from models.admin_setting import AdminSetting
+
 router = APIRouter(prefix="/analytics", tags=["Analytics"])
 
 
@@ -310,3 +308,372 @@ def get_transactions_over_time(
     )
 
     return [{"date": r.date, "count": r.count} for r in results]
+
+@router.get("/financial-metrics")
+def get_financial_metrics(
+    from_date: str | None = Query(None),
+    to_date: str | None = Query(None),
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_current_admin),
+):
+    start_date = None
+    end_date = None
+
+    try:
+        if from_date:
+            start_date = datetime.strptime(from_date, "%Y-%m-%d")
+        if to_date:
+            end_date = datetime.strptime(to_date, "%Y-%m-%d").replace(
+                hour=23, minute=59, second=59
+            )
+    except ValueError:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid date format. Use YYYY-MM-DD"
+        )
+
+    where_clauses = []
+    params = {}
+
+    if start_date:
+        where_clauses.append("o.created_at >= :start_date")
+        params["start_date"] = start_date
+
+    if end_date:
+        where_clauses.append("o.created_at <= :end_date")
+        params["end_date"] = end_date
+
+    where_sql = f"WHERE {' AND '.join(where_clauses)}" if where_clauses else ""
+
+    # Refunds should be filtered by the refund timestamp, not the order timestamp.
+    refund_where_clauses = []
+    if start_date:
+        refund_where_clauses.append("r.created_at >= :start_date")
+
+    if end_date:
+        refund_where_clauses.append("r.created_at <= :end_date")
+
+    refund_where_sql = ""
+    if refund_where_clauses:
+        refund_where_sql = "WHERE " + " AND ".join(refund_where_clauses)
+
+    order_filter_sql = f" AND {' AND '.join(where_clauses)}" if where_clauses else ""
+
+    setting = db.query(AdminSetting).filter(
+        AdminSetting.key == "platform_fee_per_transaction"
+    ).first()
+
+    platform_fee = float(setting.max_value) if setting else 2.00
+    params["platform_fee"] = platform_fee
+
+    summary_sql = text(f"""
+        SELECT
+            COUNT(o.id) AS total_transactions,
+            COALESCE(SUM(o.total_paid_amount), 0) AS gross_transaction_value,
+            COALESCE(AVG(o.total_paid_amount), 0) AS average_transaction_value,
+            COALESCE(COUNT(o.id) * :platform_fee, 0) AS platform_revenue,
+            SUM(CASE WHEN LOWER(o.action_type) = 'borrow' THEN 1 ELSE 0 END) AS borrow_transactions,
+            SUM(CASE WHEN LOWER(o.action_type) = 'purchase' THEN 1 ELSE 0 END) AS purchase_transactions
+        FROM orders o
+        {where_sql}
+    """)
+
+    refund_sql = text(f"""
+        SELECT
+            COUNT(r.id) AS total_refunds,
+            COALESCE(SUM(r.amount), 0) / 100.0 AS total_refund_amount
+        FROM refunds r
+        JOIN payments p ON p.payment_id = r.payment_id
+        JOIN orders o ON o.payment_id = p.payment_id
+        {refund_where_sql}
+    """)
+
+    payment_distribution_sql = text(f"""
+        SELECT
+            COALESCE(p.action_type, 'unknown') AS label,
+            COUNT(*) AS value
+        FROM payments p
+        JOIN orders o ON o.payment_id = p.payment_id
+        {where_sql}
+        GROUP BY COALESCE(p.action_type, 'unknown')
+        ORDER BY value DESC
+    """)
+
+    # Top earning users:
+    # 1. Find all successful borrow/purchase orders
+    # 2. Get the owner of each order
+    # 3. Sum the transferred amount paid to each owner
+    # 4. Rank owners by highest total earnings
+
+    top_earners_sql = text(f"""
+        SELECT
+            ps.owner_id AS user_id,
+            COALESCE(u.name, ps.owner_id) AS user_name,
+            ROUND(COALESCE(SUM(ps.transfer_amount_cents), 0) / 100.0, 2) AS earnings
+        FROM payment_splits ps
+        LEFT JOIN users u ON u.user_id = ps.owner_id
+        JOIN orders o ON o.id = ps.order_id
+        WHERE LOWER(o.action_type) IN ('borrow', 'purchase')
+          AND UPPER(o.status) IN ('COMPLETED', 'BORROWING', 'RETURNED', 'OVERDUE')
+          {order_filter_sql}
+        GROUP BY ps.owner_id, u.name
+        HAVING earnings > 0
+        ORDER BY earnings DESC
+        LIMIT 10
+    """)
+
+    recent_transactions_sql = text(f"""
+        SELECT
+            o.id,
+            o.created_at,
+            o.status,
+            o.action_type,
+            o.total_paid_amount,
+            COALESCE(owner_user.name, '-') AS owner_name,
+            COALESCE(borrower_user.name, '-') AS borrower_name
+        FROM orders o
+        LEFT JOIN users owner_user ON owner_user.user_id = o.owner_id
+        LEFT JOIN users borrower_user ON borrower_user.user_id = o.borrower_id
+        {where_sql}
+        ORDER BY o.created_at DESC
+        LIMIT 20
+    """)
+
+    summary = db.execute(summary_sql, params).mappings().first()
+    refunds = db.execute(refund_sql, params).mappings().first()
+    payment_distribution = db.execute(payment_distribution_sql, params).mappings().all()
+    top_earners = db.execute(top_earners_sql, params).mappings().all()
+    recent_transactions = db.execute(recent_transactions_sql, params).mappings().all()
+
+    total_transactions = int(summary["total_transactions"] or 0)
+    total_refunds = int(refunds["total_refunds"] or 0)
+    refund_rate = round((total_refunds / total_transactions) * 100, 2) if total_transactions else 0
+
+    return {
+        "total_transactions": total_transactions,
+        "gross_transaction_value": float(summary["gross_transaction_value"] or 0),
+        "platform_revenue": float(summary["platform_revenue"] or 0),
+        "platform_fee_per_transaction": platform_fee,
+        "average_transaction_value": float(summary["average_transaction_value"] or 0),
+        "borrow_transactions": int(summary["borrow_transactions"] or 0),
+        "purchase_transactions": int(summary["purchase_transactions"] or 0),
+        "payment_method_distribution": [
+            {"label": row["label"], "value": int(row["value"] or 0)}
+            for row in payment_distribution
+        ],
+        "total_refunds": total_refunds,
+        "total_refund_amount": float(refunds["total_refund_amount"] or 0),
+        "refund_rate": refund_rate,
+        "top_earning_users": [
+            {
+                "user_id": row["user_id"],
+                "user_name": row["user_name"],
+                "earnings": float(row["earnings"] or 0),
+            }
+            for row in top_earners
+        ],
+        "recent_transactions": [
+            {
+                "id": row["id"],
+                "created_at": row["created_at"].isoformat() if row["created_at"] else None,
+                "status": row["status"],
+                "action_type": row["action_type"],
+                "total_paid_amount": float(row["total_paid_amount"] or 0),
+                "owner_name": row["owner_name"],
+                "borrower_name": row["borrower_name"],
+            }
+            for row in recent_transactions
+        ],
+    }
+
+
+@router.get("/platform-fee-setting")
+def get_platform_fee_setting(
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_current_admin),
+):
+    setting = db.query(AdminSetting).filter(
+        AdminSetting.key == "platform_fee_per_transaction"
+    ).first()
+
+    return {
+        "key": "platform_fee_per_transaction",
+        "max_value": float(setting.max_value) if setting else 2.00,
+    }
+
+
+@router.get("/shipping-metrics")
+def get_shipping_metrics(
+    from_date: str | None = Query(None),
+    to_date: str | None = Query(None),
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_current_admin),
+):
+    start_date = None
+    end_date = None
+
+    try:
+        if from_date:
+            start_date = datetime.strptime(from_date, "%Y-%m-%d")
+        if to_date:
+            end_date = datetime.strptime(to_date, "%Y-%m-%d").replace(
+                hour=23, minute=59, second=59
+            )
+    except ValueError:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid date format. Use YYYY-MM-DD"
+        )
+
+    where_clauses = []
+    params = {}
+
+    if start_date:
+        where_clauses.append("o.created_at >= :start_date")
+        params["start_date"] = start_date
+
+    if end_date:
+        where_clauses.append("o.created_at <= :end_date")
+        params["end_date"] = end_date
+
+    where_sql = f"WHERE {' AND '.join(where_clauses)}" if where_clauses else ""
+
+    summary_sql = text(f"""
+        SELECT
+            COUNT(o.id) AS total_orders,
+            SUM(CASE WHEN o.shipping_method = 'post' THEN 1 ELSE 0 END) AS delivery_orders,
+            SUM(CASE WHEN o.shipping_method = 'pickup' THEN 1 ELSE 0 END) AS pickup_orders,
+            SUM(
+                CASE
+                    WHEN o.shipping_method = 'post'
+                         AND (
+                            o.shipping_out_tracking_number IS NULL
+                            OR TRIM(o.shipping_out_tracking_number) = ''
+                         )
+                    THEN 1
+                    ELSE 0
+                END
+            ) AS missing_tracking_orders,
+            SUM(
+                CASE
+                    WHEN o.shipping_out_tracking_number IS NOT NULL
+                         AND TRIM(o.shipping_out_tracking_number) <> ''
+                    THEN 1
+                    ELSE 0
+                END
+            ) AS outbound_tracking_orders,
+            SUM(
+                CASE
+                    WHEN o.shipping_return_tracking_number IS NOT NULL
+                         AND TRIM(o.shipping_return_tracking_number) <> ''
+                    THEN 1
+                    ELSE 0
+                END
+            ) AS return_tracking_orders,
+            COALESCE(AVG(o.estimated_delivery_time), 0) AS average_estimated_delivery_time,
+            COALESCE(SUM(o.shipping_out_fee_amount), 0) AS shipping_fee_total
+        FROM orders o
+        {where_sql}
+    """)
+
+    checkout_summary_sql = text("""
+        SELECT
+            COUNT(ci.item_id) AS checkout_items,
+            SUM(CASE WHEN LOWER(ci.shipping_method) = 'delivery' THEN 1 ELSE 0 END) AS checkout_delivery_items,
+            SUM(CASE WHEN LOWER(ci.shipping_method) = 'pickup' THEN 1 ELSE 0 END) AS checkout_pickup_items,
+            COALESCE(SUM(ci.shipping_quote), 0) AS checkout_shipping_quote_total,
+            COALESCE(AVG(ci.estimated_delivery_time), 0) AS checkout_average_estimated_delivery_time
+        FROM checkout_item ci
+    """)
+
+    recent_shipments_sql = text(f"""
+        SELECT
+            o.id,
+            o.status,
+            o.shipping_method,
+            o.shipping_out_tracking_number,
+            o.shipping_return_tracking_number,
+            o.estimated_delivery_time,
+            o.shipping_out_fee_amount,
+            o.created_at,
+            COALESCE(owner_user.name, '-') AS owner_name,
+            COALESCE(borrower_user.name, '-') AS borrower_name
+        FROM orders o
+        LEFT JOIN users owner_user ON owner_user.user_id = o.owner_id
+        LEFT JOIN users borrower_user ON borrower_user.user_id = o.borrower_id
+        {where_sql}
+        ORDER BY o.created_at DESC
+        LIMIT 20
+    """)
+
+    summary = db.execute(summary_sql, params).mappings().first()
+    checkout_summary = db.execute(checkout_summary_sql).mappings().first()
+    recent_shipments = db.execute(recent_shipments_sql, params).mappings().all()
+
+    total_orders = int(summary["total_orders"] or 0)
+    delivery_orders = int(summary["delivery_orders"] or 0)
+    pickup_orders = int(summary["pickup_orders"] or 0)
+
+    return {
+        "total_orders": total_orders,
+        "delivery_orders": delivery_orders,
+        "pickup_orders": pickup_orders,
+        "delivery_ratio": round((delivery_orders / total_orders) * 100, 2) if total_orders else 0,
+        "pickup_ratio": round((pickup_orders / total_orders) * 100, 2) if total_orders else 0,
+        "missing_tracking_orders": int(summary["missing_tracking_orders"] or 0),
+        "outbound_tracking_orders": int(summary["outbound_tracking_orders"] or 0),
+        "return_tracking_orders": int(summary["return_tracking_orders"] or 0),
+        "average_estimated_delivery_time": float(summary["average_estimated_delivery_time"] or 0),
+        "shipping_fee_total": float(summary["shipping_fee_total"] or 0),
+        "checkout_summary": {
+            "checkout_items": int(checkout_summary["checkout_items"] or 0),
+            "delivery_items": int(checkout_summary["checkout_delivery_items"] or 0),
+            "pickup_items": int(checkout_summary["checkout_pickup_items"] or 0),
+            "shipping_quote_total": float(checkout_summary["checkout_shipping_quote_total"] or 0),
+            "average_estimated_delivery_time": float(
+                checkout_summary["checkout_average_estimated_delivery_time"] or 0
+            ),
+        },
+        "recent_shipments": [
+            {
+                "id": row["id"],
+                "status": row["status"],
+                "shipping_method": row["shipping_method"],
+                "shipping_out_tracking_number": row["shipping_out_tracking_number"],
+                "shipping_return_tracking_number": row["shipping_return_tracking_number"],
+                "estimated_delivery_time": row["estimated_delivery_time"],
+                "shipping_out_fee_amount": float(row["shipping_out_fee_amount"] or 0),
+                "created_at": row["created_at"].isoformat() if row["created_at"] else None,
+                "owner_name": row["owner_name"],
+                "borrower_name": row["borrower_name"],
+            }
+            for row in recent_shipments
+        ],
+    }
+
+@router.put("/platform-fee-setting")
+def update_platform_fee_setting(
+    max_value: float = Query(...),
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_current_admin),
+):
+    setting = db.query(AdminSetting).filter(
+        AdminSetting.key == "platform_fee_per_transaction"
+    ).first()
+
+    if not setting:
+        setting = AdminSetting(
+            key="platform_fee_per_transaction",
+            max_value=max_value
+        )
+        db.add(setting)
+    else:
+        setting.max_value = max_value
+
+    db.commit()
+    db.refresh(setting)
+
+    return {
+        "key": setting.key,
+        "max_value": float(setting.max_value),
+    }

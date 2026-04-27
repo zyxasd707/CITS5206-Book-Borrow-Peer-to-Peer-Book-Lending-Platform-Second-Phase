@@ -53,6 +53,13 @@ The page auto-updates as you edit files in the `app/` directory (e.g. `app/page.
 
 ---
 
+Note: If a newly added route returns 404 during local development (Turbopack may not pick up new route files immediately), restart the frontend dev container:
+
+```bash
+docker compose -f compose.yaml -f compose.dev.yaml restart frontend
+```
+
+
 ## 📦 Installed Packages
 
 This project uses:
