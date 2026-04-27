@@ -81,6 +81,91 @@ export type AdminOrderUser = {
   stripe_account_id?: string | null;
 };
 
+export type AdminOrderPaymentSplit = {
+  id: number;
+  payment_id: string;
+  owner: AdminOrderUser;
+  connected_account_id: string;
+  currency: string;
+  deposit_cents: number;
+  shipping_cents: number;
+  service_fee_cents: number;
+  transfer_amount_cents: number;
+  transfer_id: string | null;
+  transfer_status: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+};
+
+export type AdminOrderRefund = {
+  id: number;
+  refund_id: string;
+  payment_id: string;
+  amount_cents: number;
+  currency: string;
+  status: string;
+  reason: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+};
+
+export type AdminOrderDispute = {
+  id: number;
+  dispute_id: string;
+  payment_id: string;
+  user: AdminOrderUser;
+  reason: string;
+  note: string | null;
+  status: string;
+  deduction_cents: number;
+  created_at: string | null;
+};
+
+export type AdminOrderComplaint = {
+  id: string;
+  type: string;
+  subject: string | null;
+  description: string | null;
+  status: string;
+  admin_response: string | null;
+  damage_severity: string | null;
+  evidence_photos: string[];
+  complainant: AdminOrderUser;
+  respondent: AdminOrderUser | null;
+  created_at: string | null;
+  updated_at: string | null;
+};
+
+export type AdminOrderReview = {
+  id: string;
+  rating: number;
+  comment: string | null;
+  reviewer: AdminOrderUser;
+  reviewee: AdminOrderUser;
+  created_at: string | null;
+};
+
+export type AdminOrderDepositEvidence = {
+  id: string;
+  submitter: AdminOrderUser;
+  submitter_role: string;
+  photos: string[];
+  claimed_severity: string;
+  note: string | null;
+  submitted_at: string | null;
+};
+
+export type AdminOrderDepositAuditLog = {
+  id: string;
+  actor: AdminOrderUser | null;
+  actor_role: string;
+  action: string;
+  amount_cents: number | null;
+  final_severity: string | null;
+  note: string | null;
+  created_at: string | null;
+};
+
 export type AdminOrderDetails = {
   order: {
     id: string;
@@ -162,13 +247,13 @@ export type AdminOrderDetails = {
     deducted_cents: number;
     damage_severity_final: string | null;
   };
-  payment_splits: Array<Record<string, unknown>>;
-  refunds: Array<Record<string, unknown>>;
-  disputes: Array<Record<string, unknown>>;
-  complaints: Array<Record<string, unknown>>;
-  reviews: Array<Record<string, unknown>>;
-  deposit_evidence: Array<Record<string, unknown>>;
-  deposit_audit_logs: Array<Record<string, unknown>>;
+  payment_splits: AdminOrderPaymentSplit[];
+  refunds: AdminOrderRefund[];
+  disputes: AdminOrderDispute[];
+  complaints: AdminOrderComplaint[];
+  reviews: AdminOrderReview[];
+  deposit_evidence: AdminOrderDepositEvidence[];
+  deposit_audit_logs: AdminOrderDepositAuditLog[];
 };
 
 function getAuthHeaders() {

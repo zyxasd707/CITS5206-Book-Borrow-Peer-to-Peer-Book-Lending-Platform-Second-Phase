@@ -35,11 +35,11 @@ function fmtMoney(value?: number | null) {
   return `$${Number(value || 0).toFixed(2)}`;
 }
 
-function fmtCents(value: unknown) {
+function fmtCents(value?: number | null) {
   return `$${(Number(value || 0) / 100).toFixed(2)}`;
 }
 
-function text(value: unknown) {
+function text(value?: string | number | null) {
   if (value === null || value === undefined || value === "") return "-";
   return String(value);
 }
@@ -333,7 +333,7 @@ export default function AdminOrderDetailsPage() {
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                     <Field label="Role" value={text(item.submitter_role)} />
                     <Field label="Severity" value={text(item.claimed_severity)} />
-                    <Field label="Submitted" value={fmtDate(item.submitted_at as string | null)} />
+                    <Field label="Submitted" value={fmtDate(item.submitted_at)} />
                   </div>
                   <p className="mt-3 text-sm text-gray-700">{text(item.note)}</p>
                 </div>
@@ -371,7 +371,10 @@ export default function AdminOrderDetailsPage() {
             <div className="space-y-2 mb-4">
               {detail.refunds.map((refund) => (
                 <div key={String(refund.id)} className="rounded-lg border bg-gray-50 p-3">
-                  <Field label="Refund" value={`${text(refund.refund_id)} · ${fmtCents(refund.amount_cents)} · ${text(refund.status)}`} />
+                  <Field
+                    label="Refund"
+                    value={`${refund.refund_id} / ${fmtCents(refund.amount_cents)} / ${refund.status}`}
+                  />
                 </div>
               ))}
             </div>
@@ -383,7 +386,10 @@ export default function AdminOrderDetailsPage() {
             <div className="space-y-2">
               {detail.disputes.map((dispute) => (
                 <div key={String(dispute.id)} className="rounded-lg border bg-gray-50 p-3">
-                  <Field label="Dispute" value={`${text(dispute.reason)} · ${text(dispute.status)} · ${fmtCents(dispute.deduction_cents)}`} />
+                  <Field
+                    label="Dispute"
+                    value={`${dispute.reason} / ${dispute.status} / ${fmtCents(dispute.deduction_cents)}`}
+                  />
                 </div>
               ))}
             </div>
@@ -399,8 +405,8 @@ export default function AdminOrderDetailsPage() {
                 <div key={String(complaint.id)} className="rounded-lg border bg-gray-50 p-4">
                   <div className="flex flex-wrap items-center gap-2 mb-2">
                     <span className="font-semibold">{text(complaint.subject)}</span>
-                    <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${statusClass(complaint.status as string)}`}>
-                      {text(complaint.status)}
+                    <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${statusClass(complaint.status)}`}>
+                      {complaint.status}
                     </span>
                   </div>
                   <p className="text-sm text-gray-700">{text(complaint.description)}</p>
@@ -438,7 +444,7 @@ export default function AdminOrderDetailsPage() {
                     <Field label="Action" value={text(audit.action)} />
                     <Field label="Actor Role" value={text(audit.actor_role)} />
                     <Field label="Amount" value={audit.amount_cents === null ? "-" : fmtCents(audit.amount_cents)} />
-                    <Field label="Created" value={fmtDate(audit.created_at as string | null)} />
+                    <Field label="Created" value={fmtDate(audit.created_at)} />
                   </div>
                 </div>
               ))}

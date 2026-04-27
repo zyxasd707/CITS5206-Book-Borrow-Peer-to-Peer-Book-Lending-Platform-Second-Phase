@@ -4,12 +4,12 @@ from collections import Counter
 
 from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy import func, text
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from core.dependencies import get_db, get_current_admin
 from models.user import User
 from models.book import Book
-from models.order import Order
+from models.order import Order, OrderBook
 from models.admin_setting import AdminSetting
 from models.complaint import Complaint
 from models.deposit_audit_log import DepositAuditLog
@@ -679,7 +679,15 @@ def get_admin_order_details(
     db: Session = Depends(get_db),
     admin: User = Depends(get_current_admin),
 ):
-    order = db.query(Order).filter(Order.id == order_id).first()
+    order = (
+        db.query(Order)
+        .options(
+            joinedload(Order.books).joinedload(OrderBook.book),
+            joinedload(Order.borrower),
+        )
+        .filter(Order.id == order_id)
+        .first()
+    )
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
 
@@ -821,7 +829,11 @@ def get_admin_order_details(
             "borrower": user_summary(order.borrower_id),
             "contact": {
                 "name": order.contact_name,
-                "email": order.borrower.email if order.borrower else None,
+                "email": (
+                    users_by_id[order.borrower_id].email
+                    if order.borrower_id in users_by_id
+                    else None
+                ),
                 "phone": order.phone,
             },
         },
