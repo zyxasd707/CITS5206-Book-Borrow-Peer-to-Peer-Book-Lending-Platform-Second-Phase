@@ -66,6 +66,111 @@ export type ShippingMetricsData = {
   }>;
 };
 
+export type AdminOrderUser = {
+  id: string | null;
+  name: string;
+  email?: string | null;
+  phone_number?: string | null;
+  city?: string | null;
+  state?: string | null;
+  country?: string | null;
+  is_restricted?: boolean;
+  restriction_reason?: string | null;
+  damage_strike_count?: number;
+  damage_severity_score?: number;
+  stripe_account_id?: string | null;
+};
+
+export type AdminOrderDetails = {
+  order: {
+    id: string;
+    status: string;
+    action_type: string;
+    created_at: string | null;
+    updated_at: string | null;
+    start_at: string | null;
+    due_at: string | null;
+    returned_at: string | null;
+    completed_at: string | null;
+    canceled_at: string | null;
+    notes: string | null;
+  };
+  people: {
+    owner: AdminOrderUser;
+    borrower: AdminOrderUser;
+    contact: {
+      name: string;
+      email: string | null;
+      phone: string | null;
+    };
+  };
+  books: Array<{
+    id: string;
+    title_or: string;
+    title_en: string | null;
+    author: string | null;
+    category: string | null;
+    condition: string | null;
+    status: string | null;
+    cover_img_url: string | null;
+    can_rent: boolean;
+    can_sell: boolean;
+    sale_price: number;
+    deposit: number;
+    max_lending_days: number;
+    date_added: string | null;
+  }>;
+  shipping: {
+    method: string | null;
+    address: {
+      street: string;
+      city: string;
+      postcode: string;
+      country: string;
+    };
+    outbound: {
+      carrier: string | null;
+      tracking_number: string | null;
+      tracking_url: string | null;
+    };
+    return: {
+      carrier: string | null;
+      tracking_number: string | null;
+      tracking_url: string | null;
+    };
+    estimated_delivery_time: number | null;
+  };
+  payment: {
+    payment_id: string | null;
+    payment_status: string | null;
+    payment_currency: string | null;
+    payment_amount_cents: number;
+    payment_created_at: string | null;
+    payment_updated_at: string | null;
+    payment_action_type: string | null;
+    deposit_or_sale_amount: number;
+    owner_income_amount: number;
+    service_fee_amount: number;
+    shipping_out_fee_amount: number;
+    total_paid_amount: number;
+    total_refunded_amount: number;
+    late_fee_amount: number;
+    damage_fee_amount: number;
+  };
+  deposit: {
+    status: string;
+    deducted_cents: number;
+    damage_severity_final: string | null;
+  };
+  payment_splits: Array<Record<string, unknown>>;
+  refunds: Array<Record<string, unknown>>;
+  disputes: Array<Record<string, unknown>>;
+  complaints: Array<Record<string, unknown>>;
+  reviews: Array<Record<string, unknown>>;
+  deposit_evidence: Array<Record<string, unknown>>;
+  deposit_audit_logs: Array<Record<string, unknown>>;
+};
+
 function getAuthHeaders() {
   return {
     Authorization: `Bearer ${localStorage.getItem("access_token")}`,
@@ -132,6 +237,20 @@ export async function getShippingMetrics(params?: {
     `${API_URL}/api/v1/analytics/shipping-metrics`,
     {
       params: params || {},
+      headers: getAuthHeaders(),
+      withCredentials: true,
+    }
+  );
+
+  return res.data;
+}
+
+export async function getAdminOrderDetails(orderId: string) {
+  const API_URL = getApiUrl();
+
+  const res = await axios.get<AdminOrderDetails>(
+    `${API_URL}/api/v1/analytics/orders/${orderId}/details`,
+    {
       headers: getAuthHeaders(),
       withCredentials: true,
     }

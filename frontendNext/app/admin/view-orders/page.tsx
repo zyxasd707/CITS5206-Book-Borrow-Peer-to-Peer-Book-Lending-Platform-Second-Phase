@@ -168,7 +168,14 @@ export default function ViewOrdersPage() {
                             {orders.length > 0 ? (
                                 orders.map((order) => (
                                     <tr key={order.id} className="border-b hover:bg-gray-50 align-top">
-                                        <td className="py-3 px-4">{order.id}</td>
+                                        <td className="py-3 px-4">
+                                            <Link
+                                                href={`/admin/orders/${order.id}`}
+                                                className="text-blue-600 underline"
+                                            >
+                                                {order.id}
+                                            </Link>
+                                        </td>
                                         <td className="py-3 px-4">
                                             <span
                                                 className={`inline-block rounded-full px-3 py-1 text-xs font-semibold ${getStatusBadgeClass(
