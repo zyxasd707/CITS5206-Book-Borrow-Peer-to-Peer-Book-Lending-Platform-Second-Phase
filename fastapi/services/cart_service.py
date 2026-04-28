@@ -2,6 +2,7 @@ import uuid
 from sqlalchemy.orm import Session
 from fastapi import HTTPException
 from models.cart import Cart, CartItem
+from models.book import Book
 from typing import List
 
 def get_cart_with_items(db: Session, user_id: str) -> Cart:
@@ -22,6 +23,12 @@ def add_cart_item(
     price: float = None,
     deposit: float = None,
 ) -> CartItem:
+    book = db.query(Book).filter(Book.id == book_id).first()
+    if not book:
+        raise HTTPException(status_code=404, detail="Book not found")
+    if book.owner_id == user_id or owner_id == user_id:
+        raise HTTPException(status_code=400, detail="You cannot request your own listed book")
+
     cart = get_cart_with_items(db, user_id)
     existing = (
         db.query(CartItem)

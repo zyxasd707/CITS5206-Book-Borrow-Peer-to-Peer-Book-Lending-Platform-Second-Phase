@@ -7,6 +7,7 @@ import Card from "../../components/ui/Card";
 import Button from "../../components/ui/Button";
 import { getRefundsForOrder } from "@/utils/payments";
 import { getCurrentUser } from "@/utils/auth";
+import { formatLocalDateTime } from "@/utils/datetime";
 
 interface RefundRecord {
   refund_id: string;
@@ -98,14 +99,7 @@ export default function RefundDetailPage() {
     loadData();
   }, [orderId]);
 
-  const fmtDate = (v?: string | null) => {
-    if (!v) return "-";
-    try {
-      return new Date(v).toLocaleString();
-    } catch {
-      return "Invalid date";
-    }
-  };
+  const fmtDate = (v?: string | null) => formatLocalDateTime(v, "-");
 
   const fmtAmount = (amount: number, currency: string) => {
     const dollars = (amount / 100).toFixed(2);
@@ -328,7 +322,7 @@ export default function RefundDetailPage() {
                       </div>
                       {(order.ownerIncomeAmount || 0) > 0 && (
                         <div className="flex justify-between text-gray-500 pl-3">
-                          <span>Owner Income</span>
+                          <span>Rental Fee</span>
                           <span>{fmtDollars(order.ownerIncomeAmount || 0)}</span>
                         </div>
                       )}

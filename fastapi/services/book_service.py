@@ -10,7 +10,7 @@ from sqlalchemy import select, func, or_, and_
 
 from models.book import Book
 
-ALLOWED_DEPOSIT_INCOME_PERCENTAGES = {0, 5, 10, 15, 20}
+ALLOWED_DEPOSIT_INCOME_PERCENTAGES = set(range(0, 21))
 
 
 def _normalize_deposit_income_percentage(value: Any) -> int:
@@ -53,7 +53,7 @@ class BookService:
             isbn=payload.get("isbn"),
             tags=payload.get("tags") or [],
             publish_year=payload.get("publish_year"),
-            max_lending_days=int(payload.get("max_lending_days", 14)),
+            max_lending_days=min(int(payload.get("max_lending_days", 30)), 30),
             deposit_income_percentage=_normalize_deposit_income_percentage(
                 payload.get("deposit_income_percentage", 0)
             ),

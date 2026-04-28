@@ -290,10 +290,26 @@ export default function LendingListPage() {
         throw new Error("Failed to confirm shipment");
       }
 
+      setOrderMap((prev) => ({
+        ...prev,
+        [selectedOrderId]: prev[selectedOrderId]
+          ? {
+              ...prev[selectedOrderId],
+              shippingOutTrackingNumber: trackingNumber.trim(),
+            }
+          : prev[selectedOrderId],
+      }));
+
       const updatedOrder = await getOrderById(selectedOrderId);
       setOrderMap((prev) => ({
         ...prev,
-        [selectedOrderId]: updatedOrder,
+        [selectedOrderId]: {
+          ...updatedOrder,
+          shippingOutTrackingNumber:
+            updatedOrder?.shippingOutTrackingNumber ||
+            prev[selectedOrderId]?.shippingOutTrackingNumber ||
+            null,
+        },
       }));
       setShipModalOpen(false);
       toast.success("Shipment confirmed successfully");
@@ -514,7 +530,7 @@ export default function LendingListPage() {
                               {hasBorrowerReceived
                                 ? "Shipped"
                                 : currentOrder?.shippingOutTrackingNumber
-                                  ? "Update Shipment"
+                                  ? "Update Shipping"
                                   : "Ship"}
                             </Button>
                           )}

@@ -19,6 +19,7 @@ def _checkout_item_to_dict(item: CheckoutItem) -> dict:
         "actionType": item.action_type,
         "price": float(item.price) if item.price is not None else None,
         "deposit": float(item.deposit) if item.deposit is not None else None,
+        "rentalDays": None,
         "shippingMethod": item.shipping_method,
         "shippingQuote": float(item.shipping_quote) if item.shipping_quote is not None else None,
     }

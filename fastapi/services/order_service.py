@@ -21,7 +21,7 @@ from services.email_service import (
 )
 
 logger = logging.getLogger(__name__)
-PLATFORM_SERVICE_FEE_RATE = 0.05
+PLATFORM_SERVICE_FEE_AMOUNT = 2.0
 
 class OrderService:
     """
@@ -101,8 +101,8 @@ class OrderService:
 
     @staticmethod
     def _calculate_service_fee(base_amount: float) -> float:
-        """Platform service fee = 5% of the provided subtotal."""
-        return float(base_amount or 0) * PLATFORM_SERVICE_FEE_RATE
+        """Platform service fee is fixed at $2 per transaction."""
+        return PLATFORM_SERVICE_FEE_AMOUNT if float(base_amount or 0) > 0 else 0.0
 
     @staticmethod
     def _is_post_shipping(shipping_method: Optional[str]) -> bool:
@@ -150,7 +150,7 @@ class OrderService:
         """
         results = []
 
-        for order_items in orders_data:
+        for index, order_items in enumerate(orders_data):
             if not order_items:
                 continue
 
@@ -166,12 +166,7 @@ class OrderService:
                 elif item.action_type.lower() == "borrow":
                     # for borrowing, use deposit
                     deposit_or_sale_amount += float(item.deposit or 0)
-                    book = db.query(Book).filter(Book.id == item.book_id).first()
-                    owner_income_amount += (
-                        float(item.deposit or 0)
-                        * float(getattr(book, "deposit_income_percentage", 0) or 0)
-                        / 100.0
-                    )
+                    owner_income_amount += float(item.price or 0)
 
             # Calculate shipping fee
             post_items = [item for item in order_items if OrderService._is_post_shipping(item.shipping_method)]
@@ -182,7 +177,7 @@ class OrderService:
 
             # Platform service fee = (item total incl. shipping) * 5%
             service_fee_base = deposit_or_sale_amount + owner_income_amount + shipping_out_fee_amount
-            service_fee_amount = OrderService._calculate_service_fee(service_fee_base)
+            service_fee_amount = OrderService._calculate_service_fee(service_fee_base) if index == 0 else 0.0
 
             # keep original item
             results.append({
@@ -348,9 +343,9 @@ class OrderService:
                 "action_type": order.action_type,
                 "total_paid_amount": float(order.total_paid_amount),
                 "books": books_info,
-                "create_at": order.created_at,
-                "due_at": order.due_at,
-                "completed_at": order.completed_at,
+                "create_at": Order._to_utc_iso(order.created_at),
+                "due_at": Order._to_utc_iso(order.due_at),
+                "completed_at": Order._to_utc_iso(order.completed_at),
                 "owner_id": order.owner_id,
                 "borrower_id": order.borrower_id,
                 "shipping_out_tracking_number": order.shipping_out_tracking_number,

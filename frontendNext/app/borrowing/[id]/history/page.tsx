@@ -13,6 +13,7 @@ import { getOrdersByBookId } from "@/utils/borrowingOrders";
 import { getBookById } from "@/utils/books";
 import { getUserById } from "@/utils/auth";
 import type { Order as ApiOrder } from "@/utils/borrowingOrders";
+import { formatLocalDateTime } from "@/utils/datetime";
 
 const STATUS_META: Record<string, { label: string; className: string }> = {
   PENDING_PAYMENT: { label: "Pending Payment", className: "text-amber-600" },
@@ -24,7 +25,7 @@ const STATUS_META: Record<string, { label: string; className: string }> = {
   CANCELED: { label: "Canceled", className: "text-gray-400" },
 };
 
-const fmtDate = (v?: string) => (v ? new Date(v).toLocaleString() : "—");
+const fmtDate = (v?: string) => formatLocalDateTime(v);
 
 export default function BorrowHistoryPage() {
   const params = useParams();

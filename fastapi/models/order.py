@@ -11,6 +11,7 @@ from sqlalchemy import (
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from models.base import Base
+from utils.datetime import to_utc_iso
 from typing import Dict
  
 # Order status enum - matches frontend OrderStatus
@@ -128,6 +129,10 @@ class Order(Base):
     owner = relationship("User", foreign_keys=[owner_id])
     borrower = relationship("User", foreign_keys=[borrower_id])
     payment = relationship("Payment", back_populates = "orders")
+
+    @staticmethod
+    def _to_utc_iso(value: datetime | None) -> str | None:
+        return to_utc_iso(value)
  
     def to_dict(self, include_books: bool = True) -> Dict:
         """
@@ -166,9 +171,9 @@ class Order(Base):
             "totalPaidAmount": float(self.total_paid_amount or 0),
             "paymentMethod": "Card via Stripe" if self.payment_id else None,
             "paymentTime": (
-                self.payment.created_at.isoformat()
+                self._to_utc_iso(self.payment.created_at)
                 if self.payment and self.payment.created_at
-                else (self.created_at.isoformat() if self.created_at else None)
+                else self._to_utc_iso(self.created_at)
             ),
             "contactName": self.contact_name,
             "contactEmail": self.borrower.email if self.borrower else None,
@@ -177,16 +182,16 @@ class Order(Base):
             "city": self.city,
             "postcode": self.postcode,
             "country": self.country,
-            "createdAt": self.created_at.isoformat() if self.created_at else None,
-            "updatedAt": self.updated_at.isoformat() if self.updated_at else None,
-            "dueAt": self.due_at.isoformat() if getattr(self, "due_at", None) else None,
+            "createdAt": self._to_utc_iso(self.created_at),
+            "updatedAt": self._to_utc_iso(self.updated_at),
+            "dueAt": self._to_utc_iso(getattr(self, "due_at", None)),
             "books": books_list,
             "paymentId": self.payment_id,
 
-            "startAt": self.start_at.isoformat() if self.start_at else None,
-            "returnedAt": self.returned_at.isoformat() if self.returned_at else None,
-            "completedAt": self.completed_at.isoformat() if self.completed_at else None,
-            "canceledAt": self.canceled_at.isoformat() if self.canceled_at else None,
+            "startAt": self._to_utc_iso(self.start_at),
+            "returnedAt": self._to_utc_iso(self.returned_at),
+            "completedAt": self._to_utc_iso(self.completed_at),
+            "canceledAt": self._to_utc_iso(self.canceled_at),
             
             "shippingOutTrackingNumber": self.shipping_out_tracking_number,
             "shippingOutTrackingUrl": self.shipping_out_tracking_url,

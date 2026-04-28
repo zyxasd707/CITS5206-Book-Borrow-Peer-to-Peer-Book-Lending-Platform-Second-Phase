@@ -7,6 +7,7 @@ import Card from "../components/ui/Card";
 import Button from "../components/ui/Button";
 import { getUserRefunds } from "@/utils/payments";
 import { getCurrentUser } from "@/utils/auth";
+import { formatLocalDateTime } from "@/utils/datetime";
 
 type RefundStatus = "succeeded" | "pending" | "failed";
 
@@ -108,14 +109,7 @@ export default function RefundsPage() {
     { value: "failed", label: "Failed", count: countByStatus("failed") },
   ] as const;
 
-  const fmtDate = (v?: string | null) => {
-    if (!v) return "-";
-    try {
-      return new Date(v).toLocaleString();
-    } catch {
-      return "Invalid date";
-    }
-  };
+  const fmtDate = (v?: string | null) => formatLocalDateTime(v, "-");
 
   const fmtAmount = (cents: number, currency: string) => {
     const dollars = (cents / 100).toFixed(2);

@@ -60,6 +60,19 @@ export const useCartStore = create<CartState>((set, get) => ({
   // 添加到购物车
   addToCart: async (book, preferredMode) => {
     const { cart } = get();
+    let currentUser: { id?: string } | null = null;
+    if (typeof window !== "undefined") {
+      try {
+        const currentUserRaw = localStorage.getItem("user");
+        currentUser = currentUserRaw ? JSON.parse(currentUserRaw) : null;
+      } catch {
+        currentUser = null;
+      }
+    }
+
+    if (currentUser?.id && currentUser.id === book.ownerId) {
+      return false;
+    }
 
     // ✅ 已存在，返回 "duplicate"
     if (cart.some((b) => b.bookId === book.id)) {

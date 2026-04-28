@@ -12,6 +12,7 @@ import { EmptyState, ErrorState, LoadingState } from "../components/ui/AsyncStat
 import type { OrderStatus } from "@/app/types/order";
 import { confirmBorrowerReceived, getBorrowingOrders, type Order } from "@/utils/borrowingOrders";
 import { getCurrentUser } from "@/utils/auth";
+import { formatLocalDateTime } from "@/utils/datetime";
 
 const STATUS_META: Record<OrderStatus, { label: string; className: string }> = {
   PENDING_PAYMENT: { label: "Pending Payment", className: "text-amber-600" },
@@ -170,14 +171,7 @@ export default function OrderListPage() {
   ] as const;
 
   // Format date helper
-  const fmtDate = (v?: string) => {
-    if (!v) return "—";
-    try {
-      return new Date(v).toLocaleString();
-    } catch {
-      return "Invalid date";
-    }
-  };
+  const fmtDate = (v?: string) => formatLocalDateTime(v);
 
   return (
     <div className="flex h-full">

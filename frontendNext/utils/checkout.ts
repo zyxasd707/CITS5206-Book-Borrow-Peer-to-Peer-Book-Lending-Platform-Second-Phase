@@ -70,7 +70,8 @@ export async function rebuildCheckout(
   user: User,
   items: any[],
   shipping: Record<string, "post" | "pickup"> = {},
-  selectedQuotes: Record<string, any> = {}
+  selectedQuotes: Record<string, any> = {},
+  rentalDays: Record<string, number> = {}
 ) {
   // 1. get current checkout id
   const existing = await getMyCheckouts();
@@ -104,8 +105,12 @@ export async function rebuildCheckout(
         bookId,
         ownerId: it.ownerId,
         actionType: (it.mode || it.actionType)?.toUpperCase(), // default BORROW
-        price: mode === "purchase" ? (it.salePrice || it.price) : undefined, // Sale Price
+        price:
+          mode === "purchase"
+            ? (it.salePrice || it.price)
+            : (it.rentalPerDay || it.depositIncomePercentage || 0) * (rentalDays[bookId] || it.rentalDays || 1),
         deposit: mode === "borrow" ? it.deposit : undefined,
+        rentalDays: mode === "borrow" ? (rentalDays[bookId] || it.rentalDays || 1) : undefined,
         shippingMethod:
           shipping[bookId] ||
           it.shippingMethod ||

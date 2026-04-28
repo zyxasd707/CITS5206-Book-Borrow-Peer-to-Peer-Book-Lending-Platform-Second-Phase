@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { CircleHelp } from "lucide-react";
 import Card from "@/app/components/ui/Card";
 import Button from "@/app/components/ui/Button";
 import Input from "@/app/components/ui/Input";
@@ -45,6 +46,8 @@ interface CheckoutItem {
   actionType: "BORROW" | "PURCHASE";
   price?: number;
   deposit?: number;
+  rentalDays?: number;
+  rentalPerDay?: number;
   depositIncomePercentage?: number;
   deliveryMethod?: "post" | "pickup" | "both";
   shippingMethod?: "post" | "pickup";
@@ -56,8 +59,34 @@ type PaymentConfirmFormProps = {
   onSuccess?: () => void;
 };
 
-const TEST_DESTINATION_ACCOUNT_ID =
-  process.env.NEXT_PUBLIC_STRIPE_TEST_DESTINATION_ACCOUNT_ID || "acct_1TGXxXQvCdOoVRC6";
+const depositSummaryTooltipText =
+  "Deposits are refundable after the book is returned in the agreed condition.";
+const shippingSummaryTooltipText =
+  "Shipping is charged per owner based on the delivery option and quote you select.";
+const rentalSummaryTooltipText =
+  "Rental fee is calculated automatically as rental/day multiplied by rental days.";
+const serviceFeeTooltipText =
+  "This is the platform's fixed service fee for the transaction.";
+
+function SummaryLabel({ label, tooltip }: { label: string; tooltip?: string }) {
+  if (!tooltip) return <span>{label}</span>;
+
+  return (
+    <span className="flex items-center gap-1.5">
+      <span>{label}</span>
+        <span className="group relative inline-flex items-center">
+          <CircleHelp
+            className="h-4 w-4 cursor-help text-gray-400"
+            aria-label={tooltip}
+            title={tooltip}
+          />
+        <span className="pointer-events-none absolute left-0 top-full z-10 mt-2 w-56 rounded-md bg-gray-900 px-3 py-2 text-xs font-normal leading-5 text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100">
+          {tooltip}
+        </span>
+      </span>
+    </span>
+  );
+}
 
 function PaymentConfirmForm({ clientSecret, onSuccess }: PaymentConfirmFormProps) {
   const stripe = useStripe();
@@ -120,7 +149,6 @@ function PaymentConfirmForm({ clientSecret, onSuccess }: PaymentConfirmFormProps
 
 export default function CheckoutPage() {
   const router = useRouter();
-  const [globalShippingChoice, setGlobalShippingChoice] = useState<"standard" | "express" | null>("standard");
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [checkouts, setCheckouts] = useState<any[]>([]);
   const [ownersMap, setOwnersMap] = useState<Record<string, { name: string; zipCode: string; stripeAccountId?: string | null }>>({});
@@ -137,8 +165,6 @@ export default function CheckoutPage() {
   const [selectedQuoteByOwner, setSelectedQuoteByOwner] = useState<Record<string, ShippingQuote>>({});
   const [isEditing, setIsEditing] = useState(false);
 
-  const [rebuilding, setRebuilding] = useState(false);
-  const [loading, setLoading] = useState(false);
   const [userLoaded, setUserLoaded] = useState(false);
   const [initializingCheckout, setInitializingCheckout] = useState(true);
   const [initError, setInitError] = useState<string | null>(null);
@@ -157,7 +183,7 @@ export default function CheckoutPage() {
   const [paying, setPaying] = useState(false);
   const [showDonationModal, setShowDonationModal] = useState(false);
   const [donationAmount, setDonationAmount] = useState<string>("");
-  const [deliveryMethodSaved, setDeliveryMethodSaved] = useState(false);
+  const [rentalDaysByBook, setRentalDaysByBook] = useState<Record<string, number>>({});
 
 
   // 1. load current user, fill address info
@@ -246,47 +272,38 @@ export default function CheckoutPage() {
               ...it,
               titleOr: book?.titleOr,
               deliveryMethod: book?.deliveryMethod,
+              rentalPerDay: (book?.depositIncomePercentage ?? 0) / 10,
               depositIncomePercentage: book?.depositIncomePercentage ?? 0,
+              rentalDays:
+                it.actionType === "BORROW" && Number(book?.depositIncomePercentage ?? 0) > 0
+                  ? Math.max(1, Math.round(Number(it.price ?? 0) / (Number(book?.depositIncomePercentage ?? 0) / 10)))
+                  : 1,
             };
           } catch {
-            return { ...it, titleOr: "Unknown Book", deliveryMethod: "", depositIncomePercentage: 0 };
+            return { ...it, titleOr: "Unknown Book", deliveryMethod: "", depositIncomePercentage: 0, rentalPerDay: 0, rentalDays: 1 };
           }
         })
       );
       setFullItems(results);
-
-      // initiate itemShipping
-      const next: Record<string, DeliveryChoice | ""> = {};
-      for (const b of results) {
-        if (b.deliveryMethod === "post") {
-          next[b.bookId] = "post";
-        } else if (b.deliveryMethod === "pickup") {
-          next[b.bookId] = "pickup";
-        } else {
-          next[b.bookId] = b.shippingMethod || ""; // both 或 未设置时，保持空，交给用户选择
+      setRentalDaysByBook((prev) => {
+        const next = { ...prev };
+        for (const item of results) {
+          if (item.actionType === "BORROW" && !next[item.bookId]) {
+            next[item.bookId] = Math.min(30, Math.max(1, Number(item.rentalDays || 1)));
+          }
         }
-      }
-      setItemShipping(next);
+        return next;
+      });
+
+      // Preserve the user's previous choice after checkout rebuilds.
+      setItemShipping((prev) => {
+        const next: Record<string, DeliveryChoice | ""> = {};
+        for (const b of results) {
+          next[b.bookId] = prev[b.bookId] ?? "";
+        }
+        return next;
+      });
     })();
-  }, [items]);
-
-  // 4. init shipping state
-  useEffect(() => {
-    if (!items.length || Object.keys(itemShipping).length > 0) return;
-    setItemShipping(Object.fromEntries(items.map((b) => [b.bookId, ""])) as Record<string, DeliveryChoice | "">);
-  }, [items]);
-
-  // ---------- useEffect initialize shipping ----------
-  useEffect(() => {
-    if (!items.length) return;
-
-    if (Object.keys(itemShipping).length > 0) return;
-
-    const next: Record<string, "post" | "pickup" | ""> = {};
-    for (const b of items) {
-      next[b.bookId] = ""; // default empty
-    }
-    setItemShipping(next);
   }, [items]);
 
   // save address
@@ -304,15 +321,13 @@ export default function CheckoutPage() {
       phoneNumber: currentCheckout.phone,
     });
 
-    const cleaned = Object.fromEntries(currentCheckout.items.map((it: any) => [it.bookId, it.shippingMethod]));
-    const newCheckout = await rebuildCheckout(currentUser, fullItems, cleaned, selectedQuoteByOwner);
-    setCheckouts([newCheckout]);
+    await refreshCheckoutForSelections(itemShipping, rentalDaysByBook);
     setIsEditing(false);
     setActionNotice("Address saved.");
   };
 
   // ---------- Get quotes per owner for DELIVERY items ----------
-  async function requestQuotes() {
+  async function requestQuotes(shippingChoices: Record<string, DeliveryChoice | "">) {
     if (!currentCheckout) return;
     console.log("[requestQuotes] start... currentCheckout:", currentCheckout);
 
@@ -322,7 +337,7 @@ export default function CheckoutPage() {
 
     const deliveryGroups: Record<string, any[]> = {};
     for (const b of items) {
-      if (itemShipping[b.bookId] === "post") {
+      if (shippingChoices[b.bookId] === "post") {
         (deliveryGroups[b.ownerId] ||= []).push(b);
       }
     }
@@ -373,63 +388,65 @@ export default function CheckoutPage() {
       }
     }
     setQuotesByOwner(result);
-    // default Standard
-    const defaults: Record<string, ShippingQuote> = {};
+    const mergedSelections: Record<string, ShippingQuote> = {};
     for (const [ownerId, quotes] of Object.entries(result)) {
+      const current = selectedQuoteByOwner[ownerId];
+      const matched = current
+        ? quotes.find((q) => q.serviceLevel === current.serviceLevel)
+        : undefined;
       const std = quotes.find((q) => q.serviceLevel === "Standard");
-      if (std) defaults[ownerId] = std;
+      if (matched) {
+        mergedSelections[ownerId] = matched;
+      } else if (std) {
+        mergedSelections[ownerId] = std;
+      }
     }
-    setSelectedQuoteByOwner(defaults);
-
-    setGlobalShippingChoice("standard");
-
-    // rebuildCheckout
-    if (Object.keys(defaults).length > 0) {
-      const cleaned = Object.fromEntries(
-        fullItems.map((it) => [it.bookId, itemShipping[it.bookId]])
-      ) as Record<string, DeliveryChoice>;
-      const newCheckout = await rebuildCheckout(currentUser!, fullItems, cleaned, defaults);
-      setCheckouts([newCheckout]);
-    }
-  }
-
-  // save delivery method
-  const saveDeliveryMethod = async () => {
-    setActionError(null);
-    setActionNotice(null);
-    const unselected = items.filter((b) => !itemShipping[b.bookId]);
-    if (unselected.length > 0) {
-      setActionError("Please select delivery method for all items before saving.");
-      return;
-    }
-
-    const cleaned = Object.fromEntries(
-      Object.entries(itemShipping).filter(([, v]) => v)
-    ) as Record<string, DeliveryChoice>;
-
-    setItemShipping(cleaned);
-    console.log("[saveDeliveryMethod] calling requestQuotes...");
-
-    await requestQuotes();
-    setDeliveryMethodSaved(true);
-    setActionNotice("Delivery methods saved.");
+    setSelectedQuoteByOwner(mergedSelections);
+    return mergedSelections;
   };
+
+  async function refreshCheckoutForSelections(
+    shippingChoices: Record<string, DeliveryChoice | "">,
+    rentalDays: Record<string, number>
+  ) {
+    if (!currentUser) return;
+
+    const hasUnselected = fullItems.some((item) => !shippingChoices[item.bookId]);
+    if (hasUnselected) return;
+
+    const quotes = await requestQuotes(shippingChoices);
+    const cleaned = Object.fromEntries(
+      Object.entries(shippingChoices).filter(([, v]) => v)
+    ) as Record<string, DeliveryChoice>;
+    const newCheckout = await rebuildCheckout(currentUser, fullItems, cleaned, quotes || {}, rentalDays);
+    setCheckouts([newCheckout]);
+  }
 
 
   // ---------- Handlers ----------
-  const setChoice = (bookId: string, value: DeliveryChoice) => {
-    setItemShipping(prev => {
-      const next = { ...prev, [bookId]: value };
-      return next;
-    });
-    // Mark delivery as unsaved when user changes selection
-    setDeliveryMethodSaved(false);
+  const setChoice = async (bookId: string, value: DeliveryChoice) => {
+    setActionError(null);
+    setActionNotice(null);
+    const nextShipping = { ...itemShipping, [bookId]: value };
+    setItemShipping(nextShipping);
+    await refreshCheckoutForSelections(nextShipping, rentalDaysByBook);
+  };
+
+  const setRentalDays = async (bookId: string, value: number) => {
+    setActionError(null);
+    setActionNotice(null);
+    const nextRentalDays = {
+      ...rentalDaysByBook,
+      [bookId]: Math.min(30, Math.max(1, value)),
+    };
+    setRentalDaysByBook(nextRentalDays);
+    await refreshCheckoutForSelections(itemShipping, nextRentalDays);
   };
 
 
   // initiate PaymentIntent，to get client_secret
   const startPayment = async (donation: number = 0) => {
-    const co = checkouts[0];
+    let co = checkouts[0];
     if (!co || !currentUser) return;
     setActionError(null);
 
@@ -448,6 +465,12 @@ export default function CheckoutPage() {
 
     try {
       setPaying(true);
+      const cleaned = Object.fromEntries(
+        fullItems.map((it) => [it.bookId, itemShipping[it.bookId]])
+      ) as Record<string, DeliveryChoice>;
+      co = await rebuildCheckout(currentUser, fullItems, cleaned, selectedQuoteByOwner, rentalDaysByBook);
+      setCheckouts([co]);
+
       const toCents = (n: number | undefined | null) =>
         Math.max(0, Math.round((n || 0) * 100));
       const totalAmount = co.totalDue + donation;
@@ -456,7 +479,7 @@ export default function CheckoutPage() {
         user_id: currentUser.id,
         amount: toCents(totalAmount),
         currency: "aud",
-        purchase: toCents(co.bookFee),
+        purchase: toCents((co.bookFee || 0) + (co.ownerIncomeAmount || 0)),
         deposit: toCents(co.deposit),
         shipping_fee: toCents(co.shippingFee),
         service_fee: toCents(co.serviceFee),
@@ -514,12 +537,6 @@ export default function CheckoutPage() {
     const unselected = items.filter((b) => !itemShipping[b.bookId]);
     if (unselected.length > 0) {
       setActionError("Please select delivery method for all items before checkout.");
-      return;
-    }
-
-    // Check if delivery methods have been saved
-    if (!deliveryMethodSaved) {
-      setActionError("Please save your delivery methods by clicking the 'Save Delivery Method' button.");
       return;
     }
 
@@ -598,12 +615,22 @@ export default function CheckoutPage() {
       return acc;
     }, {} as Record<string, CheckoutItem[]>)
   ));
-  const totalEstimatedIncome = fullItems.reduce((sum, item) => {
+  const totalRentalFee = fullItems.reduce((sum, item) => {
     if (item.actionType !== "BORROW") return sum;
-    const deposit = Number(item.deposit ?? 0);
-    const percentage = Number(item.depositIncomePercentage ?? 0);
-    return sum + (deposit * percentage) / 100;
+    const rentalPerDay = Number(item.rentalPerDay ?? item.depositIncomePercentage ?? 0);
+    const rentalDays = Number(rentalDaysByBook[item.bookId] ?? item.rentalDays ?? 1);
+    return sum + rentalPerDay * rentalDays;
   }, 0);
+  const purchaseTotal = fullItems.reduce((sum, item) => {
+    if (item.actionType !== "PURCHASE") return sum;
+    return sum + Number(item.price ?? 0);
+  }, 0);
+  const displayDeposit = Number(checkouts[0]?.deposit ?? 0);
+  const displayPurchaseFee = Number(checkouts[0]?.bookFee ?? purchaseTotal);
+  const displayRentalFee = totalRentalFee;
+  const displayShippingFee = Number(checkouts[0]?.shippingFee ?? 0);
+  const displayServiceFee = Number(checkouts[0]?.serviceFee ?? (items.length > 0 ? 2 : 0));
+  const displayTotalDue = displayDeposit + displayPurchaseFee + displayRentalFee + displayShippingFee + displayServiceFee;
 
   return (
     <div className="max-w-6xl mx-auto p-4 sm:p-6 space-y-6">
@@ -648,8 +675,6 @@ export default function CheckoutPage() {
         <div className="p-4 space-y-3">
           <div className="flex items-center justify-between gap-2">
             <h2 className="text-lg font-semibold">Items & Delivery</h2>
-            <Button variant="outline" onClick={saveDeliveryMethod} className="text-sm">Save Delivery Method</Button>
-
           </div>
 
           {/* Items group */}
@@ -671,111 +696,121 @@ export default function CheckoutPage() {
                                 Trading Way: {b.actionType === "BORROW" ? "Borrow" : "Purchase"}
                               </span>
                             </div>
-                            {b.actionType === "BORROW" && (
-                              <div className="text-sm text-amber-700 mt-1">
-                                Estimated Income: ${(
-                                  (Number(b.deposit ?? 0) * Number(b.depositIncomePercentage ?? 0)) / 100
-                                ).toFixed(2)} ({b.depositIncomePercentage ?? 0}% of deposit)
-                              </div>
-                            )}
                           </div>
 
-                          {/* Post / Pickup select */}
+                        </div>
+                        {b.actionType === "BORROW" && (
+                          <div className="mt-4 rounded-md border bg-white p-4 space-y-3">
+                            <div className="text-sm font-medium text-gray-800">Rental Details</div>
+                            <div className="flex flex-wrap items-center justify-between gap-4">
+                              <span className="text-sm text-amber-700">
+                                Rental/day: ${Number(b.rentalPerDay ?? b.depositIncomePercentage ?? 0).toFixed(2)} / day
+                              </span>
+                              <div className="flex items-center gap-2">
+                                <span className="text-sm text-gray-700">Rental Days:</span>
+                                <select
+                                  value={rentalDaysByBook[b.bookId] ?? 1}
+                                  onChange={(e) => void setRentalDays(b.bookId, Number(e.target.value))}
+                                  className="px-3 py-1 border rounded bg-white text-sm"
+                                >
+                                  {Array.from({ length: 30 }, (_, i) => i + 1).map((day) => (
+                                    <option key={day} value={day}>
+                                      {day} day{day > 1 ? "s" : ""}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                              <span className="text-sm text-amber-700">
+                                Rental fee: $
+                                {(Number(b.rentalPerDay ?? b.depositIncomePercentage ?? 0) * Number(rentalDaysByBook[b.bookId] ?? 1)).toFixed(2)}
+                              </span>
+                            </div>
+                          </div>
+                        )}
+                        <div className="mt-4 rounded-md border bg-white p-4 space-y-3">
+                          <div className="text-sm font-medium text-gray-800">Delivery</div>
                           <div className="flex flex-wrap items-center gap-2">
                             <span className="text-sm text-gray-700">Delivery Method:</span>
-                            {b.deliveryMethod === "post" && (
-                              <span className="px-4 py-1 rounded bg-black text-white text-sm">Post</span>
-                            )}
-                            {b.deliveryMethod === "pickup" && (
-                              <span className="px-4 py-1 rounded bg-black text-white text-sm">Pickup</span>
-                            )}
-                            {b.deliveryMethod === "both" && (
-                              <select
-                                value={itemShipping[b.bookId]}
-                                onChange={(e) => setChoice(b.bookId, e.target.value as DeliveryChoice)}
-                                className="px-3 py-1 border rounded bg-white text-sm"
-                              >
-                                <option value="" disabled>-- Select option --</option>
+                            <select
+                              value={itemShipping[b.bookId]}
+                              onChange={(e) => void setChoice(b.bookId, e.target.value as DeliveryChoice)}
+                              className="px-3 py-1 border rounded bg-white text-sm"
+                            >
+                              <option value="" disabled>-- Select option --</option>
+                              {(b.deliveryMethod === "post" || b.deliveryMethod === "both") && (
                                 <option value="post">Post</option>
+                              )}
+                              {(b.deliveryMethod === "pickup" || b.deliveryMethod === "both") && (
                                 <option value="pickup">Pickup</option>
-                              </select>
-                            )}
+                              )}
+                            </select>
                           </div>
-                        </div>
+                          {itemShipping[b.bookId] === "pickup" && (
+                            <p className="text-sm text-green-700">
+                              Pickup is free. Details will be shared after order.
+                            </p>
+                          )}
+                          {itemShipping[b.bookId] === "post" && (
+                            <p className="text-sm text-orange-700">
+                              Shipping fee is calculated automatically.
+                            </p>
+                          )}
+                          {itemShipping[b.bookId] === "post" &&
+                            quotesByOwner[ownerId]?.length > 0 && (
+                              <div className="border-t pt-3">
+                                <h4 className="text-sm font-semibold mb-2 text-gray-800">
+                                  AusPost Shipping Quotes
+                                </h4>
+                                <div className="flex flex-wrap gap-2">
+                                  {quotesByOwner[ownerId].map((q) => {
+                                    const choiceKey = q.serviceLevel === "Standard" ? "standard" : "express";
+                                    return (
+                                      <button
+                                        key={q.id}
+                                        type="button"
+                                        onClick={async () => {
+                                          // 所有 owner 都选择相同 serviceLevel
+                                          const updated: Record<string, ShippingQuote> = {};
+                                          for (const [oid, quotes] of Object.entries(quotesByOwner)) {
+                                            const match = quotes.find(
+                                              (x) => x.serviceLevel?.toLowerCase() === choiceKey
+                                            );
+                                            if (match) {
+                                              updated[oid] = {
+                                                ...match,
+                                                serviceCode: choiceKey === "express"
+                                                  ? "AUS_PARCEL_EXPRESS"
+                                                  : "AUS_PARCEL_REGULAR",
+                                              } as any;
+                                            }
+                                          }
+                                          setSelectedQuoteByOwner(updated);
 
-                        {/* Pickup hint */}
-                        {itemShipping[b.bookId] === "pickup" && (
-                          <p className="text-sm text-green-700 mt-2">
-                            Pickup is free. Details will be shared after order.
-                          </p>
-                        )}
-                        {/* Delivery hint */}
-                        {itemShipping[b.bookId] === "post" && (
-                          <p className="text-sm text-orange-700 mt-2">
-                            Shipping fees will be calculated after Save Delivery Method.
-                          </p>
-                        )}
+                                          const cleaned = Object.fromEntries(
+                                            fullItems.map((it) => [it.bookId, itemShipping[it.bookId]])
+                                          ) as Record<string, DeliveryChoice>;
+
+                                          const newCheckout = await rebuildCheckout(currentUser!, fullItems, cleaned, updated, rentalDaysByBook);
+                                          setCheckouts([newCheckout]);
+                                        }}
+                                        className={`px-3 py-2 rounded border text-sm ${selectedQuoteByOwner[ownerId]?.id === q.id
+                                          ? "bg-black text-white"
+                                          : "bg-white hover:bg-gray-50"
+                                          }`}
+                                      >
+                                        {q.carrier} {q.serviceLevel} • ${q.cost} • ETA {q.etaDays || "-"}d
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            )}
+                        </div>
 
 
                       </div>
                     ))}
                   </div>
-                  {/* Shipping Quotes（if chose delivery, display under this owner） */}
-                  {ownerItems.some((b) => itemShipping[b.bookId] === "post") &&
-                    quotesByOwner[ownerId]?.length > 0 && (
-                      <div className="mt-4 p-4 rounded-md border bg-white">
-                        <h4 className="text-sm font-semibold mb-2 text-gray-800">
-                          AusPost Shipping Quotes
-                        </h4>
-                        <div className="flex flex-wrap gap-2">
-                          {quotesByOwner[ownerId].map((q) => {
-                            const choiceKey = q.serviceLevel === "Standard" ? "standard" : "express";
-                            return (
-                              <button
-                                key={q.id}
-                                type="button"
-                                onClick={async () => {
-                                  setGlobalShippingChoice(choiceKey);
-
-                                  // 所有 owner 都选择相同 serviceLevel
-                                  const updated: Record<string, ShippingQuote> = {};
-                                  for (const [oid, quotes] of Object.entries(quotesByOwner)) {
-                                    const match = quotes.find(
-                                      (x) => x.serviceLevel?.toLowerCase() === choiceKey
-                                    );
-                                    if (match) {
-                                      updated[oid] = {
-                                        ...match,
-                                        serviceCode: choiceKey === "express"
-                                          ? "AUS_PARCEL_EXPRESS"
-                                          : "AUS_PARCEL_REGULAR",
-                                      } as any;
-                                    }
-                                  }
-                                  setSelectedQuoteByOwner(updated);
-
-                                  // rebuild checkout
-                                  const cleaned = Object.fromEntries(
-                                    fullItems.map((it) => [it.bookId, itemShipping[it.bookId]])
-                                  ) as Record<string, DeliveryChoice>;
-
-                                  const newCheckout = await rebuildCheckout(currentUser!, fullItems, cleaned, updated);
-                                  setCheckouts([newCheckout]);
-
-                                }}
-                                className={`px-3 py-2 rounded border text-sm ${selectedQuoteByOwner[ownerId]?.id === q.id
-                                  ? "bg-black text-white"
-                                  : "bg-white hover:bg-gray-50"
-                                  }`}
-                              >
-                                {q.carrier} {q.serviceLevel} • ${q.cost} • ETA {q.etaDays || "-"}d
-                              </button>
-                            );
-                          })}
-                        </div>
-
-                      </div>
-                    )}
                 </div>
               ))}
           </div>
@@ -787,26 +822,24 @@ export default function CheckoutPage() {
         <div className="p-4 space-y-2">
           <h2 className="text-lg font-semibold">Order Summary</h2>
           <div className="flex justify-between text-sm">
-            <span>Deposits (Refundable)</span>
-            <span>${checkouts[0]?.deposit?.toFixed(2) || "0.00"}</span>
+            <SummaryLabel label="Deposits (Refundable)" tooltip={depositSummaryTooltipText} />
+            <span>${displayDeposit.toFixed(2)}</span>
           </div>
           <div className="flex justify-between text-sm">
             <span>Purchase Price</span>
-            <span>${checkouts[0]?.bookFee?.toFixed(2) || "0.00"}</span>
+            <span>${displayPurchaseFee.toFixed(2)}</span>
           </div>
           <div className="flex justify-between text-sm">
-            <span>Shipping Fee</span>
-            <span>${checkouts[0]?.shippingFee?.toFixed(2) || "0.00"}</span>
+            <SummaryLabel label="Shipping Fee" tooltip={shippingSummaryTooltipText} />
+            <span>${displayShippingFee.toFixed(2)}</span>
           </div>
           <div className="flex justify-between text-sm text-amber-700">
-            <span>Estimated Income from Deposits</span>
-            <span>${Number(checkouts[0]?.ownerIncomeAmount ?? totalEstimatedIncome).toFixed(2)}</span>
+            <SummaryLabel label="Rental Fee" tooltip={rentalSummaryTooltipText} />
+            <span>${displayRentalFee.toFixed(2)}</span>
           </div>
-          <div className="mt-2 rounded-md border border-gray-200 bg-gray-50 px-3 py-2">
-            <div className="flex justify-between text-sm font-medium">
-              <span>Platform Fee (5% of all fees above)</span>
-              <span>${checkouts[0]?.serviceFee?.toFixed(2) || "0.00"}</span>
-            </div>
+          <div className="flex justify-between text-sm">
+            <SummaryLabel label="Service Fee" tooltip={serviceFeeTooltipText} />
+            <span>${displayServiceFee.toFixed(2)}</span>
           </div>
           {donationAmount && parseFloat(donationAmount) > 0 && (
             <div className="flex justify-between text-sm text-green-600 font-medium">
@@ -817,15 +850,9 @@ export default function CheckoutPage() {
           <div className="flex justify-between text-lg font-bold border-t pt-2">
             <span>Total {donationAmount && parseFloat(donationAmount) > 0 ? "to Pay" : "Due"}</span>
             <span>
-              ${((checkouts[0]?.totalDue || 0) + (parseFloat(donationAmount) || 0)).toFixed(2)}
+              ${(displayTotalDue + (parseFloat(donationAmount) || 0)).toFixed(2)}
             </span>
           </div>
-          <p className="text-xs text-gray-500">
-            Deposits may be refundable upon return. Shipping is charged per owner based on your selected quote.
-          </p>
-          <p className="text-xs text-amber-700">
-            Estimated income is included in the checkout total.
-          </p>
         </div>
       </Card>
 

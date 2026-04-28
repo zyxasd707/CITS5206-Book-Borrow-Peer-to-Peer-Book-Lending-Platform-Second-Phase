@@ -17,6 +17,7 @@ import {
   sendMessageWithImage,
   getUserByEmail,
 } from "@/utils/messageApi";
+import { formatLocalDateTime } from "@/utils/datetime";
 
 const API_URL = getApiUrl();
 const WS_URL = process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8000";
@@ -883,11 +884,7 @@ export default function MessagesPage() {
                         </p>
                         <p>
                           <span className="font-medium text-gray-900">Time:</span>{" "}
-                          {selectedNotification.created_at
-                            ? new Date(selectedNotification.created_at).toLocaleString("en-AU", {
-                                timeZone: "Australia/Perth",
-                              })
-                            : "N/A"}
+                          {formatLocalDateTime(selectedNotification.created_at, "N/A")}
                         </p>
                       </div>
                     </div>

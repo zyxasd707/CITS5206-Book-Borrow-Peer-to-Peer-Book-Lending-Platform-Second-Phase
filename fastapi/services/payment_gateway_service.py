@@ -209,6 +209,7 @@ def initiate_payment(data: dict, db: Session):
             action_types.add(item.action_type)
             if item.action_type == "BORROW":
                 deposit_total += int((item.deposit or 0) * 100)
+                purchase_total += int((item.price or 0) * 100)
             elif item.action_type == "PURCHASE":
                 purchase_total += int((item.price or 0) * 100)
 
@@ -983,7 +984,7 @@ def build_payment_splits_for_orders(db: Session, payment_id: str, orders: List[O
     """
     Create a PaymentSplit for each order:
       - Purchase: transfer = sale price + shipping; service fee kept by platform
-      - Borrow: transfer = shipping (deposit kept by platform, refunded after return)
+      - Borrow: transfer = rental fee + shipping (deposit kept by platform, refunded after return)
     """
     for order in orders:
         owner_acct = (order.owner.stripe_account_id if order.owner else None)
@@ -1000,7 +1001,7 @@ def build_payment_splits_for_orders(db: Session, payment_id: str, orders: List[O
             transfer_cents = deposit_or_sale_cents + shipping_cents
             deposit_cents = 0
         else:
-            transfer_cents = shipping_cents
+            transfer_cents = to_cents((order.owner_income_amount or 0)) + shipping_cents
             deposit_cents = deposit_or_sale_cents
 
         sp = PaymentSplit(

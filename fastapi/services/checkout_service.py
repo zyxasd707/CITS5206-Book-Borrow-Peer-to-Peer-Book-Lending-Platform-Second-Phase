@@ -10,7 +10,7 @@ from models.user import User
 
 BASE_URL = "https://digitalapi.auspost.com.au/postage/parcel/domestic/calculate.json"
 AUSPOST_API_KEY = os.getenv("AUSPOST_CALCULATE_API_KEY")
-PLATFORM_SERVICE_FEE_RATE = 0.05
+PLATFORM_SERVICE_FEE_AMOUNT = 2.0
 
 
 # -------- Shipping fee calculator --------
@@ -162,11 +162,10 @@ async def _apply_checkout_data(db: Session, checkout: Checkout, checkoutIn: Chec
             priceTotal += float(itemIn.price)
         elif itemIn.actionType.upper() == "BORROW" and itemIn.deposit:
             depositTotal += float(itemIn.deposit)
-            ownerIncomeTotal += (
-                float(itemIn.deposit)
-                * float(getattr(book, "deposit_income_percentage", 0) or 0)
-                / 100.0
-            )
+            rental_rate = float(getattr(book, "deposit_income_percentage", 0) or 0) / 10.0
+            rental_days = max(0, int(getattr(itemIn, "rentalDays", 0) or 0))
+            rental_fee = rental_rate * rental_days if rental_days > 0 else float(itemIn.price or 0)
+            ownerIncomeTotal += rental_fee
 
         item = CheckoutItem(
             item_id=str(uuid.uuid4()),
@@ -174,7 +173,11 @@ async def _apply_checkout_data(db: Session, checkout: Checkout, checkoutIn: Chec
             book_id=itemIn.bookId,
             owner_id=itemIn.ownerId,
             action_type=itemIn.actionType,
-            price=itemIn.price,
+            price=(
+                ((float(getattr(book, "deposit_income_percentage", 0) or 0) / 10.0) * max(0, int(getattr(itemIn, "rentalDays", 0) or 0)))
+                if itemIn.actionType.upper() == "BORROW"
+                else itemIn.price
+            ),
             deposit=itemIn.deposit,
             shipping_method=itemIn.shippingMethod,
             shipping_quote=0.0,
@@ -195,9 +198,9 @@ async def _apply_checkout_data(db: Session, checkout: Checkout, checkoutIn: Chec
                 shippingFeeTotal += float(item.shipping_quote)
                 processedOwners.add(item.owner_id)
 
-    # Step D: platform service fee = (item total incl. shipping) * 5%
+    # Step D: platform service fee is fixed at $2 per transaction.
     subtotalBeforeServiceFee = depositTotal + ownerIncomeTotal + priceTotal + shippingFeeTotal
-    serviceFeeAmount = subtotalBeforeServiceFee * PLATFORM_SERVICE_FEE_RATE
+    serviceFeeAmount = PLATFORM_SERVICE_FEE_AMOUNT if checkout.items else 0.0
 
     # Step E: update checkout totals
     checkout.deposit = depositTotal

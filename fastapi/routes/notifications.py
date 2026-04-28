@@ -3,9 +3,9 @@ from sqlalchemy.orm import Session
 from core.dependencies import get_db, get_current_user
 from models.user import User
 from services.notification_service import NotificationService
+from utils.datetime import to_utc_iso
 
 router = APIRouter(prefix="/notifications", tags=["Notifications"])
-
 
 @router.get("/")
 def list_notifications(
@@ -21,7 +21,7 @@ def list_notifications(
             "title": n.title,
             "message": n.message,
             "is_read": n.is_read,
-            "created_at": n.created_at.isoformat() if n.created_at else None,
+            "created_at": to_utc_iso(n.created_at),
         }
         for n in notifications
     ]
