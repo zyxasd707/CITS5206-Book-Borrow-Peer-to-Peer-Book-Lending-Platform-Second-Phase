@@ -2,7 +2,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { Clock, Truck, ArrowLeft, AlertTriangle, ExternalLink } from "lucide-react";
 import CoverImg from "@/app/components/ui/CoverImg";
 import Card from "@/app/components/ui/Card";
@@ -67,6 +67,7 @@ const fetchOrderDetails = async (orderId: string): Promise<ApiOrder | null> => {
 export default function OrderDetailPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   const [order, setOrder] = useState<ApiOrder | null>(null);
   const [loading, setLoading] = useState(true);
@@ -86,6 +87,11 @@ export default function OrderDetailPage() {
   const [damageNote, setDamageNote] = useState("");
   const [damagePhotos, setDamagePhotos] = useState<File[]>([]);
   const [confirmSubmitting, setConfirmSubmitting] = useState(false);
+
+  // Refund modal state (from complaint redirect)
+  const [showRefundModal, setShowRefundModal] = useState(false);
+  const [refundReason, setRefundReason] = useState("");
+  const [refundDescription, setRefundDescription] = useState("");
 
   const resetDamageForm = () => {
     setDamageSeverity("none");
@@ -156,6 +162,18 @@ export default function OrderDetailPage() {
 
     loadData();
   }, [id]);
+
+  // Handle refund redirect from complaint form
+  useEffect(() => {
+    const action = searchParams.get("action");
+    if (action === "refund") {
+      const reason = searchParams.get("reason") || "";
+      const description = searchParams.get("description") || "";
+      setRefundReason(decodeURIComponent(reason));
+      setRefundDescription(decodeURIComponent(description));
+      setShowRefundModal(true);
+    }
+  }, [searchParams]);
 
   const statusMeta = useMemo(
     () => (order ? getDisplayedStatusMeta(order) : null),
@@ -1121,6 +1139,100 @@ export default function OrderDetailPage() {
               }}
             >
               Confirm
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Refund Request Modal (from complaint redirect) */}
+      <Modal
+        isOpen={showRefundModal}
+        onClose={() => setShowRefundModal(false)}
+        title="Request Refund"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-gray-700">
+            You are requesting a refund for this order with the following reason:
+          </p>
+          
+          <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+            <p className="text-sm font-medium text-gray-900">{refundReason}</p>
+            <p className="text-xs text-gray-600 mt-1">{refundDescription}</p>
+          </div>
+
+          <div className="rounded-md bg-blue-50 border border-blue-200 p-3 text-xs text-blue-800">
+            <p className="font-medium mb-1">About Refunds:</p>
+            <ul className="list-disc list-inside space-y-1">
+              <li>Your refund request will be reviewed by our team</li>
+              <li>Processing may take 5-7 business days</li>
+              <li>You can track the refund status in this order's Refund Status section</li>
+            </ul>
+          </div>
+
+          <div className="flex justify-end gap-2 pt-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowRefundModal(false);
+                router.back();
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={async () => {
+                try {
+                  if (!order?.paymentId) {
+                    toast.error("Payment information not found");
+                    return;
+                  }
+
+                  const token = getToken();
+                  if (!token) {
+                    toast.error("Please login first");
+                    router.push("/auth");
+                    return;
+                  }
+
+                  // Call the payment gateway refund API
+                  const res = await fetch(
+                    `${getApiUrl()}/api/v1/payment_gateway/payment/refund/${order.paymentId}`,
+                    {
+                      method: "POST",
+                      headers: {
+                        "Content-Type": "application/json",
+                        Authorization: `Bearer ${token}`,
+                        "Idempotency-Key": `refund-${order.id}-${Date.now()}`,
+                      },
+                      body: JSON.stringify({
+                        reason: refundReason,
+                        note: refundDescription,
+                      }),
+                    }
+                  );
+
+                  if (!res.ok) {
+                    const err = await res.json().catch(() => ({ detail: "Failed to process refund" }));
+                    throw new Error(err.detail || "Failed to process refund");
+                  }
+
+                  const data = await res.json();
+                  toast.success(`Refund of ${(data.amount_refunded / 100).toFixed(2)} ${data.currency} has been initiated`);
+                  
+                  // Refresh refund data
+                  const refundData = await getRefundsForOrder(id);
+                  setRefunds(refundData.refunds || []);
+                  
+                  setShowRefundModal(false);
+                  window.dispatchEvent(new Event("notif-update"));
+                } catch (err: any) {
+                  console.error(err);
+                  toast.error(err?.message || "Failed to process refund");
+                }
+              }}
+              className="bg-green-600 hover:bg-green-700"
+            >
+              Process Refund
             </Button>
           </div>
         </div>
