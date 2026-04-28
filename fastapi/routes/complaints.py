@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from typing import Optional, List, Literal
 from sqlalchemy.orm import Session
+import json
 
 from core.dependencies import get_db, get_current_user, get_current_admin
 from models.user import User as UserModel
@@ -14,6 +15,14 @@ router = APIRouter(prefix="/complaints", tags=["Complaint"])
 
 # ------ Helpers to match frontend field names ------
 def _to_read(c: Complaint) -> dict:
+    # Parse evidence_photos from JSON string to list
+    evidence_photos = []
+    if c.evidence_photos:
+        try:
+            evidence_photos = json.loads(c.evidence_photos)
+        except (json.JSONDecodeError, TypeError):
+            evidence_photos = []
+    
     return {
         "id": c.id,
         "orderId": c.order_id,
@@ -24,6 +33,8 @@ def _to_read(c: Complaint) -> dict:
         "description": c.description,
         "status": c.status,
         "adminResponse": c.admin_response,
+        "evidencePhotos": evidence_photos,
+        "damageSeverity": c.damage_severity,
         "createdAt": c.created_at,
         "updatedAt": c.updated_at,
     }
@@ -44,6 +55,8 @@ class ComplaintCreateBody(BaseModel):
     type: Literal["book-condition","delivery","user-behavior","other","overdue"]
     subject: constr(min_length=1, max_length=255)
     description: constr(min_length=1)
+    evidencePhotos: Optional[List[str]] = None
+    damageSeverity: Optional[Literal["none", "light", "medium", "severe"]] = None
 
 class MessageCreate(BaseModel):
     body: constr(min_length=1)
@@ -74,6 +87,8 @@ def create_complaint(
         type=body.type,
         subject=body.subject,
         description=body.description,
+        evidence_photos=body.evidencePhotos,
+        damage_severity=body.damageSeverity,
     )
     return _to_read(c)
 
@@ -118,7 +133,7 @@ def get_complaint(
     """
 
     c = ComplaintService.get(db, complaint_id)
-    if user.user_id not in (c.complainant_id, c.respondent_id) and user.user_id != "admin":  # TODO: Change the admin to a proper judging logic
+    if user.user_id not in (c.complainant_id, c.respondent_id) and not user.is_admin: 
         raise HTTPException(status_code=403, detail="Forbidden")
     msgs = ComplaintService.list_messages(db, complaint_id=complaint_id)
     return {"complaint": _to_read(c), "messages": [_msg_to_read(m) for m in msgs]}
@@ -170,4 +185,3 @@ def resolve_complaint(
         admin_response=body.adminResponse,
     )
     return _to_read(c)
-

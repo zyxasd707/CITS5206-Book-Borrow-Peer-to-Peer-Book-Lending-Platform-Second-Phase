@@ -8,11 +8,13 @@ export type Complaint = {
   orderId?: string;
   complainantId: string;
   respondentId?: string;
-  type: "book-condition" | "delivery" | "user-behavior" | "other";
+  type: "book-condition" | "delivery" | "user-behavior" | "other" | "overdue";
   subject: string;
   description: string;
   status: "pending" | "investigating" | "resolved" | "closed";
   adminResponse?: string;
+  evidencePhotos?: string[] | null;
+  damageSeverity?: "none" | "light" | "medium" | "severe" | null;
   createdAt: string;
   updatedAt: string;
   
@@ -31,7 +33,12 @@ export type ComplaintDetail = {
   messages: Message[];
 };
 
-export type CreateComplaintRequest = Omit<Complaint, "id" | "status" | "createdAt" | "updatedAt" | "adminResponse" | "complainantId">;
+export type CreateComplaintRequest = Omit<Complaint, "id" | "status" | "createdAt" | "updatedAt" | "adminResponse" | "complainantId"> & {
+  orderId?: string;
+  respondentId?: string;
+  evidencePhotos?: string[] | null;
+  damageSeverity?: string | null;
+};
 
 export type MessageCreate = { body: string };
 
