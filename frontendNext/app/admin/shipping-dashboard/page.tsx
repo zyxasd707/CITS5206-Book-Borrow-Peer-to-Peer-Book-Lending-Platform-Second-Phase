@@ -318,7 +318,14 @@ export default function ShippingDashboardPage() {
             {metrics.recent_shipments.length > 0 ? (
               metrics.recent_shipments.map((order) => (
                 <tr key={order.id} className="border-b hover:bg-gray-50 align-top">
-                  <td className="py-3 px-4 font-mono text-xs">{order.id}</td>
+                  <td className="py-3 px-4 font-mono text-xs">
+                    <Link
+                      href={`/admin/orders/${order.id}`}
+                      className="text-blue-600 underline"
+                    >
+                      {order.id}
+                    </Link>
+                  </td>
                   <td className="py-3 px-4">
                     <span
                       className={`inline-block rounded-full px-3 py-1 text-xs font-semibold ${statusClass(order.status)}`}
