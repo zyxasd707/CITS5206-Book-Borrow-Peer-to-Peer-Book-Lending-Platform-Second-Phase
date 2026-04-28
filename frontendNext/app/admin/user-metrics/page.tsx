@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { BookMarked, MapPin, UserPlus, Users } from "lucide-react";
+import { getApiUrl, getToken } from "@/utils/auth";
 
 type UserMetricsData = {
     total_users: number;
@@ -44,10 +45,8 @@ export default function UserMetricsPage() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
 
-    const token =
-        typeof window !== "undefined"
-            ? localStorage.getItem("access_token")
-            : null;
+    const token = typeof window !== "undefined" ? getToken() : null;
+    const API_URL = getApiUrl();
 
     useEffect(() => {
         const fetchInitialData = async () => {
@@ -59,12 +58,12 @@ export default function UserMetricsPage() {
                 }
 
                 const [metricsRes, demographicsRes] = await Promise.all([
-                    fetch("http://localhost:8000/api/v1/analytics/user-metrics", {
+                    fetch(`${API_URL}/api/v1/analytics/user-metrics`, {
                         headers: {
                             Authorization: `Bearer ${token}`,
                         },
                     }),
-                    fetch("http://localhost:8000/api/v1/analytics/user-demographics", {
+                    fetch(`${API_URL}/api/v1/analytics/user-demographics`, {
                         headers: {
                             Authorization: `Bearer ${token}`,
                         },
@@ -72,7 +71,15 @@ export default function UserMetricsPage() {
                 ]);
 
                 if (!metricsRes.ok || !demographicsRes.ok) {
-                    throw new Error("Failed to fetch user dashboard data");
+                    const status = !metricsRes.ok ? metricsRes.status : demographicsRes.status;
+                    setError(
+                        status === 401
+                            ? "Your admin session has expired. Please log in again."
+                            : status === 403
+                                ? "Admin access is required to view user metrics."
+                                : "Could not load user metrics."
+                    );
+                    return;
                 }
 
                 const metricsResult = await metricsRes.json();
@@ -88,7 +95,6 @@ export default function UserMetricsPage() {
                     reading_preferences: demographicsResult.reading_preferences ?? [],
                 });
             } catch (err) {
-                console.error(err);
                 setError("Could not load user metrics.");
             } finally {
                 setLoading(false);
@@ -114,7 +120,7 @@ export default function UserMetricsPage() {
 
         try {
             const res = await fetch(
-                `http://localhost:8000/api/v1/analytics/user-signups?from_date=${fromDate}&to_date=${toDate}`,
+                `${API_URL}/api/v1/analytics/user-signups?from_date=${fromDate}&to_date=${toDate}`,
                 {
                     headers: {
                         Authorization: `Bearer ${token}`,
@@ -123,7 +129,14 @@ export default function UserMetricsPage() {
             );
 
             if (!res.ok) {
-                throw new Error("Failed to fetch sign-up data");
+                setError(
+                    res.status === 401
+                        ? "Your admin session has expired. Please log in again."
+                        : res.status === 403
+                            ? "Admin access is required to view sign-up data."
+                            : "Could not load sign-up data."
+                );
+                return;
             }
 
             const result = await res.json();
@@ -131,7 +144,6 @@ export default function UserMetricsPage() {
             setTotalSignups(result.total_signups ?? 0);
             setUsers(result.users ?? []);
         } catch (err) {
-            console.error(err);
             setError("Could not load sign-up data.");
         } finally {
             setSignupLoading(false);

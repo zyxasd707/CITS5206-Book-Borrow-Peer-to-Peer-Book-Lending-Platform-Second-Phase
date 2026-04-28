@@ -3,7 +3,7 @@ from datetime import date, datetime, timedelta
 from collections import Counter
 
 from fastapi import APIRouter, Depends, Query, HTTPException
-from sqlalchemy import func, text
+from sqlalchemy import func, text, case
 from sqlalchemy.orm import Session, joinedload
 
 from core.dependencies import get_db, get_current_admin
@@ -57,13 +57,138 @@ def get_book_metrics(
 ):
     total_books = db.query(Book).count()
 
-    books_for_loan = db.query(Book).filter(Book.can_rent == True).count()
-    books_for_sale = db.query(Book).filter(Book.can_sell == True).count()
+    books_for_loan = db.query(Book).filter(
+        Book.can_rent == True,
+        Book.status == "listed",
+    ).count()
+    books_for_sale = db.query(Book).filter(
+        Book.can_sell == True,
+        Book.status == "listed",
+    ).count()
 
     return {
         "total_books": total_books,
         "books_for_loan": books_for_loan,
         "books_for_sale": books_for_sale,
+    }
+
+@router.get("/book-listings")
+def get_book_listings(
+    type: str = Query("all", pattern="^(all|loan|sale)$"),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_current_admin),
+):
+    query = db.query(Book)
+
+    if type == "loan":
+        query = query.filter(
+            Book.can_rent == True,
+            Book.status == "listed",
+        )
+    elif type == "sale":
+        query = query.filter(
+            Book.can_sell == True,
+            Book.status == "listed",
+        )
+
+    total_count = query.count()
+    total_pages = (total_count + page_size - 1) // page_size if total_count else 0
+    books = (
+        query
+        .order_by(Book.date_added.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
+    book_ids = [book.id for book in books]
+    owner_ids = {book.owner_id for book in books}
+
+    users_by_id = {
+        user.user_id: user
+        for user in db.query(User).filter(User.user_id.in_(owner_ids)).all()
+    } if owner_ids else {}
+
+    activity_rows = (
+        db.query(
+            OrderBook.book_id,
+            func.sum(
+                case((Order.action_type == "borrow", 1), else_=0)
+            ).label("times_borrowed"),
+            func.sum(
+                case((Order.action_type == "purchase", 1), else_=0)
+            ).label("times_purchased"),
+            func.max(Order.created_at).label("last_order_at"),
+        )
+        .join(Order, Order.id == OrderBook.order_id)
+        .filter(OrderBook.book_id.in_(book_ids))
+        .group_by(OrderBook.book_id)
+        .all()
+    ) if book_ids else []
+
+    activity_by_book_id = {
+        row.book_id: {
+            "times_borrowed": int(row.times_borrowed or 0),
+            "times_purchased": int(row.times_purchased or 0),
+            "last_order_at": row.last_order_at.isoformat() if row.last_order_at else None,
+        }
+        for row in activity_rows
+    }
+
+    results = []
+    for book in books:
+        owner = users_by_id.get(book.owner_id)
+        activity = activity_by_book_id.get(book.id, {
+            "times_borrowed": 0,
+            "times_purchased": 0,
+            "last_order_at": None,
+        })
+
+        results.append({
+            "id": book.id,
+            "title_or": book.title_or,
+            "title_en": book.title_en,
+            "original_language": book.original_language,
+            "author": book.author,
+            "category": book.category,
+            "description": book.description,
+            "cover_img_url": book.cover_img_url,
+            "condition_img_urls": book.condition_img_urls or [],
+            "status": book.status,
+            "condition": book.condition,
+            "can_rent": bool(book.can_rent),
+            "can_sell": bool(book.can_sell),
+            "date_added": book.date_added.isoformat() if book.date_added else None,
+            "update_date": book.update_date.isoformat() if book.update_date else None,
+            "isbn": book.isbn,
+            "tags": book.tags or [],
+            "publish_year": book.publish_year,
+            "max_lending_days": int(book.max_lending_days or 0),
+            "deposit_income_percentage": int(book.deposit_income_percentage or 0),
+            "delivery_method": book.delivery_method,
+            "sale_price": float(book.sale_price or 0),
+            "deposit": float(book.deposit or 0),
+            "owner": {
+                "id": book.owner_id,
+                "name": owner.name if owner else "-",
+                "email": owner.email if owner else None,
+                "phone_number": owner.phone_number if owner else None,
+                "city": owner.city if owner else None,
+                "state": owner.state if owner else None,
+                "country": owner.country if owner else None,
+            },
+            **activity,
+        })
+
+    return {
+        "type": type,
+        "total": len(results),
+        "total_count": total_count,
+        "page": page,
+        "page_size": page_size,
+        "total_pages": total_pages,
+        "books": results,
     }
 
 @router.get("/user-metrics")

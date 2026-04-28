@@ -10,6 +10,11 @@ import {
 } from "chart.js";
 import { BookOpen, LibraryBig, Repeat, Tags } from "lucide-react";
 import { Pie } from "react-chartjs-2";
+import {
+    getAdminBookListings,
+    type AdminBookListing,
+    type BookListingType,
+} from "@/utils/analytics";
 
 ChartJS.register(ArcElement, Tooltip, Legend);
 
@@ -47,6 +52,23 @@ type UserBook = {
     date_added: string | null;
 };
 
+const listingTitles: Record<BookListingType, string> = {
+    all: "All Books Listed",
+    loan: "Books Available for Loan",
+    sale: "Books Available for Sale",
+};
+
+const listingPageSize = 20;
+
+function formatDate(value: string | null) {
+    if (!value) return "-";
+    return new Date(value).toLocaleDateString();
+}
+
+function formatAmount(value: number) {
+    return `$${Number(value || 0).toFixed(2)}`;
+}
+
 export default function BookMetricsPage() {
     const [metrics, setMetrics] = useState<BookMetricsData>({
         total_books: 0,
@@ -71,6 +93,14 @@ export default function BookMetricsPage() {
     const [searchingUsers, setSearchingUsers] = useState(false);
     const [loadingUserBooks, setLoadingUserBooks] = useState(false);
     const [error, setError] = useState("");
+    const [selectedListingType, setSelectedListingType] =
+        useState<BookListingType | null>(null);
+    const [bookListings, setBookListings] = useState<AdminBookListing[]>([]);
+    const [loadingListings, setLoadingListings] = useState(false);
+    const [listingError, setListingError] = useState("");
+    const [listingPage, setListingPage] = useState(1);
+    const [listingTotalCount, setListingTotalCount] = useState(0);
+    const [listingTotalPages, setListingTotalPages] = useState(0);
 
     const token =
         typeof window !== "undefined"
@@ -217,6 +247,37 @@ export default function BookMetricsPage() {
         }
     };
 
+    const handleMetricClick = async (type: BookListingType, page = 1) => {
+        try {
+            setSelectedListingType(type);
+            setListingPage(page);
+            setLoadingListings(true);
+            setListingError("");
+
+            const result = await getAdminBookListings(type, {
+                page,
+                page_size: listingPageSize,
+            });
+            setBookListings(result.books ?? []);
+            setListingTotalCount(result.total_count ?? 0);
+            setListingTotalPages(result.total_pages ?? 0);
+        } catch (err: any) {
+            setBookListings([]);
+            setListingTotalCount(0);
+            setListingTotalPages(0);
+            const status = err?.response?.status;
+            setListingError(
+                status === 401
+                    ? "Your admin session has expired. Please log in again."
+                    : status === 403
+                        ? "Admin access is required to view book listing details."
+                        : "Could not load book listing details."
+            );
+        } finally {
+            setLoadingListings(false);
+        }
+    };
+
     if (loading) {
         return <p className="text-gray-600">Loading book metrics...</p>;
     }
@@ -231,24 +292,28 @@ export default function BookMetricsPage() {
             value: metrics.total_books,
             icon: LibraryBig,
             className: "text-blue-600",
+            listingType: "all" as BookListingType,
         },
         {
             title: "Books Available for Loan",
             value: metrics.books_for_loan,
             icon: Repeat,
             className: "text-green-600",
+            listingType: "loan" as BookListingType,
         },
         {
             title: "Books Available for Sale",
             value: metrics.books_for_sale,
             icon: Tags,
             className: "text-orange-600",
+            listingType: "sale" as BookListingType,
         },
         {
             title: "Books Listed Per User (Average)",
             value: averageData.average_books_per_user,
             icon: BookOpen,
             className: "text-violet-600",
+            listingType: null,
         },
     ];
 
@@ -301,19 +366,147 @@ export default function BookMetricsPage() {
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
                 {cards.map((card) => {
                     const Icon = card.icon;
+                    const isClickable = Boolean(card.listingType);
+                    const active = selectedListingType === card.listingType;
                     return (
-                    <div
+                    <button
                         key={card.title}
-                        className="bg-white rounded-xl shadow-sm border p-5"
+                        type="button"
+                        onClick={() => card.listingType && handleMetricClick(card.listingType)}
+                        disabled={!isClickable}
+                        className={`bg-white rounded-xl shadow-sm border p-5 text-left transition ${
+                            isClickable ? "hover:-translate-y-0.5 hover:shadow-md cursor-pointer" : "cursor-default"
+                        } ${active ? "ring-2 ring-blue-500 border-blue-300" : ""}`}
                     >
                         <div className={`flex items-center gap-2 text-sm mb-1 ${card.className}`}>
                             <Icon className="w-4 h-4" /> {card.title}
                         </div>
                         <h2 className="text-2xl font-bold mt-2">{card.value}</h2>
-                    </div>
+                    </button>
                     );
                 })}
             </div>
+
+            {selectedListingType && (
+                <div className="bg-white rounded-xl shadow-sm border p-6 overflow-x-auto">
+                    <div className="flex items-center justify-between gap-4 mb-4">
+                        <div>
+                            <h2 className="text-xl font-semibold">
+                                {listingTitles[selectedListingType]}
+                            </h2>
+                            <p className="text-sm text-gray-500">
+                                {listingTotalCount} book{listingTotalCount === 1 ? "" : "s"} found
+                            </p>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() => {
+                                setSelectedListingType(null);
+                                setBookListings([]);
+                                setListingPage(1);
+                                setListingTotalCount(0);
+                                setListingTotalPages(0);
+                                setListingError("");
+                            }}
+                            className="rounded-lg border px-3 py-2 text-sm hover:bg-gray-50"
+                        >
+                            Hide Details
+                        </button>
+                    </div>
+
+                    {listingError && <p className="text-red-600 mb-4">{listingError}</p>}
+                    {loadingListings ? (
+                        <p className="text-gray-600">Loading book details...</p>
+                    ) : (
+                        <>
+                        <table className="min-w-full border-collapse text-sm">
+                            <thead>
+                                <tr className="border-b text-left">
+                                    <th className="py-3 px-4">Title</th>
+                                    <th className="py-3 px-4">Author</th>
+                                    <th className="py-3 px-4">Category</th>
+                                    <th className="py-3 px-4">Listed By</th>
+                                    <th className="py-3 px-4">Owner Email</th>
+                                    <th className="py-3 px-4">Status</th>
+                                    <th className="py-3 px-4">Borrowed</th>
+                                    <th className="py-3 px-4">Purchased</th>
+                                    <th className="py-3 px-4">Sale Price</th>
+                                    <th className="py-3 px-4">Deposit</th>
+                                    <th className="py-3 px-4">Listed Date</th>
+                                    <th className="py-3 px-4">Updated</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {bookListings.length > 0 ? (
+                                    bookListings.map((book) => (
+                                        <tr key={book.id} className="border-b hover:bg-gray-50 align-top">
+                                            <td className="py-3 px-4">
+                                                <Link
+                                                    href={`/books/${book.id}`}
+                                                    className="font-medium text-blue-600 underline"
+                                                >
+                                                    {book.title_or || book.title_en || "-"}
+                                                </Link>
+                                                <div className="text-xs text-gray-500">
+                                                    {book.condition} | {book.delivery_method}
+                                                </div>
+                                            </td>
+                                            <td className="py-3 px-4">{book.author || "-"}</td>
+                                            <td className="py-3 px-4">{book.category || "-"}</td>
+                                            <td className="py-3 px-4">{book.owner.name || "-"}</td>
+                                            <td className="py-3 px-4">{book.owner.email || "-"}</td>
+                                            <td className="py-3 px-4">
+                                                <span className="rounded-full bg-gray-100 px-2 py-1 text-xs font-medium text-gray-700">
+                                                    {book.status}
+                                                </span>
+                                            </td>
+                                            <td className="py-3 px-4">{book.times_borrowed}</td>
+                                            <td className="py-3 px-4">{book.times_purchased}</td>
+                                            <td className="py-3 px-4">{formatAmount(book.sale_price)}</td>
+                                            <td className="py-3 px-4">{formatAmount(book.deposit)}</td>
+                                            <td className="py-3 px-4">{formatDate(book.date_added)}</td>
+                                            <td className="py-3 px-4">{formatDate(book.update_date)}</td>
+                                        </tr>
+                                    ))
+                                ) : (
+                                    <tr>
+                                        <td colSpan={12} className="py-4 px-4 text-center text-gray-500">
+                                            No books found for this metric.
+                                        </td>
+                                    </tr>
+                                )}
+                            </tbody>
+                        </table>
+
+                        {listingTotalPages > 1 && (
+                            <div className="mt-4 flex items-center justify-between border-t pt-4">
+                                <p className="text-sm text-gray-500">
+                                    Page {listingPage} of {listingTotalPages}
+                                </p>
+                                <div className="flex gap-2">
+                                    <button
+                                        type="button"
+                                        disabled={listingPage <= 1 || loadingListings}
+                                        onClick={() => handleMetricClick(selectedListingType, listingPage - 1)}
+                                        className="rounded-lg border px-3 py-2 text-sm hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+                                    >
+                                        Previous
+                                    </button>
+                                    <button
+                                        type="button"
+                                        disabled={listingPage >= listingTotalPages || loadingListings}
+                                        onClick={() => handleMetricClick(selectedListingType, listingPage + 1)}
+                                        className="rounded-lg border px-3 py-2 text-sm hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+                                    >
+                                        Next
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+                        </>
+                    )}
+                </div>
+            )}
 
             <div className="grid grid-cols-1 xl:grid-cols-2 gap-8 mb-8">
                 <div className="bg-white rounded-xl shadow-sm border p-6">
