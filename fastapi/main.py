@@ -138,6 +138,26 @@ def ensure_user_damage_columns() -> None:
             conn.execute(text(ddl))
             print(f"Added missing users.{column_name} column")
 
+
+def ensure_payment_columns() -> None:
+    required_columns = {
+        "checkout_id": (
+            "ALTER TABLE payments ADD COLUMN checkout_id VARCHAR(255) NULL UNIQUE AFTER payment_id"
+        ),
+        "purchase": (
+            "ALTER TABLE payments ADD COLUMN purchase INTEGER NOT NULL DEFAULT 0 AFTER status"
+        ),
+    }
+    with engine.begin() as conn:
+        for column_name, ddl in required_columns.items():
+            column_exists = conn.execute(
+                text(f"SHOW COLUMNS FROM payments LIKE '{column_name}'")
+            ).first()
+            if column_exists:
+                continue
+            conn.execute(text(ddl))
+            print(f"Added missing payments.{column_name} column")
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     import time
@@ -162,6 +182,7 @@ async def lifespan(app: FastAPI):
     ensure_order_owner_income_amount_column()
     ensure_order_deposit_columns()
     ensure_user_damage_columns()
+    ensure_payment_columns()
     seed_sample_data()
     start_scheduler()
     yield

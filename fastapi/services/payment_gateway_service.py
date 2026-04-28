@@ -32,11 +32,12 @@ def log_event(db: Session, event_type: str, reference_id: str = None, actor: str
     """
     Save an audit log entry to DB.
     """
+    safe_message = None if message is None else str(message)[:500]
     log = AuditLog(
         event_type=event_type,
         reference_id=reference_id,
         actor=actor,
-        message=message,
+        message=safe_message,
         created_at=datetime.utcnow() 
     )
     db.add(log)

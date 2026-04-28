@@ -13,7 +13,7 @@ load_dotenv(os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file_
 class Settings:
     def __init__(self):
         # App (non-sensitive defaults)
-        self.APP_NAME = "BookHive API"
+        self.APP_NAME = "BookBorrow API"
         self.VERSION = "1.0.0"
         self.APP_BASE_URL = os.getenv("APP_BASE_URL", "http://localhost").rstrip("/")
         
@@ -28,10 +28,6 @@ class Settings:
             raise ValueError("Missing required database environment variables: DB_USER, DB_PASSWORD, DB_HOST, DB_NAME")
         
         self.DATABASE_URL = f"mysql+pymysql://{db_user}:{db_password}@{db_host}:{db_port}/{db_name}"
-        
-        # Print for debugging (remove in production)
-        print(f"Database Host: {db_host}")
-        print(f"Constructed DATABASE_URL: {self.DATABASE_URL}")  # Warning: This prints sensitive info—remove after testing!
         
         # JWT (required)
         self.SECRET_KEY = os.getenv('SECRET_KEY')
@@ -55,7 +51,7 @@ class Settings:
         self.BREVO_API_KEY = brevo_api_key
         self.BREVO_KEY_TYPE = brevo_key_type
         self.BREVO_SENDER_EMAIL = os.getenv("BREVO_SENDER_EMAIL")
-        self.BREVO_SENDER_NAME = os.getenv("BREVO_SENDER_NAME", "BookHive")
+        self.BREVO_SENDER_NAME = os.getenv("BREVO_SENDER_NAME", "BookBorrow")
 
         # Stripe (required)
         stripe_api_key = os.getenv("STRIPE_SECRET_KEY")
@@ -73,7 +69,7 @@ class Settings:
 
         # Email sender info
         self.BREVO_SENDER_EMAIL = os.getenv('BREVO_SENDER_EMAIL', '')
-        self.BREVO_SENDER_NAME = os.getenv('BREVO_SENDER_NAME', 'BookHive')
+        self.BREVO_SENDER_NAME = os.getenv('BREVO_SENDER_NAME', 'BookBorrow')
 
 # Instantiate settings (will raise errors if required vars are missing)
 settings = Settings()
