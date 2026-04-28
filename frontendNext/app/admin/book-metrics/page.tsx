@@ -250,10 +250,16 @@ export default function BookMetricsPage() {
 
             const result = await getAdminBookListings(type);
             setBookListings(result.books ?? []);
-        } catch (err) {
-            console.error(err);
+        } catch (err: any) {
             setBookListings([]);
-            setListingError("Could not load book listing details.");
+            const status = err?.response?.status;
+            setListingError(
+                status === 401
+                    ? "Your admin session has expired. Please log in again."
+                    : status === 403
+                        ? "Admin access is required to view book listing details."
+                        : "Could not load book listing details."
+            );
         } finally {
             setLoadingListings(false);
         }
