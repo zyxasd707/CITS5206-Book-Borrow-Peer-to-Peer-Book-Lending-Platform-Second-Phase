@@ -41,7 +41,8 @@ const ComplainPage: React.FC = () => {
     description: "",
     orderId: "",
     respondentId: "",
-    damageSeverity: "none" as const
+    damageSeverity: "none" as const,
+    needsRefund: false
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [userCache, setUserCache] = useState<Record<string, User>>({});
@@ -194,6 +195,15 @@ const ComplainPage: React.FC = () => {
       console.log("🧩 Auto-detected respondentId:", respondentId);
     }
 
+    // If user selects refund option, redirect to refund flow instead
+    if (newComplaint.needsRefund && newComplaint.orderId) {
+      const reason = encodeURIComponent(newComplaint.subject);
+      const description = encodeURIComponent(newComplaint.description);
+      router.push(`/borrowing/${newComplaint.orderId}?action=refund&reason=${reason}&description=${description}`);
+      setIsSubmitting(false);
+      return;
+    }
+
     const complaintData: CreateComplaintRequest = {
       type: newComplaint.type,
       subject: newComplaint.subject,
@@ -237,7 +247,7 @@ const ComplainPage: React.FC = () => {
       setComplaints([createdComplaint, ...complaints]);
     }
     setIsCreateModalOpen(false);
-    setNewComplaint({ type: "other", subject: "", description: "", orderId: "", respondentId: "" });
+    setNewComplaint({ type: "other", subject: "", description: "", orderId: "", respondentId: "", damageSeverity: "none", needsRefund: false });
     setEvidenceFiles([]);
 
     console.log("Complaint flow completed successfully.");
@@ -478,138 +488,184 @@ const ComplainPage: React.FC = () => {
         {/* Create Complaint Modal */}
         {isCreateModalOpen && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-            <div className="bg-white rounded-lg max-w-md w-full p-6">
-              <h2 className="text-xl font-semibold mb-4">Submit New Complaint</h2>
+            <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] flex flex-col">
+              {/* Header - Fixed */}
+              <div className="px-6 py-4 border-b border-gray-200 flex-shrink-0">
+                <h2 className="text-xl font-semibold text-gray-900">Submit New Complaint</h2>
+              </div>
 
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Type
-                  </label>
-                  <select
-                    value={newComplaint.type}
-                    onChange={(e) => setNewComplaint({ ...newComplaint, type: e.target.value as any })}
-                    className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  >
-                    <option value="other">Other</option>
-                    <option value="book-condition">Book Condition</option>
-                    <option value="delivery">Delivery Issue</option>
-                    <option value="user-behavior">User Behavior</option>
-                    <option value="overdue">Overdue (System)</option>
-                  </select>
-                </div>
-
-                {newComplaint.type === "book-condition" && (
+              {/* Content - Scrollable */}
+              <div className="flex-1 overflow-y-auto px-6 py-4">
+                <div className="space-y-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Damage Severity
+                      Type
                     </label>
                     <select
-                      value={newComplaint.damageSeverity}
-                      onChange={(e) => setNewComplaint({ ...newComplaint, damageSeverity: e.target.value as any })}
+                      value={newComplaint.type}
+                      onChange={(e) => setNewComplaint({ ...newComplaint, type: e.target.value as any })}
                       className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     >
-                      <option value="none">None</option>
-                      <option value="light">Light</option>
-                      <option value="medium">Medium</option>
-                      <option value="severe">Severe</option>
+                      <option value="other">Other</option>
+                      <option value="book-condition">Book Condition</option>
+                      <option value="delivery">Delivery Issue</option>
+                      <option value="user-behavior">User Behavior</option>
+                      <option value="overdue">Overdue (System)</option>
                     </select>
                   </div>
-                )}
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Related Order ID (Optional)
-                  </label>
-                  <input
-                    type="text"
-                    value={newComplaint.orderId}
-                    onChange={(e) => setNewComplaint({ ...newComplaint, orderId: e.target.value })}
-                    className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    placeholder="Enter order ID if complaint is related to a specific order"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Subject
-                  </label>
-                  <input
-                    type="text"
-                    value={newComplaint.subject}
-                    onChange={(e) => setNewComplaint({ ...newComplaint, subject: e.target.value })}
-                    className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    placeholder="Brief description of the issue"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Description
-                  </label>
-                  <textarea
-                    value={newComplaint.description}
-                    onChange={(e) => setNewComplaint({ ...newComplaint, description: e.target.value })}
-                    rows={4}
-                    className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    placeholder="Please provide detailed information about your complaint..."
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Evidence Images (Optional)
-                  </label>
-                  <input
-                    type="file"
-                    id="evidence-upload"
-                    accept="image/*"
-                    multiple
-                    onChange={handleEvidenceFiles}
-                    className="hidden"
-                  />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => document.getElementById("evidence-upload")?.click()}
-                  >
-                    Upload Evidence
-                  </Button>
-                  <p className="text-xs text-gray-500 mt-1">
-                    Upload images to support your complaint (max 2MB per file)
-                  </p>
-
-                  {/* Preview evidence images */}
-                  {evidenceFiles.length > 0 && (
-                    <div className="flex gap-2 mt-3 flex-wrap">
-                      {evidenceFiles.map((f, i) => (
-                        <div key={i} className="relative">
-                          <img
-                            src={f.url || (f.file ? URL.createObjectURL(f.file) : "")}
-                            alt={`Evidence ${i + 1}`}
-                            className="h-20 w-20 object-cover rounded border"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveEvidenceFile(i)}
-                            className="absolute -top-2 -right-2 bg-red-600 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center hover:bg-red-700"
-                          >
-                            ✕
-                          </button>
-                        </div>
-                      ))}
+                  {newComplaint.type === "book-condition" && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Damage Severity
+                      </label>
+                      <select
+                        value={newComplaint.damageSeverity}
+                        onChange={(e) => setNewComplaint({ ...newComplaint, damageSeverity: e.target.value as any })}
+                        className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      >
+                        <option value="none">None</option>
+                        <option value="light">Light</option>
+                        <option value="medium">Medium</option>
+                        <option value="severe">Severe</option>
+                      </select>
                     </div>
                   )}
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Related Order ID (Optional)
+                    </label>
+                    <input
+                      type="text"
+                      value={newComplaint.orderId}
+                      onChange={(e) => setNewComplaint({ ...newComplaint, orderId: e.target.value })}
+                      className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      placeholder="Enter order ID if complaint is related to a specific order"
+                    />
+                  </div>
+
+                  {newComplaint.orderId && (
+                    <div className="bg-blue-50 border border-blue-200 rounded-md p-4">
+                      <label className="block text-sm font-medium text-gray-700 mb-3">
+                        Do you need a refund?
+                      </label>
+                      <div className="space-y-2">
+                        <label className="flex items-center">
+                          <input
+                            type="radio"
+                            name="refundOption"
+                            checked={!newComplaint.needsRefund}
+                            onChange={() => setNewComplaint({ ...newComplaint, needsRefund: false })}
+                            className="w-4 h-4 text-blue-600"
+                          />
+                          <span className="ml-2 text-sm text-gray-700">
+                            No, just file a complaint
+                          </span>
+                        </label>
+                        <label className="flex items-center">
+                          <input
+                            type="radio"
+                            name="refundOption"
+                            checked={newComplaint.needsRefund}
+                            onChange={() => setNewComplaint({ ...newComplaint, needsRefund: true })}
+                            className="w-4 h-4 text-blue-600"
+                          />
+                          <span className="ml-2 text-sm text-gray-700">
+                            Yes, I need a refund
+                          </span>
+                        </label>
+                      </div>
+                      {newComplaint.needsRefund && (
+                        <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded text-xs text-amber-800">
+                          ⚠️ Selecting refund will redirect you to the refund process instead of filing a complaint.
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Subject
+                    </label>
+                    <input
+                      type="text"
+                      value={newComplaint.subject}
+                      onChange={(e) => setNewComplaint({ ...newComplaint, subject: e.target.value })}
+                      className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      placeholder="Brief description of the issue"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Description
+                    </label>
+                    <textarea
+                      value={newComplaint.description}
+                      onChange={(e) => setNewComplaint({ ...newComplaint, description: e.target.value })}
+                      rows={4}
+                      className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                      placeholder="Please provide detailed information about your complaint..."
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Evidence Images (Optional)
+                    </label>
+                    <input
+                      type="file"
+                      id="evidence-upload"
+                      accept="image/*"
+                      multiple
+                      onChange={handleEvidenceFiles}
+                      className="hidden"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => document.getElementById("evidence-upload")?.click()}
+                    >
+                      Upload Evidence
+                    </Button>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Upload images to support your complaint (max 2MB per file)
+                    </p>
+
+                    {/* Preview evidence images */}
+                    {evidenceFiles.length > 0 && (
+                      <div className="mt-3 grid grid-cols-4 sm:grid-cols-6 gap-2">
+                        {evidenceFiles.map((f, i) => (
+                          <div key={i} className="relative">
+                            <img
+                              src={f.url || (f.file ? URL.createObjectURL(f.file) : "")}
+                              alt={`Evidence ${i + 1}`}
+                              className="h-16 w-16 object-cover rounded border"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveEvidenceFile(i)}
+                              className="absolute -top-2 -right-2 bg-red-600 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center hover:bg-red-700"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
 
-              <div className="flex justify-end space-x-3 mt-6">
+              {/* Footer - Fixed */}
+              <div className="px-6 py-4 border-t border-gray-200 flex justify-end gap-3 flex-shrink-0">
                 <Button
                   variant="outline"
                   onClick={() => {
                     setIsCreateModalOpen(false);
-                    setNewComplaint({ type: "other", subject: "", description: "", orderId: "", respondentId: "", damageSeverity: "none" });
+                    setNewComplaint({ type: "other", subject: "", description: "", orderId: "", respondentId: "", damageSeverity: "none", needsRefund: false });
                     setEvidenceFiles([]);
                   }}
                   disabled={isSubmitting}
