@@ -29,6 +29,7 @@ def _make_order(
     payment_id="pi_test_123",
     books=None,
     total_refunded_amount=None,
+    total_paid_amount=25.00,   # dollars; refund_on_cancel uses to_cents(total_paid_amount)
 ):
     order = MagicMock()
     order.id = order_id
@@ -38,6 +39,11 @@ def _make_order(
     order.payment_id = payment_id
     order.canceled_at = None
     order.total_refunded_amount = total_refunded_amount
+    # total_paid_amount is the SOURCE OF TRUTH for refund_on_cancel (not
+    # PaymentSplit). Setting it explicitly is required — without this, the
+    # MagicMock attribute defaults to a truthy mock object and to_cents()
+    # returns a meaningless number, masking the real branch logic.
+    order.total_paid_amount = total_paid_amount
 
     # books relationship — list of OrderBook-like objects
     if books is None:
@@ -448,20 +454,66 @@ class TestRefundOnCancel:
 
     @patch("services.payment_gateway_service.stripe")
     def test_zero_amount_raises_400(self, mock_stripe):
-        """PaymentSplit with 0 refundable amount → 400."""
+        """Order.total_paid_amount = 0 → 400 (no refundable amount)."""
         from services.payment_gateway_service import refund_on_cancel
         from models.order import Order
         from models.payment_split import PaymentSplit
         from fastapi import HTTPException
 
-        order = _make_order(status="PENDING_SHIPMENT")
-        sp = _make_payment_split(deposit_cents=0, shipping_cents=0)
+        # NOTE: refund_on_cancel reads `Order.total_paid_amount`, NOT the
+        # PaymentSplit components. The split deposit/shipping are irrelevant
+        # to this branch — only total_paid_amount matters.
+        order = _make_order(status="PENDING_SHIPMENT", total_paid_amount=0)
+        sp = _make_payment_split()
         db = MagicMock()
         _mock_db_query(db, {Order: order, PaymentSplit: sp})
 
         with pytest.raises(HTTPException) as exc_info:
             refund_on_cancel(db, "order-001")
         assert exc_info.value.status_code == 400
+
+    @patch("services.payment_gateway_service.stripe")
+    def test_refund_includes_service_fee(self, mock_stripe):
+        """
+        Locked business rule (confirmed 2026-04-28): cancel-stage refunds
+        return EVERYTHING the user paid, including the platform service fee.
+        Platform earns less rather than withholding fees from a customer who
+        never received any service.
+
+        The implementation uses `Order.total_paid_amount` precisely because
+        that field is the post-PR-#88 source of truth — it equals
+        deposit + rental + shipping + service_fee (per checkout_service).
+        Using the older `PaymentSplit.deposit_cents + shipping_cents` would
+        silently exclude the service fee, short-changing the user.
+        """
+        from services.payment_gateway_service import refund_on_cancel
+        from models.order import Order
+        from models.payment_split import PaymentSplit
+        from models.payment_gateway import Payment
+        from models.book import Book
+
+        # Realistic figures: deposit $20 + shipping $5 + service fee $2 = $27
+        order = _make_order(status="PENDING_SHIPMENT", total_paid_amount=27.00)
+        sp = _make_payment_split(deposit_cents=2000, shipping_cents=500)
+        payment = _make_payment(amount=2700)
+        book = _make_book()
+        mock_stripe.Refund.create.return_value = _make_stripe_refund()
+
+        db = MagicMock()
+        _mock_db_query(db, {Order: order, PaymentSplit: sp, Payment: payment, Book: book})
+
+        result = refund_on_cancel(db, "order-001", actor="user-123")
+
+        # The headline assertion: refund AMOUNT must include the service fee
+        # (2700 cents, not 2500 — the +200 cents IS the service fee being returned).
+        mock_stripe.Refund.create.assert_called_once_with(
+            payment_intent="pi_test_123", amount=2700,
+        )
+        assert result["amount"] == 2700
+        # Defensive: prove the refund is STRICTLY greater than the
+        # split-only amount, so a future regression to the old formula
+        # would be caught.
+        assert result["amount"] > (sp.deposit_cents + sp.shipping_cents)
 
     @patch("services.payment_gateway_service.stripe")
     def test_already_refunded_idempotent(self, mock_stripe):
