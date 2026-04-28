@@ -165,3 +165,13 @@ fastapi/media/*/deposit_evidence/
 # Local-only docs/notes
 docs/architecture-diagram.html
 如何测试 测试 账户 普通 管理员Admin.txt
+
+# Personal D2 deliverables and drafts (per-author, not team artefacts)
+docs/D2-*
+docs/Yuxing*D2*
+docs/build_d2_report.js
+docs/*-proposal.md
+docs/The complete flow*.png
+
+# User-uploaded message attachments and evidence — additional pattern
+fastapi/media/U*/

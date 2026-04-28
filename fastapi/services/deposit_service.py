@@ -92,6 +92,10 @@ def _persist_refund_record(db: Session, payment_id: str, stripe_refund: Dict[str
         status=stripe_refund["status"],
         reason=reason,
     ))
+    # Flush the just-added Refund so the SUM(Refund.amount) below sees it.
+    # SessionLocal is configured autoflush=False, so without this a full-amount
+    # refund would be miscategorized as 'partially_refunded'.
+    db.flush()
 
     payment = db.query(Payment).filter(Payment.payment_id == payment_id).first()
     if payment:

@@ -122,29 +122,30 @@ class OrderService:
             - shipping_out_fee_amount
             - order_total
 
-        Return examples:
+        Return examples (post-PR-#88: fixed $2 service fee charged ONCE on
+        the first order in a multi-order checkout, $0 on the rest):
             [
                 {
-                    "items": [CheckoutItem(ci1), CheckoutItem(ci2)],  # borrow, owner1
+                    "items": [CheckoutItem(ci1), CheckoutItem(ci2)],  # borrow, owner1 (first)
                     "deposit_or_sale_amount": 25.0,                   # 10 + 15
                     "owner_income_amount": 2.5,
-                    "service_fee_amount": 5.0,                        # checkout.service_fee
+                    "service_fee_amount": 2.0,                        # PLATFORM_SERVICE_FEE_AMOUNT
                     "shipping_out_fee_amount": 3.0,                   # first post shipping_quote
-                    "order_total": 35.5                               # 25 + 2.5 + 5 + 3
+                    "order_total": 32.5                               # 25 + 2.5 + 2 + 3
                 },
                 {
                     "items": [CheckoutItem(ci3)],                     # purchase, owner1
                     "deposit_or_sale_amount": 20.0,                   # purchase price
-                    "service_fee_amount": 5.0,
+                    "service_fee_amount": 0.0,                        # 0 — fee already charged on first order
                     "shipping_out_fee_amount": 0.0,                   # pickup, no shipping
-                    "order_total": 25.0                                # 20 + 5 + 0
+                    "order_total": 20.0                                # 20 + 0 + 0
                 },
                 {
                     "items": [CheckoutItem(ci4)],                     # purchase, owner2
                     "deposit_or_sale_amount": 25.0,                   # purchase price
-                    "service_fee_amount": 5.0,
+                    "service_fee_amount": 0.0,                        # 0 — fee already charged on first order
                     "shipping_out_fee_amount": 4.0,                   # post shipping
-                    "order_total": 34.0                                # 25 + 5 + 4
+                    "order_total": 29.0                                # 25 + 0 + 4
                 }
             ]
         """
@@ -175,7 +176,9 @@ class OrderService:
                 # if pickup, shipping_out_fee_amount = 0
                 shipping_out_fee_amount = float(post_items[0].shipping_quote or 0)
 
-            # Platform service fee = (item total incl. shipping) * 5%
+            # Platform service fee = fixed $2 (PLATFORM_SERVICE_FEE_AMOUNT),
+            # charged ONCE per checkout — only on the first order, not on
+            # subsequent orders in a multi-owner checkout.
             service_fee_base = deposit_or_sale_amount + owner_income_amount + shipping_out_fee_amount
             service_fee_amount = OrderService._calculate_service_fee(service_fee_base) if index == 0 else 0.0
 
