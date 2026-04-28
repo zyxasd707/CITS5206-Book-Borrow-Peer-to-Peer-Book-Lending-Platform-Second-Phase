@@ -472,6 +472,39 @@ const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
               </div>
             </div>
 
+            {/* Payment Account */}
+            <div className="mt-8 border-t pt-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-1">Payment Account</h3>
+              <p className="text-sm text-gray-500 mb-4">
+                {profileData.stripe_account_id
+                  ? "Your payment account is set up. You can manage it via Stripe."
+                  : "Set up a payment account to receive payments when you lend or sell books."}
+              </p>
+              <Button
+                type="button"
+                variant="outline"
+                className="border-black text-black"
+                disabled={creatingLink}
+                onClick={async () => {
+                  try {
+                    setCreatingLink(true);
+                    const { onboarding_url } = await createExpressAccount(profileData.email!);
+                    window.location.href = onboarding_url;
+                  } catch (e: any) {
+                    toast.error(e?.response?.data?.detail || "Failed to open payment account");
+                  } finally {
+                    setCreatingLink(false);
+                  }
+                }}
+              >
+                {creatingLink
+                  ? "Loading..."
+                  : profileData.stripe_account_id
+                  ? "Manage Payment Account"
+                  : "Set up Payment Account"}
+              </Button>
+            </div>
+
             {/* Action Buttons */}
             <div className="mt-6 flex justify-end gap-3">
               <Button
