@@ -18,10 +18,9 @@ from models.payment_gateway import (
     StripeWebhookEvent
 )
 from typing import Optional
+from utils.datetime import to_utc_iso
 
 router = APIRouter(prefix="/payment_gateway", tags=["Payment_gateway"])
-
-# -------- Helper --------
 
 
 
@@ -167,8 +166,8 @@ def get_refunds_for_order(order_id: str, db: Session = Depends(get_db)):
                 "currency": r.currency,
                 "status": r.status,
                 "reason": r.reason,
-                "created_at": r.created_at,
-                "updated_at": r.updated_at,
+                "created_at": to_utc_iso(r.created_at),
+                "updated_at": to_utc_iso(r.updated_at),
             }
             for r in refunds
         ],
@@ -251,21 +250,21 @@ def get_user_refunds(user_id: str, db: Session = Depends(get_db)):
                 "status": r.status,
                 "reason": r.reason,
                 "refund_type": refund_type,
-                "created_at": r.created_at.isoformat() if r.created_at else None,
-                "updated_at": r.updated_at.isoformat() if r.updated_at else None,
+                "created_at": to_utc_iso(r.created_at),
+                "updated_at": to_utc_iso(r.updated_at),
                 "order": {
                     "order_id": order.id,
                     "status": order.status,
                     "book_titles": book_titles,
-                    "created_at": order.created_at.isoformat() if order.created_at else None,
-                    "canceled_at": order.canceled_at.isoformat() if order.canceled_at else None,
+                    "created_at": to_utc_iso(order.created_at),
+                    "canceled_at": to_utc_iso(order.canceled_at),
                 },
                 "timeline": [
                     {
                         "event": log.event_type,
                         "actor": log.actor,
                         "message": log.message,
-                        "timestamp": log.created_at.isoformat() if log.created_at else None,
+                        "timestamp": to_utc_iso(log.created_at),
                     }
                     for log in logs
                 ],
@@ -402,7 +401,7 @@ def get_admin_refunds(
                     "dispute_id": d.dispute_id,
                     "reason": d.reason,
                     "status": d.status,
-                    "created_at": d.created_at.isoformat() if d.created_at else None,
+                    "created_at": to_utc_iso(d.created_at),
                 }
                 for d in payment_disputes
             ]
@@ -433,8 +432,8 @@ def get_admin_refunds(
             "reason": r.reason,
             "refund_type": r_type,
             "trigger": trigger,
-            "created_at": r.created_at.isoformat() if r.created_at else None,
-            "updated_at": r.updated_at.isoformat() if r.updated_at else None,
+            "created_at": to_utc_iso(r.created_at),
+            "updated_at": to_utc_iso(r.updated_at),
             "order": {
                 "order_id": order.id if order else None,
                 "status": order.status if order else None,
@@ -522,7 +521,7 @@ def get_admin_refund_detail(
                     "event": log.event_type,
                     "actor": log.actor,
                     "message": log.message,
-                    "timestamp": log.created_at.isoformat() if log.created_at else None,
+                    "timestamp": to_utc_iso(log.created_at),
                 }
                 for log in logs
             ]
@@ -538,7 +537,7 @@ def get_admin_refund_detail(
                 "note": d.note,
                 "status": d.status,
                 "deduction": d.deduction,
-                "created_at": d.created_at.isoformat() if d.created_at else None,
+                "created_at": to_utc_iso(d.created_at),
             }
             for d in payment_disputes
         ]
@@ -583,8 +582,8 @@ def get_admin_refund_detail(
         "reason": refund.reason,
         "refund_type": r_type,
         "trigger": trigger,
-        "created_at": refund.created_at.isoformat() if refund.created_at else None,
-        "updated_at": refund.updated_at.isoformat() if refund.updated_at else None,
+        "created_at": to_utc_iso(refund.created_at),
+        "updated_at": to_utc_iso(refund.updated_at),
         "payment": {
             "payment_id": payment.payment_id,
             "amount": payment.amount,
@@ -603,8 +602,8 @@ def get_admin_refund_detail(
             "order_id": order.id,
             "status": order.status,
             "book_titles": book_titles,
-            "created_at": order.created_at.isoformat() if order.created_at else None,
-            "canceled_at": order.canceled_at.isoformat() if order.canceled_at else None,
+            "created_at": to_utc_iso(order.created_at),
+            "canceled_at": to_utc_iso(order.canceled_at),
         } if order else None,
         "borrower": {
             "user_id": borrower.user_id,

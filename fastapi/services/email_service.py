@@ -165,7 +165,7 @@ def send_order_confirmation_receipt_email(
             f"- Order {order['order_id']} | {order['action_type']} | "
             f"{order['shipping_method']} | Books: {books} | "
             f"Item amount: ${order['deposit_or_sale_amount']:.2f} | "
-            f"Owner income: ${order.get('owner_income_amount', 0):.2f} | "
+            f"Rental fee: ${order.get('owner_income_amount', 0):.2f} | "
             f"Shipping: ${order['shipping_fee_amount']:.2f} | "
             f"Service fee: ${order['service_fee_amount']:.2f} | "
             f"Amount: ${order['total_paid_amount']:.2f}"

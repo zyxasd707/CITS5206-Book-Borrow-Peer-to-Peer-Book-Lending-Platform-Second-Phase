@@ -106,7 +106,7 @@ class BookCreate(BaseModel):
     isbn: Optional[str] = None
     tags: Optional[List[str]] = None
     publishYear: Optional[int] = None
-    maxLendingDays: int = 14
+    maxLendingDays: int = Field(30, ge=1, le=30)
     depositIncomePercentage: int = Field(0, ge=0, le=20)
     deliveryMethod: Literal["post","pickup","both"] = "both"
     salePrice: Optional[float] = None
@@ -128,7 +128,7 @@ class BookUpdate(BaseModel):
     isbn: Optional[str] = None
     tags: Optional[List[str]] = None
     publishYear: Optional[int] = None
-    maxLendingDays: Optional[int] = None
+    maxLendingDays: Optional[int] = Field(None, ge=1, le=30)
     depositIncomePercentage: Optional[int] = Field(None, ge=0, le=20)
     deliveryMethod: Optional[Literal["post","pickup","both"]] = None
     salePrice: Optional[float] = None

@@ -41,14 +41,12 @@ export default function BookDetailPage() {
   const [book, setBook] = useState<Book | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const depositIncome =
-    ((Number(book?.deposit) || 0) * (Number(book?.depositIncomePercentage) || 0)) / 100;
-
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [owner, setOwner] = useState<User | null>(null);
 
   const { cart, fetchCart, addToCart } = useCartStore();
   const alreadyInCart = cart.some((item) => item.id === book?.id);
+  const isOwnBook = !!(currentUser?.id && book?.ownerId && currentUser.id === book.ownerId);
 
   const distance = useMemo(() => {
     if (!owner?.coordinates || !currentUser?.coordinates) return 0;
@@ -272,6 +270,11 @@ const [ownerRating, setOwnerRating] = useState<RatingStats>({
                         return;
                       }
 
+                      if (isOwnBook) {
+                        toast.error("You can't request your own listed book");
+                        return;
+                      }
+
                       // Already in cart
                       if (alreadyInCart) {
                         toast.error("This book is already in your cart");
@@ -292,12 +295,14 @@ const [ownerRating, setOwnerRating] = useState<RatingStats>({
                     }}
                     className="w-full flex items-center justify-center space-x-2"
                     disabled={
-                      alreadyInCart || book.status !== "listed" || (!book.canRent && !book.canSell)
+                      isOwnBook || alreadyInCart || book.status !== "listed" || (!book.canRent && !book.canSell)
                     }
                   >
                     <ShoppingBag className="w-4 h-4" />
                     <span>
-                      {alreadyInCart
+                      {isOwnBook
+                        ? "Your Listing"
+                        : alreadyInCart
                         ? "Already in Cart"
                         : book.status !== "listed"
                           ? "Unlisted"
@@ -402,7 +407,7 @@ const [ownerRating, setOwnerRating] = useState<RatingStats>({
                     <div className="flex items-center justify-between">
                       <span className="text-gray-500 flex items-center gap-1">
                         <Clock className="w-4 h-4" />
-                        Max lending:
+                        Maximum rental duration:
                       </span>
                       <span className="font-medium">{book.maxLendingDays} days</span>
                     </div>
@@ -415,6 +420,7 @@ const [ownerRating, setOwnerRating] = useState<RatingStats>({
                     </span>
                     <span className="font-medium">{getDeliveryLabel(book.deliveryMethod)}</span>
                   </div>
+
                 </div>
 
                 {/* Price Info (only show if applicable) */}
@@ -436,9 +442,6 @@ const [ownerRating, setOwnerRating] = useState<RatingStats>({
                           <p className="text-xs text-gray-500 mt-1">
                             * Deposit is refundable upon timely return of the book in good condition.
                           </p>
-                          <p className="text-xs text-amber-700 mt-1">
-                            Estimated Income: ${depositIncome.toFixed(2)} ({book.depositIncomePercentage ?? 0}% of deposit fee)
-                          </p>
                         </div>
                       )}
 
@@ -456,6 +459,38 @@ const [ownerRating, setOwnerRating] = useState<RatingStats>({
                           <p className="text-xs text-gray-500 mt-1">
                             * Sale Price is the final purchase price (non-refundable).
                           </p>
+                        </div>
+                      )}
+
+                      {book.canRent && !book.canSell && (
+                        <div className="flex flex-col justify-start">
+                          <div className="flex justify-between">
+                            <p className="text-sm text-gray-500">Rental/Day:</p>
+                            <p className="font-bold text-orange-600">
+                              ${(Number(book.depositIncomePercentage ?? 0) / 10).toFixed(1)}/day
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-500 mt-1">
+                              Duration is chosen by the borrower at checkout, up to {book.maxLendingDays} days.
+                            </p>
+                          </div>
+                        </div>
+                      )}
+
+                      {book.canRent && book.canSell && (
+                        <div className="flex flex-col">
+                          <div className="flex justify-between">
+                            <p className="text-sm text-gray-500">Rental/Day:</p>
+                            <p className="font-bold text-orange-600">
+                              ${(Number(book.depositIncomePercentage ?? 0) / 10).toFixed(1)}/day
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-500 mt-1">
+                              Duration is chosen by the borrower at checkout, up to {book.maxLendingDays} days.
+                            </p>
+                          </div>
                         </div>
                       )}
                     </div>

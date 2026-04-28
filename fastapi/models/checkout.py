@@ -73,6 +73,7 @@ class CheckoutItemBase(BaseModel):
     actionType: str
     price: Optional[float] = None
     deposit: Optional[float] = None
+    rentalDays: Optional[int] = None
     shippingMethod: Optional[str] = None
     shippingQuote: Optional[float] = None
     serviceCode: Optional[str] = "AUS_PARCEL_REGULAR"

@@ -12,6 +12,7 @@ import { toast } from "sonner";
 import { getApiUrl, getToken, getCurrentUser } from "@/utils/auth";
 import { getReviewsByOrder } from "@/utils/review";
 import { getRefundsForOrder, cancelOrderWithRefund } from "@/utils/payments";
+import { formatLocalDateTime } from "@/utils/datetime";
 
 import type { OrderStatus, ApiOrder } from "@/app/types/order";
 import type { User } from "@/app/types/user";
@@ -29,7 +30,7 @@ const STATUS_META: Record<OrderStatus, { label: string; className: string }> = {
 const fmtAUD = (amount?: number) =>
   typeof amount === "number" ? `A$ ${amount.toFixed(2)}` : "—";
 
-const fmtDate = (v?: string | null) => (v ? new Date(v).toLocaleString() : "—");
+const fmtDate = (v?: string | null) => formatLocalDateTime(v);
 
 const TX_STAGE_META = {
   pending: { label: "Pending", className: "bg-amber-100 text-amber-800" },
@@ -52,6 +53,7 @@ const fetchOrderDetails = async (orderId: string): Promise<ApiOrder | null> => {
 
     const response = await fetch(`${apiUrl}/api/v1/orders/${orderId}`, {
       headers: { Authorization: `Bearer ${token}` },
+      cache: "no-store",
     });
 
     if (!response.ok) {
@@ -414,9 +416,35 @@ export default function OrderDetailPage() {
 
       toast.success("Shipment confirmed successfully");
 
+      setOrder((prev) =>
+        prev
+          ? {
+              ...prev,
+              shippingOutTrackingNumber:
+                prev.status === "PENDING_SHIPMENT"
+                  ? trackingNumber.trim()
+                  : prev.shippingOutTrackingNumber,
+              shippingReturnTrackingNumber:
+                prev.status === "BORROWING" || prev.status === "OVERDUE"
+                  ? trackingNumber.trim()
+                  : prev.shippingReturnTrackingNumber,
+              status:
+                prev.status === "BORROWING" || prev.status === "OVERDUE"
+                  ? "RETURNED"
+                  : prev.status,
+            }
+          : prev
+      );
+
       const updatedOrder = await fetchOrderDetails(order.id);
       if (updatedOrder) {
-        setOrder(updatedOrder);
+        setOrder((prev) => ({
+          ...updatedOrder,
+          shippingOutTrackingNumber:
+            updatedOrder.shippingOutTrackingNumber || prev?.shippingOutTrackingNumber || null,
+          shippingReturnTrackingNumber:
+            updatedOrder.shippingReturnTrackingNumber || prev?.shippingReturnTrackingNumber || null,
+        }));
       }
       // Trigger notification badge refresh in Header
       window.dispatchEvent(new Event("notif-update"));
@@ -631,7 +659,7 @@ export default function OrderDetailPage() {
             </div>
             {(order.ownerIncomeAmount || 0) > 0 && (
               <div className="flex justify-between">
-                <span>Owner Income</span>
+                <span>Rental Fee</span>
                 <span className="font-medium">
                   {fmtAUD(order.ownerIncomeAmount)}
                 </span>
@@ -805,7 +833,7 @@ export default function OrderDetailPage() {
               className="bg-black text-white hover:bg-gray-800"
               onClick={() => setShipModalOpen(true)}
             >
-              {order.shippingOutTrackingNumber ? "Update Shipment" : "Ship"}
+              {order.shippingOutTrackingNumber ? "Update Shipping" : "Ship"}
             </Button>
           )}
 
