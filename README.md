@@ -124,6 +124,11 @@ cp .env.example .env
 
 Update values in `.env` before running services.
 
+Environment guidance:
+- Use `.env.example` as the starting template for any new environment.
+- Keep local development values on `localhost`.
+- Use `https://www.bookborrow.org` for VPS / production-facing values such as `APP_BASE_URL`, `FRONTEND_URL`, and `NEXT_PUBLIC_API_URL`.
+
 ### 2) Frontend (Local Non-Docker Option)
 
 ```bash
@@ -206,6 +211,10 @@ STRIPE_SECRET_KEY=<stripe-secret-key>
 # Required to avoid CORS issues in local dev
 ALLOWED_ORIGINS=http://localhost:3000,http://127.0.0.1:3000,http://localhost,http://127.0.0.1
 ```
+
+Production note:
+- The VPS should use a private `.env` with production-only secrets and public URLs set to `https://www.bookborrow.org`.
+- Do not copy the production `.env` back into local development unless you intentionally want local services to target production endpoints.
 
 ### Step 2 - Start Docker Desktop
 
