@@ -66,6 +66,52 @@ export type ShippingMetricsData = {
   }>;
 };
 
+export type BookListingType = "all" | "loan" | "sale";
+
+export type AdminBookListing = {
+  id: string;
+  title_or: string;
+  title_en: string;
+  original_language: string;
+  author: string;
+  category: string | null;
+  description: string;
+  cover_img_url: string | null;
+  condition_img_urls: string[];
+  status: string;
+  condition: string;
+  can_rent: boolean;
+  can_sell: boolean;
+  date_added: string | null;
+  update_date: string | null;
+  isbn: string | null;
+  tags: string[];
+  publish_year: number | null;
+  max_lending_days: number;
+  deposit_income_percentage: number;
+  delivery_method: string;
+  sale_price: number;
+  deposit: number;
+  owner: {
+    id: string;
+    name: string;
+    email: string | null;
+    phone_number: string | null;
+    city: string | null;
+    state: string | null;
+    country: string | null;
+  };
+  times_borrowed: number;
+  times_purchased: number;
+  last_order_at: string | null;
+};
+
+export type AdminBookListingsResponse = {
+  type: BookListingType;
+  total: number;
+  books: AdminBookListing[];
+};
+
 export type AdminOrderUser = {
   id: string | null;
   name: string;
@@ -322,6 +368,21 @@ export async function getShippingMetrics(params?: {
     `${API_URL}/api/v1/analytics/shipping-metrics`,
     {
       params: params || {},
+      headers: getAuthHeaders(),
+      withCredentials: true,
+    }
+  );
+
+  return res.data;
+}
+
+export async function getAdminBookListings(type: BookListingType = "all") {
+  const API_URL = getApiUrl();
+
+  const res = await axios.get<AdminBookListingsResponse>(
+    `${API_URL}/api/v1/analytics/book-listings`,
+    {
+      params: { type },
       headers: getAuthHeaders(),
       withCredentials: true,
     }

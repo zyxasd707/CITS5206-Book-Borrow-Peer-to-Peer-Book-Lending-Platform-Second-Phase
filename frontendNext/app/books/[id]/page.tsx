@@ -5,7 +5,7 @@ import { useState, useMemo, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 
-import { Star, MapPin, Clock, Share2, MessageCircle, Package, Shield, ShoppingBag, Book as BookIcon, Languages } from "lucide-react";
+import { ArrowLeft, Star, MapPin, Clock, Share2, MessageCircle, Package, Shield, ShoppingBag, Book as BookIcon, Languages } from "lucide-react";
 import Card from "@/app/components/ui/Card";
 import Button from "@/app/components/ui/Button";
 import Modal from "@/app/components/ui/Modal";
@@ -251,6 +251,15 @@ const [ownerRating, setOwnerRating] = useState<RatingStats>({
     <div className="flex h-full">
       <div className="flex-1 overflow-y-auto">
         <div className="max-w-6xl mx-auto p-6">
+          <div className="mb-4">
+            <Link
+              href="/admin/book-metrics"
+              className="inline-flex items-center gap-2 text-sm font-medium text-gray-700 hover:text-black"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              Back to Dashboard
+            </Link>
+          </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             <div className="lg:col-span-1">
