@@ -109,6 +109,10 @@ export type AdminBookListing = {
 export type AdminBookListingsResponse = {
   type: BookListingType;
   total: number;
+  total_count: number;
+  page: number;
+  page_size: number;
+  total_pages: number;
   books: AdminBookListing[];
 };
 
@@ -376,13 +380,19 @@ export async function getShippingMetrics(params?: {
   return res.data;
 }
 
-export async function getAdminBookListings(type: BookListingType = "all") {
+export async function getAdminBookListings(
+  type: BookListingType = "all",
+  params?: {
+    page?: number;
+    page_size?: number;
+  }
+) {
   const API_URL = getApiUrl();
 
   const res = await axios.get<AdminBookListingsResponse>(
     `${API_URL}/api/v1/analytics/book-listings`,
     {
-      params: { type },
+      params: { type, ...(params || {}) },
       headers: getAuthHeaders(),
       withCredentials: true,
     }

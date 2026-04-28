@@ -58,6 +58,8 @@ const listingTitles: Record<BookListingType, string> = {
     sale: "Books Available for Sale",
 };
 
+const listingPageSize = 20;
+
 function formatDate(value: string | null) {
     if (!value) return "-";
     return new Date(value).toLocaleDateString();
@@ -96,6 +98,9 @@ export default function BookMetricsPage() {
     const [bookListings, setBookListings] = useState<AdminBookListing[]>([]);
     const [loadingListings, setLoadingListings] = useState(false);
     const [listingError, setListingError] = useState("");
+    const [listingPage, setListingPage] = useState(1);
+    const [listingTotalCount, setListingTotalCount] = useState(0);
+    const [listingTotalPages, setListingTotalPages] = useState(0);
 
     const token =
         typeof window !== "undefined"
@@ -242,16 +247,24 @@ export default function BookMetricsPage() {
         }
     };
 
-    const handleMetricClick = async (type: BookListingType) => {
+    const handleMetricClick = async (type: BookListingType, page = 1) => {
         try {
             setSelectedListingType(type);
+            setListingPage(page);
             setLoadingListings(true);
             setListingError("");
 
-            const result = await getAdminBookListings(type);
+            const result = await getAdminBookListings(type, {
+                page,
+                page_size: listingPageSize,
+            });
             setBookListings(result.books ?? []);
+            setListingTotalCount(result.total_count ?? 0);
+            setListingTotalPages(result.total_pages ?? 0);
         } catch (err: any) {
             setBookListings([]);
+            setListingTotalCount(0);
+            setListingTotalPages(0);
             const status = err?.response?.status;
             setListingError(
                 status === 401
@@ -382,7 +395,7 @@ export default function BookMetricsPage() {
                                 {listingTitles[selectedListingType]}
                             </h2>
                             <p className="text-sm text-gray-500">
-                                {bookListings.length} book{bookListings.length === 1 ? "" : "s"} found
+                                {listingTotalCount} book{listingTotalCount === 1 ? "" : "s"} found
                             </p>
                         </div>
                         <button
@@ -390,6 +403,9 @@ export default function BookMetricsPage() {
                             onClick={() => {
                                 setSelectedListingType(null);
                                 setBookListings([]);
+                                setListingPage(1);
+                                setListingTotalCount(0);
+                                setListingTotalPages(0);
                                 setListingError("");
                             }}
                             className="rounded-lg border px-3 py-2 text-sm hover:bg-gray-50"
@@ -402,6 +418,7 @@ export default function BookMetricsPage() {
                     {loadingListings ? (
                         <p className="text-gray-600">Loading book details...</p>
                     ) : (
+                        <>
                         <table className="min-w-full border-collapse text-sm">
                             <thead>
                                 <tr className="border-b text-left">
@@ -460,6 +477,33 @@ export default function BookMetricsPage() {
                                 )}
                             </tbody>
                         </table>
+
+                        {listingTotalPages > 1 && (
+                            <div className="mt-4 flex items-center justify-between border-t pt-4">
+                                <p className="text-sm text-gray-500">
+                                    Page {listingPage} of {listingTotalPages}
+                                </p>
+                                <div className="flex gap-2">
+                                    <button
+                                        type="button"
+                                        disabled={listingPage <= 1 || loadingListings}
+                                        onClick={() => handleMetricClick(selectedListingType, listingPage - 1)}
+                                        className="rounded-lg border px-3 py-2 text-sm hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+                                    >
+                                        Previous
+                                    </button>
+                                    <button
+                                        type="button"
+                                        disabled={listingPage >= listingTotalPages || loadingListings}
+                                        onClick={() => handleMetricClick(selectedListingType, listingPage + 1)}
+                                        className="rounded-lg border px-3 py-2 text-sm hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+                                    >
+                                        Next
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+                        </>
                     )}
                 </div>
             )}

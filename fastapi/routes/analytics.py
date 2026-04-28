@@ -57,8 +57,14 @@ def get_book_metrics(
 ):
     total_books = db.query(Book).count()
 
-    books_for_loan = db.query(Book).filter(Book.can_rent == True).count()
-    books_for_sale = db.query(Book).filter(Book.can_sell == True).count()
+    books_for_loan = db.query(Book).filter(
+        Book.can_rent == True,
+        Book.status == "listed",
+    ).count()
+    books_for_sale = db.query(Book).filter(
+        Book.can_sell == True,
+        Book.status == "listed",
+    ).count()
 
     return {
         "total_books": total_books,
@@ -69,17 +75,33 @@ def get_book_metrics(
 @router.get("/book-listings")
 def get_book_listings(
     type: str = Query("all", pattern="^(all|loan|sale)$"),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db),
     admin: User = Depends(get_current_admin),
 ):
     query = db.query(Book)
 
     if type == "loan":
-        query = query.filter(Book.can_rent == True)
+        query = query.filter(
+            Book.can_rent == True,
+            Book.status == "listed",
+        )
     elif type == "sale":
-        query = query.filter(Book.can_sell == True)
+        query = query.filter(
+            Book.can_sell == True,
+            Book.status == "listed",
+        )
 
-    books = query.order_by(Book.date_added.desc()).all()
+    total_count = query.count()
+    total_pages = (total_count + page_size - 1) // page_size if total_count else 0
+    books = (
+        query
+        .order_by(Book.date_added.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
     book_ids = [book.id for book in books]
     owner_ids = {book.owner_id for book in books}
 
@@ -162,6 +184,10 @@ def get_book_listings(
     return {
         "type": type,
         "total": len(results),
+        "total_count": total_count,
+        "page": page,
+        "page_size": page_size,
+        "total_pages": total_pages,
         "books": results,
     }
 

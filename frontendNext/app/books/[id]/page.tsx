@@ -252,13 +252,14 @@ const [ownerRating, setOwnerRating] = useState<RatingStats>({
       <div className="flex-1 overflow-y-auto">
         <div className="max-w-6xl mx-auto p-6">
           <div className="mb-4">
-            <Link
-              href="/admin/book-metrics"
+            <button
+              type="button"
+              onClick={() => router.back()}
               className="inline-flex items-center gap-2 text-sm font-medium text-gray-700 hover:text-black"
             >
               <ArrowLeft className="w-4 h-4" />
-              Back to Dashboard
-            </Link>
+              Back
+            </button>
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
