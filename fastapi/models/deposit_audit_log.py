@@ -27,6 +27,7 @@ AUDIT_SEVERITY_ENUM = ("none", "light", "medium", "severe")
 
 class DepositAuditLog(Base):
     __tablename__ = "deposit_audit_log"
+    __table_args__ = {"mysql_charset": "utf8mb4", "mysql_collate": "utf8mb4_unicode_ci"}
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     order_id = Column(String(36), ForeignKey("orders.id", ondelete="SET NULL"),

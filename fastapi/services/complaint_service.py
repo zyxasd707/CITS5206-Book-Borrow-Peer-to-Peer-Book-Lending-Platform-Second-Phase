@@ -4,6 +4,8 @@ from sqlalchemy.orm import Session
 from sqlalchemy import select, or_, and_
 
 from models.complaint import Complaint, ComplaintMessage, COMPLAINT_STATUS_ENUM, COMPLAINT_TYPE_ENUM
+from models.user import User
+from services.notification_service import NotificationService
 
 class ComplaintService:
 
@@ -18,11 +20,19 @@ class ComplaintService:
         description: str,
         order_id: Optional[str] = None,
         respondent_id: Optional[str] = None,
+        evidence_photos: Optional[List[str]] = None,
+        damage_severity: Optional[str] = None,
         commit: bool = True,
     ) -> Complaint:
         if type not in COMPLAINT_TYPE_ENUM:
             from fastapi import HTTPException
             raise HTTPException(status_code=422, detail="Invalid complaint type")
+
+        # Convert evidence_photos list to JSON string
+        import json
+        evidence_photos_json = None
+        if evidence_photos:
+            evidence_photos_json = json.dumps(evidence_photos)
 
         c = Complaint(
             id=str(uuid4()),
@@ -33,11 +43,26 @@ class ComplaintService:
             subject=subject,
             description=description,
             status="pending",
+            evidence_photos=evidence_photos_json,
+            damage_severity=damage_severity,
         )
         db.add(c)
         if commit:
             db.commit()
             db.refresh(c)
+            
+            # Notify all admins about the new complaint
+            admins = db.query(User).filter(User.is_admin == True).all()
+            for admin in admins:
+                NotificationService.create(
+                    db,
+                    user_id=admin.user_id,
+                    type="NEW_COMPLAINT",
+                    title=f"New Complaint: {subject}",
+                    message=f"A new complaint has been submitted (Type: {type}). Subject: {subject}",
+                    order_id=order_id,
+                    commit=True,
+                )
         return c
 
     # List (by user role)

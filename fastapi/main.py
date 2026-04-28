@@ -86,6 +86,58 @@ def ensure_order_owner_income_amount_column() -> None:
         )
         print("Added missing orders.owner_income_amount column")
 
+
+def ensure_order_deposit_columns() -> None:
+    required_columns = {
+        "deposit_status": (
+            "ALTER TABLE orders ADD COLUMN deposit_status "
+            "ENUM('held','pending_review','released','partially_deducted','forfeited') "
+            "NOT NULL DEFAULT 'held'"
+        ),
+        "deposit_deducted_cents": (
+            "ALTER TABLE orders ADD COLUMN deposit_deducted_cents INTEGER NOT NULL DEFAULT 0"
+        ),
+        "damage_severity_final": (
+            "ALTER TABLE orders ADD COLUMN damage_severity_final "
+            "ENUM('none','light','medium','severe') NULL"
+        ),
+    }
+    with engine.begin() as conn:
+        for column_name, ddl in required_columns.items():
+            column_exists = conn.execute(
+                text(f"SHOW COLUMNS FROM orders LIKE '{column_name}'")
+            ).first()
+            if column_exists:
+                continue
+            conn.execute(text(ddl))
+            print(f"Added missing orders.{column_name} column")
+
+
+def ensure_user_damage_columns() -> None:
+    required_columns = {
+        "damage_strike_count": (
+            "ALTER TABLE users ADD COLUMN damage_strike_count INTEGER NOT NULL DEFAULT 0"
+        ),
+        "damage_severity_score": (
+            "ALTER TABLE users ADD COLUMN damage_severity_score INTEGER NOT NULL DEFAULT 0"
+        ),
+        "is_restricted": (
+            "ALTER TABLE users ADD COLUMN is_restricted BOOLEAN NOT NULL DEFAULT FALSE"
+        ),
+        "restriction_reason": (
+            "ALTER TABLE users ADD COLUMN restriction_reason VARCHAR(255) NULL"
+        ),
+    }
+    with engine.begin() as conn:
+        for column_name, ddl in required_columns.items():
+            column_exists = conn.execute(
+                text(f"SHOW COLUMNS FROM users LIKE '{column_name}'")
+            ).first()
+            if column_exists:
+                continue
+            conn.execute(text(ddl))
+            print(f"Added missing users.{column_name} column")
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     import time
@@ -108,6 +160,8 @@ async def lifespan(app: FastAPI):
     ensure_book_deposit_income_percentage_column()
     ensure_checkout_owner_income_amount_column()
     ensure_order_owner_income_amount_column()
+    ensure_order_deposit_columns()
+    ensure_user_damage_columns()
     seed_sample_data()
     start_scheduler()
     yield

@@ -40,7 +40,8 @@ const ComplainPage: React.FC = () => {
     subject: "",
     description: "",
     orderId: "",
-    respondentId: ""
+    respondentId: "",
+    damageSeverity: "none" as const
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [userCache, setUserCache] = useState<Record<string, User>>({});
@@ -199,6 +200,8 @@ const ComplainPage: React.FC = () => {
       description: newComplaint.description,
       orderId: newComplaint.orderId || undefined,
       respondentId: respondentId || undefined,
+      evidencePhotos: evidenceFiles.length > 0 ? evidenceFiles.map(e => e.url) : undefined,
+      damageSeverity: newComplaint.type === "book-condition" ? newComplaint.damageSeverity : undefined,
     };
 
     console.log("Creating complaint with data:", complaintData);
@@ -288,12 +291,14 @@ const ComplainPage: React.FC = () => {
     const orderId = complaint.orderId?.toLowerCase() || "";
 
     // Get user names from cache
-    const complainantName = userCache[complaint.complainantId]
-      ? [userCache[complaint.complainantId].firstName, userCache[complaint.complainantId].lastName]
+    const complainant = userCache[complaint.complainantId];
+    const respondent = complaint.respondentId ? userCache[complaint.respondentId] : undefined;
+    const complainantName = complainant
+      ? [complainant.firstName, complainant.lastName]
           .filter(Boolean).join(" ").toLowerCase()
       : "";
-    const respondentName = userCache[complaint.respondentId]
-      ? [userCache[complaint.respondentId].firstName, userCache[complaint.respondentId].lastName]
+    const respondentName = respondent
+      ? [respondent.firstName, respondent.lastName]
           .filter(Boolean).join(" ").toLowerCase()
       : "";
 
@@ -494,6 +499,24 @@ const ComplainPage: React.FC = () => {
                   </select>
                 </div>
 
+                {newComplaint.type === "book-condition" && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Damage Severity
+                    </label>
+                    <select
+                      value={newComplaint.damageSeverity}
+                      onChange={(e) => setNewComplaint({ ...newComplaint, damageSeverity: e.target.value as any })}
+                      className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    >
+                      <option value="none">None</option>
+                      <option value="light">Light</option>
+                      <option value="medium">Medium</option>
+                      <option value="severe">Severe</option>
+                    </select>
+                  </div>
+                )}
+
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Related Order ID (Optional)
@@ -586,7 +609,7 @@ const ComplainPage: React.FC = () => {
                   variant="outline"
                   onClick={() => {
                     setIsCreateModalOpen(false);
-                    setNewComplaint({ type: "other", subject: "", description: "", orderId: "", respondentId: "" });
+                    setNewComplaint({ type: "other", subject: "", description: "", orderId: "", respondentId: "", damageSeverity: "none" });
                     setEvidenceFiles([]);
                   }}
                   disabled={isSubmitting}
