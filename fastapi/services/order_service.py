@@ -456,18 +456,20 @@ class OrderService:
         target_user_id: Optional[str] = None
     ) -> List[Dict[str, Optional[str]]]:
         """
-        Return AUPOST shipping out and return tracking numbers per order for a user.
-        Each item includes order_id and tracking numbers (or None if not AUPOST).
+        Return one entry per shipment leg (outbound + return) the user is involved in.
 
-        Example:
-        [
-            {
-                "order_id": "ORD123",
-                "shipping_out_tracking_number": "OUT123",
-                "shipping_return_tracking_number": "RET123"
-            },
-            ...
-        ]
+        Each entry says whether the current user is the sender or recipient of that
+        leg, and whether the package is in transit or already delivered (the latter
+        meaning the recipient has confirmed receipt via the in-app flow).
+
+        Outbound leg: owner ships to borrower.
+            - in_transit  while order.status == PENDING_SHIPMENT
+            - delivered   once status moves past it (BORROWING / OVERDUE /
+                          RETURNED / COMPLETED), since the borrower had to
+                          confirm receipt to advance it.
+        Return leg: borrower ships back to owner.
+            - in_transit  while order.status == RETURNED
+            - delivered   once status == COMPLETED.
         """
         user_id = target_user_id or current_user.user_id
 
@@ -479,36 +481,77 @@ class OrderService:
             (Order.borrower_id == user_id) | (Order.owner_id == user_id)
         ).all()
 
-        result = []
+        # Status sets that decide whether each leg is in-transit vs delivered.
+        OUT_IN_TRANSIT = {"PENDING_SHIPMENT"}
+        OUT_DELIVERED = {"BORROWING", "OVERDUE", "RETURNED", "COMPLETED"}
+        RETURN_IN_TRANSIT = {"RETURNED"}
+        RETURN_DELIVERED = {"COMPLETED"}
+
+        result: List[Dict[str, Optional[str]]] = []
         for order in orders:
-            out_num = order.shipping_out_tracking_number if order.shipping_out_carrier == "AUSPOST" else None
-            return_num = order.shipping_return_tracking_number if order.shipping_return_carrier == "AUSPOST" else None
+            # Skip orders that never had a shipment (still pending payment) or
+            # were canceled — neither leg is meaningful.
+            if order.status in ("PENDING_PAYMENT", "CANCELED"):
+                continue
+
             first_book = next((ob.book for ob in order.books if ob.book), None)
-            book_title = None
-            if first_book:
-                book_title = first_book.title_or or first_book.title_en
+            book_title = (first_book.title_or or first_book.title_en) if first_book else None
+            owner_name = order.owner.name if order.owner else None
+            borrower_name = order.borrower.name if order.borrower else None
 
-            if order.owner_id == user_id:
-                counterpart_name = order.borrower.name if order.borrower else None
-                counterpart_role = "Borrower"
-            else:
-                counterpart_name = order.owner.name if order.owner else None
-                counterpart_role = "Owner"
+            # Outbound leg — only if the lender filled a tracking number.
+            if order.shipping_out_tracking_number:
+                if order.status in OUT_IN_TRANSIT:
+                    out_state = "in_transit"
+                elif order.status in OUT_DELIVERED:
+                    out_state = "delivered"
+                else:
+                    out_state = None  # unexpected, skip rather than mislabel
 
-            # Only include if at least one AUPOST tracking number exists
-            if out_num or return_num:
-                result.append({
-                    "order_id": order.id,
-                    "shipping_out_tracking_number": out_num,
-                    "shipping_return_tracking_number": return_num,
-                    "book_title": book_title,
-                    "counterpart_name": counterpart_name,
-                    "counterpart_role": counterpart_role,
-                    "created_at": order.created_at,
-                    "updated_at": order.updated_at,
-                    "start_at": order.start_at,
-                    "returned_at": order.returned_at,
-                })
+                if out_state is not None:
+                    is_owner = order.owner_id == user_id
+                    result.append({
+                        "order_id": order.id,
+                        "leg": "out",
+                        "role": "sender" if is_owner else "recipient",
+                        "tracking_state": out_state,
+                        "carrier": order.shipping_out_carrier,
+                        "tracking_number": order.shipping_out_tracking_number,
+                        "book_title": book_title,
+                        "counterpart_name": borrower_name if is_owner else owner_name,
+                        "counterpart_role": "Borrower" if is_owner else "Owner",
+                        "created_at": order.created_at,
+                        "updated_at": order.updated_at,
+                        "shipped_at": order.updated_at,
+                        "delivered_at": order.start_at if out_state == "delivered" else None,
+                    })
+
+            # Return leg — only if the borrower filed a return tracking number.
+            if order.shipping_return_tracking_number:
+                if order.status in RETURN_IN_TRANSIT:
+                    return_state = "in_transit"
+                elif order.status in RETURN_DELIVERED:
+                    return_state = "delivered"
+                else:
+                    return_state = None
+
+                if return_state is not None:
+                    is_borrower = order.borrower_id == user_id
+                    result.append({
+                        "order_id": order.id,
+                        "leg": "return",
+                        "role": "sender" if is_borrower else "recipient",
+                        "tracking_state": return_state,
+                        "carrier": order.shipping_return_carrier,
+                        "tracking_number": order.shipping_return_tracking_number,
+                        "book_title": book_title,
+                        "counterpart_name": owner_name if is_borrower else borrower_name,
+                        "counterpart_role": "Owner" if is_borrower else "Borrower",
+                        "created_at": order.created_at,
+                        "updated_at": order.updated_at,
+                        "shipped_at": order.returned_at,
+                        "delivered_at": order.completed_at if return_state == "delivered" else None,
+                    })
 
         return result
     

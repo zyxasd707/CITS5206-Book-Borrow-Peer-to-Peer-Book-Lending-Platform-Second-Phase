@@ -55,23 +55,35 @@ export async function getShippingQuotes(
 }
 
 
+export type ShipmentLeg = "out" | "return";
+export type ShipmentRole = "sender" | "recipient";
+export type TrackingState = "in_transit" | "delivered";
+
 export type TrackingNumberItem = {
   order_id: string;
-  shipping_out_tracking_number?: string | null;
-  shipping_return_tracking_number?: string | null;
+  leg: ShipmentLeg;
+  role: ShipmentRole;
+  tracking_state: TrackingState;
+  carrier?: string | null;
+  tracking_number?: string | null;
   book_title?: string | null;
   counterpart_name?: string | null;
   counterpart_role?: string | null;
   created_at?: string | null;
   updated_at?: string | null;
-  start_at?: string | null;
-  returned_at?: string | null;
+  shipped_at?: string | null;
+  delivered_at?: string | null;
 };
 
 /**
- * @param userId option，Only administrators can upload
+ * Fetch the current user's shipments (both outbound and return legs across all
+ * orders they participate in). Each item is a single shipment leg labelled
+ * with whether the user is the sender or recipient and whether the package
+ * is in transit or already delivered.
+ *
+ * @param userId optional — admin-only override to query another user's shipments.
  */
-export async function getUserAuspostTrackingNumbers(
+export async function getUserShipments(
   userId?: string
 ): Promise<TrackingNumberItem[]> {
   try {
@@ -85,7 +97,7 @@ export async function getUserAuspostTrackingNumbers(
 
     return res.data;
   } catch (err) {
-    console.error("Failed to fetch tracking numbers:", err);
+    console.error("Failed to fetch shipments:", err);
     throw err;
   }
 }
