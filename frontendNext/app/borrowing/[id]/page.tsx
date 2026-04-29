@@ -165,6 +165,24 @@ export default function OrderDetailPage() {
     loadData();
   }, [id]);
 
+  // Hydrate ship modal fields from the persisted order so reopening the page
+  // doesn't make the user retype the tracking number / carrier they already saved.
+  useEffect(() => {
+    if (!order) return;
+    const isReturnLeg =
+      order.status === "BORROWING" ||
+      order.status === "OVERDUE" ||
+      order.status === "RETURNED";
+    const persistedTracking = isReturnLeg
+      ? order.shippingReturnTrackingNumber
+      : order.shippingOutTrackingNumber;
+    const persistedCarrier = isReturnLeg
+      ? order.shippingReturnCarrier
+      : order.shippingOutCarrier;
+    setTrackingNumber(persistedTracking || "");
+    setCarrier(persistedCarrier || "AUSPOST");
+  }, [order]);
+
   // Handle refund redirect from complaint form
   useEffect(() => {
     const action = searchParams.get("action");
@@ -511,6 +529,29 @@ export default function OrderDetailPage() {
           )}
         </div>
       </div>
+
+      {isBorrower &&
+        order.status === "PENDING_SHIPMENT" &&
+        order.shippingOutTrackingNumber && (
+          <div className="flex items-start gap-3 rounded-lg border border-blue-200 bg-blue-50 p-4">
+            <Truck className="mt-0.5 h-5 w-5 shrink-0 text-blue-600" />
+            <div className="flex-1 text-sm">
+              <p className="font-semibold text-blue-900">
+                Your book is on its way
+              </p>
+              <p className="mt-1 text-blue-800">
+                The lender has shipped this order. Once it arrives, please
+                confirm receipt so the lender knows it got there safely.
+              </p>
+            </div>
+            <Button
+              className="bg-blue-600 text-white hover:bg-blue-700 shrink-0"
+              onClick={() => setBorrowerConfirmReceiveModalOpen(true)}
+            >
+              Confirm Receive
+            </Button>
+          </div>
+        )}
 
       {/* Section 1 — Order Info */}
       <div className="grid md:grid-cols-2 gap-4">

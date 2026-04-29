@@ -255,7 +255,7 @@ export default function LendingListPage() {
 
   const openShipmentModal = (orderId: string, order?: ApiOrder) => {
     setSelectedOrderId(orderId);
-    setCarrier(order?.shippingOutTrackingNumber ? order.shippingMethod?.toUpperCase() || "AUSPOST" : "AUSPOST");
+    setCarrier(order?.shippingOutCarrier || "AUSPOST");
     setTrackingNumber(order?.shippingOutTrackingNumber || "");
     setShipModalOpen(true);
   };

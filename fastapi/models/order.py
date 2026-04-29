@@ -193,8 +193,10 @@ class Order(Base):
             "completedAt": self._to_utc_iso(self.completed_at),
             "canceledAt": self._to_utc_iso(self.canceled_at),
             
+            "shippingOutCarrier": self.shipping_out_carrier,
             "shippingOutTrackingNumber": self.shipping_out_tracking_number,
             "shippingOutTrackingUrl": self.shipping_out_tracking_url,
+            "shippingReturnCarrier": self.shipping_return_carrier,
             "shippingReturnTrackingNumber": self.shipping_return_tracking_number,
             "shippingReturnTrackingUrl": self.shipping_return_tracking_url,
             

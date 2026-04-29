@@ -5,16 +5,24 @@ import { useRouter } from "next/navigation";
 import { Package, Truck, CheckCircle } from "lucide-react";
 import Card from "@/app/components/ui/Card";
 import { getCurrentUser, isAuthenticated } from "@/utils/auth";
-import { getUserAuspostTrackingNumbers, type TrackingNumberItem } from "@/utils/shipping";
+import { getUserShipments, type TrackingNumberItem } from "@/utils/shipping";
 import clsx from "clsx";
 
 const formatDateTime = (value?: string | null) =>
   value ? new Date(value).toLocaleString("en-AU") : "—";
 
+const trackingHref = (item: TrackingNumberItem): string | null => {
+  if (!item.tracking_number) return null;
+  if ((item.carrier || "").toUpperCase() === "AUSPOST") {
+    return `https://auspost.com.au/mypost/track/details/${item.tracking_number}`;
+  }
+  return null;
+};
+
 const ShippingPage: React.FC = () => {
   const router = useRouter();
   const [currentUser, setCurrentUser] = useState<any>(null);
-  const [trackingNumbers, setTrackingNumbers] = useState<TrackingNumberItem[]>([]);
+  const [shipments, setShipments] = useState<TrackingNumberItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<"sent" | "received">("sent");
 
@@ -29,8 +37,8 @@ const ShippingPage: React.FC = () => {
         const userData = await getCurrentUser();
         if (userData) {
           setCurrentUser(userData);
-          const trackingData = await getUserAuspostTrackingNumbers();
-          setTrackingNumbers(trackingData);
+          const data = await getUserShipments();
+          setShipments(data);
         } else {
           router.push("/auth");
         }
@@ -52,12 +60,8 @@ const ShippingPage: React.FC = () => {
     );
   }
 
-  const sentList = trackingNumbers.filter(
-    (t) => !!t.shipping_out_tracking_number
-  );
-  const receivedList = trackingNumbers.filter(
-    (t) => !!t.shipping_return_tracking_number
-  );
+  const sentList = shipments.filter((s) => s.role === "sender");
+  const receivedList = shipments.filter((s) => s.role === "recipient");
   const currentList = activeTab === "sent" ? sentList : receivedList;
 
   return (
@@ -74,7 +78,7 @@ const ShippingPage: React.FC = () => {
               <Package className="w-8 h-8 text-blue-600 mr-3" />
               <div>
                 <p className="text-sm font-medium text-gray-600">Total Shipments</p>
-                <p className="text-2xl font-bold text-gray-900">{trackingNumbers.length}</p>
+                <p className="text-2xl font-bold text-gray-900">{shipments.length}</p>
               </div>
             </div>
           </Card>
@@ -136,66 +140,79 @@ const ShippingPage: React.FC = () => {
             </div>
           ) : (
             <div className="space-y-4">
-              {currentList.map((item) => (
-                <Card key={item.order_id} className="border border-gray-200 shadow-sm">
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                    <div className="min-w-0 text-sm text-gray-700">
-                      <h3
-                        className="font-semibold text-black hover:underline cursor-pointer text-base sm:text-lg"
-                        onClick={() => router.push(`/borrowing/${item.order_id}`)}
-                      >
-                        {item.book_title || `Order #${item.order_id}`}
-                      </h3>
+              {currentList.map((item) => {
+                const isDelivered = item.tracking_state === "delivered";
+                const href = trackingHref(item);
+                const legLabel = item.leg === "out" ? "Outgoing" : "Return";
+                const dateLabel = isDelivered ? "Delivered" : "Shipped";
+                const dateValue = isDelivered
+                  ? item.delivered_at || item.updated_at || item.created_at
+                  : item.shipped_at || item.updated_at || item.created_at;
 
-                      {item.counterpart_name && (
-                        <p className="mt-1 text-gray-600">
-                          {item.counterpart_role || "User"}: {item.counterpart_name}
-                        </p>
-                      )}
-
-                      {activeTab === "sent" && item.shipping_out_tracking_number && (
-                        <p className="mt-2">
-                          Outgoing Tracking:{" "}
-                          <a
-                            href={`https://auspost.com.au/mypost/track/details/${item.shipping_out_tracking_number}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="font-mono text-blue-600 underline hover:text-blue-800"
+                return (
+                  <Card
+                    key={`${item.order_id}-${item.leg}`}
+                    className="border border-gray-200 shadow-sm"
+                  >
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                      <div className="min-w-0 text-sm text-gray-700">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h3
+                            className="font-semibold text-black hover:underline cursor-pointer text-base sm:text-lg"
+                            onClick={() => router.push(`/borrowing/${item.order_id}`)}
                           >
-                            {item.shipping_out_tracking_number}
-                          </a>
-                        </p>
-                      )}
-
-                      {activeTab === "received" && item.shipping_return_tracking_number && (
-                        <p className="mt-2">
-                          Return Tracking:{" "}
-                          <a
-                            href={`https://auspost.com.au/mypost/track/details/${item.shipping_return_tracking_number}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="font-mono text-green-600 underline hover:text-green-800"
+                            {item.book_title || `Order #${item.order_id}`}
+                          </h3>
+                          <span
+                            className={clsx(
+                              "inline-block rounded-full px-2 py-0.5 text-xs font-medium",
+                              isDelivered
+                                ? "bg-green-100 text-green-700"
+                                : "bg-orange-100 text-orange-700"
+                            )}
                           >
-                            {item.shipping_return_tracking_number}
-                          </a>
-                        </p>
-                      )}
-                    </div>
+                            {isDelivered ? "Delivered" : "In Transit"}
+                          </span>
+                        </div>
 
-                    <div className="shrink-0 text-xs text-gray-500 sm:text-right">
-                      <p>
-                        {activeTab === "sent" ? "Shipped Date" : "Received Date"}:{" "}
-                        {formatDateTime(
-                          activeTab === "sent"
-                            ? item.updated_at || item.start_at || item.created_at
-                            : item.returned_at || item.updated_at || item.created_at
+                        {item.counterpart_name && (
+                          <p className="mt-1 text-gray-600">
+                            {item.counterpart_role || "User"}: {item.counterpart_name}
+                          </p>
                         )}
-                      </p>
-                      <p className="mt-1 text-gray-400">Order ID: {item.order_id}</p>
+
+                        {item.tracking_number && (
+                          <p className="mt-2">
+                            {legLabel} Tracking
+                            {item.carrier ? ` (${item.carrier})` : ""}:{" "}
+                            {href ? (
+                              <a
+                                href={href}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="font-mono text-blue-600 underline hover:text-blue-800"
+                              >
+                                {item.tracking_number}
+                              </a>
+                            ) : (
+                              <span className="font-mono text-gray-800">
+                                {item.tracking_number}
+                              </span>
+                            )}
+                          </p>
+                        )}
+                      </div>
+
+                      <div className="shrink-0 text-xs text-gray-500 sm:text-right">
+                        <p>
+                          {dateLabel}: {formatDateTime(dateValue)}
+                        </p>
+                        <p className="mt-1 text-gray-400">Order ID: {item.order_id}</p>
+                      </div>
                     </div>
-                  </div>
-                </Card>
-              ))}
+                  </Card>
+                );
+              })}
             </div>
           )}
         </Card>

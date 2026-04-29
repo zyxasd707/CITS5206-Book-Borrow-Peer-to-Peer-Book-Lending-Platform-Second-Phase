@@ -104,8 +104,10 @@ export interface ApiOrder {
   returnedAt: string | null;
   completedAt: string | null;
   canceledAt: string | null;
+  shippingOutCarrier: string | null;
   shippingOutTrackingNumber: string | null;
   shippingOutTrackingUrl: string | null;
+  shippingReturnCarrier: string | null;
   shippingReturnTrackingNumber: string | null;
   shippingReturnTrackingUrl: string | null;
   lateFeeAmount: number;
