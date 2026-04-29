@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { getApiUrl } from "@/utils/auth";
 import {
     Chart as ChartJS,
     ArcElement,
@@ -106,6 +107,7 @@ export default function BookMetricsPage() {
         typeof window !== "undefined"
             ? localStorage.getItem("access_token")
             : null;
+    const API_URL = getApiUrl();
 
     useEffect(() => {
         const fetchDashboardData = async () => {
@@ -117,17 +119,17 @@ export default function BookMetricsPage() {
                 }
 
                 const [metricsRes, categoriesRes, averageRes] = await Promise.all([
-                    fetch("http://localhost:8000/api/v1/analytics/book-metrics", {
+                    fetch(`${API_URL}/api/v1/analytics/book-metrics`, {
                         headers: {
                             Authorization: `Bearer ${token}`,
                         },
                     }),
-                    fetch("http://localhost:8000/api/v1/analytics/book-categories", {
+                    fetch(`${API_URL}/api/v1/analytics/book-categories`, {
                         headers: {
                             Authorization: `Bearer ${token}`,
                         },
                     }),
-                    fetch("http://localhost:8000/api/v1/analytics/books-per-user-average", {
+                    fetch(`${API_URL}/api/v1/analytics/books-per-user-average`, {
                         headers: {
                             Authorization: `Bearer ${token}`,
                         },
@@ -181,7 +183,7 @@ export default function BookMetricsPage() {
                 setSearchingUsers(true);
 
                 const res = await fetch(
-                    `http://localhost:8000/api/v1/analytics/search-users?q=${encodeURIComponent(
+                    `${API_URL}/api/v1/analytics/search-users?q=${encodeURIComponent(
                         trimmed
                     )}`,
                     {
@@ -223,7 +225,7 @@ export default function BookMetricsPage() {
             setError("");
 
             const res = await fetch(
-                `http://localhost:8000/api/v1/analytics/books-by-user/${user.user_id}`,
+                `${API_URL}/api/v1/analytics/books-by-user/${user.user_id}`,
                 {
                     headers: {
                         Authorization: `Bearer ${token}`,
