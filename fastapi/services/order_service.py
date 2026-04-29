@@ -662,6 +662,11 @@ class OrderService:
                 commit=False,
             )
 
+            # Commit tracking number + notification now, before fee distribution,
+            # so a Stripe failure in distribute_shipping_fee can't rollback these changes.
+            db.commit()
+            db.refresh(order)
+
             try:
                 borrower_name = (order.borrower.name if order.borrower and order.borrower.name else "there")
                 owner_name = (order.owner.name if order.owner and order.owner.name else "there")
@@ -690,7 +695,7 @@ class OrderService:
             except Exception as e:
                 logger.warning("Failed to send shipment status emails: %s", e)
 
-            # implement distribute shipping fee function
+            # Distribute shipping fee via Stripe (best-effort, runs after commit above)
             try:
                 payment_id = order.payment_id
                 if payment_id:
@@ -698,6 +703,7 @@ class OrderService:
                     from services.payment_gateway_service import distribute_shipping_fee
                     distribute_shipping_fee(payment_id, data, db=db)
             except Exception as e:
+                db.rollback()
                 print(f"[WARN] distribute_shipping_fee failed: {e}")
                 
             
