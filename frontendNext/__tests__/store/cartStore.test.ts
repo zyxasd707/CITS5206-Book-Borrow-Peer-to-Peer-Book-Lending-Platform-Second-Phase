@@ -83,7 +83,7 @@ describe('cartStore - useCartStore', () => {
           title: 'Book 2',
           cartItemId: 'cart-2',
           bookId: '2',
-          mode: 'purchase',
+          mode: 'borrow',
           ownerId: 'owner-2',
           canRent: true,
           canSell: true,
@@ -96,7 +96,7 @@ describe('cartStore - useCartStore', () => {
 
       const state = useCartStore.getState();
       expect(state.cart[0].mode).toBe('purchase');
-      expect(state.cart[1].mode).toBe('purchase'); // should remain unchanged
+      expect(state.cart[1].mode).toBe('borrow'); // must not be affected by setMode('1', ...)
     });
   });
 
