@@ -57,6 +57,7 @@ services:
       - backend
     networks:
       - mynetwork
+    command: ["npm", "run", "dev"]
 
   nginx:
     image: nginx:latest
