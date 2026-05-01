@@ -6,7 +6,7 @@ BookHive-to-BookBorrow migration.
 ## Source of Truth
 
 - Repository: `https://github.com/zyxasd707/CITS5206-Book-Borrow-Peer-to-Peer-Book-Lending-Platform-Second-Phase.git`
-- Deployment branch: `VPSdeployment`
+- Deployment branch: `main`
 - VPS app directory: `/root/capstone15/Bookborrow`
 - Public URL: `https://www.bookborrow.org`
 - Database: Docker MySQL container `mysql-db`, database `BookBorrow`
@@ -17,7 +17,7 @@ BookHive-to-BookBorrow migration.
 ```bash
 cd /root/capstone15/Bookborrow
 git fetch origin
-git pull --ff-only origin VPSdeployment
+git pull --ff-only origin main
 docker compose -f compose.yaml build
 docker compose -f compose.yaml up -d
 docker compose -f compose.yaml exec backend alembic -c alembic.ini upgrade head
