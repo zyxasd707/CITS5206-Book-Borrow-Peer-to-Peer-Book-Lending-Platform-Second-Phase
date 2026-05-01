@@ -13,6 +13,18 @@ build: ## Build production containers
 logs: ## Show logs (prod)
 	docker compose -f compose.yaml logs -f nginx frontend backend
 
+migrate: ## Run database migrations in the backend container
+	docker compose -f compose.yaml exec backend alembic -c alembic.ini upgrade head
+
+health: ## Run production health checks
+	bash scripts/vps/check_health.sh
+
+backup-db: ## Create a Docker MySQL database backup
+	bash scripts/vps/backup_db.sh
+
+rollback: ## Roll back to a git ref and rebuild production containers (usage: make rollback REF=<ref>)
+	bash scripts/vps/rollback.sh $(REF)
+
 
 # =====================
 # Development (Local)
@@ -28,6 +40,9 @@ build-dev: ## Build development containers
 
 logs-dev: ## Show logs (dev)
 	docker compose -f compose.yaml -f compose.dev.yaml logs -f nginx frontend backend
+
+migrate-dev: ## Run database migrations in the dev backend container
+	docker compose -f compose.yaml -f compose.dev.yaml exec backend alembic -c alembic.ini upgrade head
 
 
 # =====================

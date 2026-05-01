@@ -353,6 +353,8 @@ brew install make
 - TLS certificates (`nginx/letsencrypt/`) and VPS runtime artifacts must not be pushed.
 - Local development does not require HTTPS.
 - Do not push code from production servers. Production changes must flow through GitHub-based workflows to preserve traceability and deployment consistency.
+- Production verification, monitoring, backup, restore, and rollback steps are documented in [docs/production-runbook.md](docs/production-runbook.md).
+- Database schema changes are tracked by Alembic migrations under `fastapi/migrations/`.
 
 ---
 
@@ -365,6 +367,9 @@ make up
 make down
 make build
 make logs
+make migrate
+make health
+make backup-db
 ```
 
 ### Development
@@ -374,6 +379,7 @@ make up-dev
 make down-dev
 make build-dev
 make logs-dev
+make migrate-dev
 ```
 
 ### Cleanup

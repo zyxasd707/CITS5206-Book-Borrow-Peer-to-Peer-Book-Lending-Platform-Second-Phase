@@ -3,8 +3,8 @@ name: Deploy to VPS
 on:
   push:
     branches:
-      - "master"
-      - "infra/github-actions-deploy"
+      - VPSdeployment
+  workflow_dispatch:
 
 concurrency:
   group: deploy-to-vps
@@ -12,43 +12,26 @@ concurrency:
 
 jobs:
   deploy-prod:
-    if: github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      - uses: webfactory/ssh-agent@v0.7.0
+      - uses: actions/checkout@v4
+
+      - uses: webfactory/ssh-agent@v0.9.0
         with:
           ssh-private-key: ${{ secrets.VPS_SSH_KEY }}
-      - name: Deploy to Production
+
+      - name: Deploy BookBorrow to production
         run: |
-          ssh -o StrictHostKeyChecking=no ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} << 'EOF'
-            cd ~/capstone15/Bookhive
-            git pull origin master
-            docker compose down
-            docker compose up -d --build
-            docker compose ps
+          ssh -o StrictHostKeyChecking=no "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}" << 'EOF'
+            set -euo pipefail
+            cd /root/capstone15/Bookborrow
+            git fetch origin
+            git pull --ff-only origin VPSdeployment
+            docker compose -f compose.yaml build
+            docker compose -f compose.yaml up -d
+            docker compose -f compose.yaml exec -T backend alembic -c alembic.ini upgrade head
+            bash scripts/vps/check_health.sh
+            docker compose -f compose.yaml ps
             git log -1 --oneline
-            echo "🚀 Deployment complete!"
+            echo "Deployment complete"
           EOF
-
-  deploy-staging:
-    if: github.ref == 'refs/heads/infra/github-actions-deploy'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - uses: webfactory/ssh-agent@v0.7.0
-        with:
-          ssh-private-key: ${{ secrets.VPS_SSH_KEY }}
-      - name: Deploy to Staging
-        run: |
-          ssh -o StrictHostKeyChecking=no ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} << 'EOF'
-            cd ~/capstone15/Bookhive
-            git pull origin infra/github-actions-deploy
-            docker compose down
-            docker compose up -d --build
-            docker compose ps
-            git log -1 --oneline
-            echo "🚀 Deployment complete!"
-          EOF
-
-

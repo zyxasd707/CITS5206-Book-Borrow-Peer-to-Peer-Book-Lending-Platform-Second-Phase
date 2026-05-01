@@ -1,4 +1,3 @@
-version: "3.9"
 services:
   db:             # Local MySQL database for development only;
     image: mysql:8.0
@@ -6,7 +5,7 @@ services:
     command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
     environment:
       MYSQL_ROOT_PASSWORD: rootpassword
-      MYSQL_DATABASE: BookHive
+      MYSQL_DATABASE: BookBorrow
       MYSQL_USER: myuser
       MYSQL_PASSWORD: "123456"
     ports:
@@ -41,7 +40,13 @@ services:
 
   frontend:
     image: frontendnext:latest
-    build: ./frontendNext
+    build:
+      context: ./frontendNext
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+        NEXT_PUBLIC_WS_URL: ${NEXT_PUBLIC_WS_URL}
+        NEXT_PUBLIC_STRIPE_PK: ${NEXT_PUBLIC_STRIPE_PK}
+        NEXT_PUBLIC_STRIPE_TEST_DESTINATION_ACCOUNT_ID: ${NEXT_PUBLIC_STRIPE_TEST_DESTINATION_ACCOUNT_ID}
     container_name: next-frontend
     env_file:
       - ./.env

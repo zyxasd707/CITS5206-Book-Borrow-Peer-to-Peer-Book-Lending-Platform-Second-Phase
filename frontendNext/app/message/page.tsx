@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, type ReactNode } from "react";
 import { getCurrentUser, getApiUrl, getToken } from "@/utils/auth";
 import { useSearchParams, useRouter } from "next/navigation";
 import type { ChatThread, Message, SendMessageData } from "@/app/types/message";
@@ -56,7 +56,7 @@ const formatTimeAgo = (dateStr: string) => {
   return `${days} days ago`;
 };
 
-const NOTIF_ICON_MAP: Record<string, { bg: string; color: string; icon: JSX.Element }> = {
+const NOTIF_ICON_MAP: Record<string, { bg: string; color: string; icon: ReactNode }> = {
   PAYMENT_CONFIRMED: {
     bg: "bg-green-100", color: "text-green-700",
     icon: <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>,

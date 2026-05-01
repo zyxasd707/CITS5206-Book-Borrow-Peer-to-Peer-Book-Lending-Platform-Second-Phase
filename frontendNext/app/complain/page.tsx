@@ -27,6 +27,25 @@ import { getOrderById } from "@/utils/borrowingOrders";
 import { createPaymentDispute } from "@/utils/payments";
 import { uploadFile } from "@/utils/books";
 
+type ComplaintFormState = {
+  type: CreateComplaintRequest["type"];
+  subject: string;
+  description: string;
+  orderId: string;
+  respondentId: string;
+  damageSeverity: "none" | "light" | "medium" | "severe";
+  needsRefund: boolean;
+};
+
+const initialComplaintForm: ComplaintFormState = {
+  type: "other",
+  subject: "",
+  description: "",
+  orderId: "",
+  respondentId: "",
+  damageSeverity: "none",
+  needsRefund: false,
+};
 
 const ComplainPage: React.FC = () => {
   const router = useRouter();
@@ -35,15 +54,7 @@ const ComplainPage: React.FC = () => {
   const [complaints, setComplaints] = useState<Complaint[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-  const [newComplaint, setNewComplaint] = useState({
-    type: "other" as const,
-    subject: "",
-    description: "",
-    orderId: "",
-    respondentId: "",
-    damageSeverity: "none" as const,
-    needsRefund: false
-  });
+  const [newComplaint, setNewComplaint] = useState<ComplaintFormState>(initialComplaintForm);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [userCache, setUserCache] = useState<Record<string, User>>({});
   const [searchQuery, setSearchQuery] = useState("");
@@ -247,7 +258,7 @@ const ComplainPage: React.FC = () => {
       setComplaints([createdComplaint, ...complaints]);
     }
     setIsCreateModalOpen(false);
-    setNewComplaint({ type: "other", subject: "", description: "", orderId: "", respondentId: "", damageSeverity: "none", needsRefund: false });
+    setNewComplaint(initialComplaintForm);
     setEvidenceFiles([]);
 
     console.log("Complaint flow completed successfully.");
@@ -665,7 +676,7 @@ const ComplainPage: React.FC = () => {
                   variant="outline"
                   onClick={() => {
                     setIsCreateModalOpen(false);
-                    setNewComplaint({ type: "other", subject: "", description: "", orderId: "", respondentId: "", damageSeverity: "none", needsRefund: false });
+                    setNewComplaint(initialComplaintForm);
                     setEvidenceFiles([]);
                   }}
                   disabled={isSubmitting}
