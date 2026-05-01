@@ -1,10 +1,6 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  typescript: {
-    ignoreBuildErrors: true,
-  },
-  
   allowedDevOrigins: [
     "https://www.bookborrow.org",
     "https://bookborrow.org",
@@ -24,4 +20,3 @@ const nextConfig: NextConfig = {
 };
 
 export default nextConfig;
-

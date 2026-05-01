@@ -74,11 +74,14 @@ function SummaryLabel({ label, tooltip }: { label: string; tooltip?: string }) {
   return (
     <span className="flex items-center gap-1.5">
       <span>{label}</span>
-        <span className="group relative inline-flex items-center">
+        <span
+          className="group relative inline-flex items-center"
+          aria-label={tooltip}
+          title={tooltip}
+        >
           <CircleHelp
             className="h-4 w-4 cursor-help text-gray-400"
-            aria-label={tooltip}
-            title={tooltip}
+            aria-hidden="true"
           />
         <span className="pointer-events-none absolute left-0 top-full z-10 mt-2 w-56 rounded-md bg-gray-900 px-3 py-2 text-xs font-normal leading-5 text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100">
           {tooltip}

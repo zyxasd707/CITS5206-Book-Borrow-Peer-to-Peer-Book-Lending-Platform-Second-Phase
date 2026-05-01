@@ -466,14 +466,6 @@ def seed(*, force: bool = False):
     db = SessionLocal()
     try:
         if not force and not is_database_empty(db):
-            print("Database is not empty. Skipping auto-seed.")
-            # Still try the deposit demo — it's idempotent and a small addition
-            # for dev DBs that predate MVP6-1.
-            try:
-                _seed_deposit_demos(db)
-            except Exception as exc:
-                db.rollback()
-                print(f"  Deposit demo seed failed: {exc}")
             return
 
         print("Seeding users...")

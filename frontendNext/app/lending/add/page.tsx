@@ -552,11 +552,14 @@ export default function AddBook() {
                         label={
                           <span className="flex items-center gap-1.5">
                             <span>Deposit Fee*</span>
-                            <span className="group relative inline-flex items-center">
+                            <span
+                              className="group relative inline-flex items-center"
+                              aria-label={depositTooltipText}
+                              title={depositTooltipText}
+                            >
                               <CircleHelp
                                 className="h-4 w-4 cursor-help text-gray-400"
-                                aria-label={depositTooltipText}
-                                title={depositTooltipText}
+                                aria-hidden="true"
                               />
                               <span className="pointer-events-none absolute left-1/2 top-full z-10 mt-2 w-64 -translate-x-1/2 rounded-md bg-gray-900 px-3 py-2 text-xs font-normal leading-5 text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100">
                                 {depositTooltipText}
@@ -574,11 +577,14 @@ export default function AddBook() {
                         <label className="block text-sm font-medium text-gray-700 mb-2">
                           <span className="flex items-center gap-1.5">
                             <span>Rental/Day*</span>
-                            <span className="group relative inline-flex items-center">
+                            <span
+                              className="group relative inline-flex items-center"
+                              aria-label={rentalPerDayTooltipText}
+                              title={rentalPerDayTooltipText}
+                            >
                               <CircleHelp
                                 className="h-4 w-4 cursor-help text-gray-400"
-                                aria-label={rentalPerDayTooltipText}
-                                title={rentalPerDayTooltipText}
+                                aria-hidden="true"
                               />
                               <span className="pointer-events-none absolute left-1/2 top-full z-10 mt-2 w-72 -translate-x-1/2 rounded-md bg-gray-900 px-3 py-2 text-xs font-normal leading-5 text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100">
                                 {rentalPerDayTooltipText}

@@ -15,9 +15,15 @@ export interface Comment {
   orderId: string;
   reviewerId: string;
   revieweeId: string;
+  bookId?: string;
   rating: number;
+  content?: string;
   comment?: string;
+  tags?: string[];
+  type?: "lender" | "borrower";
   createdAt: string;
+  isAnonymous?: boolean;
+  helpfulCount?: number;
 
   reviewerName?: string;
   revieweeName?: string;
@@ -35,5 +41,5 @@ export interface RatingStats {
     4: number;
     5: number;
   };
+  recentComments?: Comment[];
 }
-
