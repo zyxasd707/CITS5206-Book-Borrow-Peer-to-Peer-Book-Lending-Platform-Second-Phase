@@ -3,7 +3,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Search, Filter, Package, Clock, AlertTriangle, ArrowDownCircle, ArrowUpCircle, User as UserIcon, RefreshCw } from "lucide-react";
+import { Search, Filter, Package, Clock, AlertTriangle, ArrowDownCircle, ArrowUpCircle, User as UserIcon, RefreshCw, MessageSquare } from "lucide-react";
 import { toast } from "sonner";
 import CoverImg from "../components/ui/CoverImg";
 import Card from "../components/ui/Card";
@@ -12,6 +12,8 @@ import { EmptyState, ErrorState, LoadingState } from "../components/ui/AsyncStat
 import type { OrderStatus } from "@/app/types/order";
 import { confirmBorrowerReceived, getBorrowingOrders, type Order } from "@/utils/borrowingOrders";
 import { getCurrentUser } from "@/utils/auth";
+import { getMyDeposits, type DepositSummaryItem } from "@/utils/deposits";
+import { getDepositBadge } from "@/utils/depositBadge";
 import { formatLocalDateTime } from "@/utils/datetime";
 
 const STATUS_META: Record<OrderStatus, { label: string; className: string }> = {
@@ -72,6 +74,7 @@ export default function OrderListPage() {
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [usersCache, setUsersCache] = useState<Record<string, any>>({});
   const [confirmingOrderId, setConfirmingOrderId] = useState<string | null>(null);
+  const [depositMap, setDepositMap] = useState<Record<string, DepositSummaryItem>>({});
   const router = useRouter();
 
   useEffect(() => {
@@ -103,6 +106,20 @@ export default function OrderListPage() {
           if (u) cache[u.id] = u;
         });
         setUsersCache(cache);
+
+        // Fetch deposit summaries (covers both borrower- and lender-side rows)
+        if (user?.id) {
+          try {
+            const deposits = await getMyDeposits(user.id);
+            const map: Record<string, DepositSummaryItem> = {};
+            deposits.forEach((d) => {
+              map[d.orderId] = d;
+            });
+            setDepositMap(map);
+          } catch (e) {
+            console.error("Failed to load deposit summaries:", e);
+          }
+        }
 
       } catch (error) {
         console.error("Failed to load orders:", error);
@@ -279,6 +296,16 @@ export default function OrderListPage() {
                     order.status === "BORROWING" &&
                     order.due_at &&
                     new Date(order.due_at).getTime() < Date.now();
+                  const depositSummary = depositMap[order.order_id];
+                  const financialBadge = depositSummary
+                    ? getDepositBadge({
+                        orderStatus: order.status,
+                        depositStatus: depositSummary.depositStatus,
+                        depositCents: depositSummary.depositCents,
+                        depositDeductedCents: depositSummary.depositDeductedCents,
+                        isBorrower,
+                      })
+                    : null;
 
                   return (
                     <Card
@@ -393,6 +420,29 @@ export default function OrderListPage() {
                             </div>
                           </div>
 
+                          {/* Financial badge (deposit-state surfacing per BRD §6.7) */}
+                          {financialBadge && (
+                            <div className="mt-2">
+                              {financialBadge.highlight ? (
+                                <button
+                                  onClick={() =>
+                                    router.push(`/deposits/${order.order_id}`)
+                                  }
+                                  className={`inline-flex items-center rounded-full border px-3 py-1.5 text-sm font-semibold shadow-sm transition hover:opacity-90 ${financialBadge.className}`}
+                                  title="Open deposit detail to claim your refund"
+                                >
+                                  {financialBadge.label}
+                                </button>
+                              ) : (
+                                <span
+                                  className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-semibold ${financialBadge.className}`}
+                                >
+                                  {financialBadge.label}
+                                </span>
+                              )}
+                            </div>
+                          )}
+
                           {/* Times */}
                           <div className="text-sm text-gray-500 mt-1 flex flex-col gap-1">
                             <div className="flex items-center gap-3 flex-wrap">
@@ -436,6 +486,19 @@ export default function OrderListPage() {
                             }
                           >
                             View Detail
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="border-gray-300 text-gray-700 hover:bg-gray-100 flex items-center gap-1"
+                            onClick={() =>
+                              router.push(
+                                `/supports-complaints?orderId=${order.order_id}`
+                              )
+                            }
+                          >
+                            <MessageSquare className="w-3.5 h-3.5" />
+                            Open Complaint
                           </Button>
                         </div>
                       </div>
