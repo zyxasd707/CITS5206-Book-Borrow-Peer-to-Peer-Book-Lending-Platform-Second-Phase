@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   AlertTriangle,
   ArrowRight,
@@ -35,9 +35,19 @@ const TABS: { key: TabKey; label: string; icon: typeof ListTodo }[] = [
   { key: "history", label: "History", icon: CheckCircle2 },
 ];
 
+function isTabKey(v: string | null): v is TabKey {
+  return v === "awaiting" || v === "active" || v === "history";
+}
+
 export default function ActivityPage() {
   const router = useRouter();
-  const [tab, setTab] = useState<TabKey>("awaiting");
+  const searchParams = useSearchParams();
+  // Honor `?tab=` so the A.5 legacy-redirect from /refunds and /deposits
+  // can drop the user straight into the Active tab.
+  const initialTab: TabKey = isTabKey(searchParams.get("tab"))
+    ? (searchParams.get("tab") as TabKey)
+    : "awaiting";
+  const [tab, setTab] = useState<TabKey>(initialTab);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [buckets, setBuckets] = useState<ActivityBuckets | null>(null);
