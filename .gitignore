@@ -175,3 +175,6 @@ docs/The complete flow*.png
 
 # User-uploaded message attachments and evidence — additional pattern
 fastapi/media/U*/
+
+# Local AI assistant/tool settings
+.claude/
