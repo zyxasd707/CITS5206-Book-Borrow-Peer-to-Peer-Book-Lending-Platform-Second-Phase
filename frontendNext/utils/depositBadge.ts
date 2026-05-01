@@ -45,10 +45,17 @@ export function getDepositBadge(args: {
   }
 
   if (orderStatus === "BORROWING" || orderStatus === "OVERDUE") {
-    return {
-      label: `${fmt(depositCents)} deposit at risk`,
-      className: "bg-orange-50 text-orange-700 border-orange-200",
-    };
+    // Borrower's money is exposed to deduction; lender just sees the platform
+    // is holding the borrower's deposit until return is confirmed.
+    return isBorrower
+      ? {
+          label: `${fmt(depositCents)} deposit at risk`,
+          className: "bg-orange-50 text-orange-700 border-orange-200",
+        }
+      : {
+          label: `${fmt(depositCents)} held by platform`,
+          className: "bg-blue-50 text-blue-700 border-blue-200",
+        };
   }
 
   if (orderStatus === "RETURNED") {
