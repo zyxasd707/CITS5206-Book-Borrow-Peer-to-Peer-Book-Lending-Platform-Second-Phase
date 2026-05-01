@@ -18,10 +18,12 @@ import type { User } from "@/app/types/user";
 import {
   getDepositDetail,
   submitBorrowerEvidence,
+  claimRefund,
   DepositDetail,
   DepositEvidence,
   DepositAuditEntry,
 } from "@/utils/deposits";
+import { toast } from "sonner";
 
 const SEVERITY_META: Record<string, { label: string; className: string }> = {
   none: { label: "None", className: "bg-gray-100 text-gray-700" },
@@ -32,6 +34,7 @@ const SEVERITY_META: Record<string, { label: string; className: string }> = {
 
 const STATUS_META: Record<string, { label: string; className: string }> = {
   pending_review: { label: "Pending Review", className: "bg-yellow-100 text-yellow-700 border-yellow-200" },
+  refund_ready: { label: "Refund Ready to Claim", className: "bg-blue-100 text-blue-700 border-blue-200" },
   released: { label: "Released", className: "bg-green-100 text-green-700 border-green-200" },
   partially_deducted: { label: "Partially Deducted", className: "bg-orange-100 text-orange-700 border-orange-200" },
   forfeited: { label: "Forfeited", className: "bg-red-100 text-red-700 border-red-200" },
@@ -307,6 +310,7 @@ export default function MyDepositDetailPage() {
   const [me, setMe] = useState<User | null>(null);
   const [detail, setDetail] = useState<DepositDetail | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [claiming, setClaiming] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -418,6 +422,45 @@ export default function MyDepositDetailPage() {
             <div className="font-semibold">Your account is restricted from borrowing.</div>
             <div>Reason: {me.restrictionReason || "Contact support for details."}</div>
           </div>
+        </div>
+      )}
+
+      {amBorrower && detail.depositStatus === "refund_ready" && (
+        <div className="rounded-xl border border-blue-300 bg-blue-50 p-5 space-y-3">
+          <div className="flex items-start gap-2 text-blue-900">
+            <Info className="w-5 h-5 shrink-0 mt-0.5" />
+            <div>
+              <div className="font-semibold text-base">Your deposit refund is ready</div>
+              <div className="text-sm mt-0.5">
+                Admin has reviewed your case. You can now claim{" "}
+                <span className="font-semibold">{fmtAmount(refundable)}</span> back to your original
+                payment method.
+                {detail.depositDeductedCents > 0 && (
+                  <span className="text-blue-700">
+                    {" "}({fmtAmount(detail.depositDeductedCents)} was deducted for damage.)
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+          <button
+            disabled={claiming}
+            onClick={async () => {
+              setClaiming(true);
+              try {
+                await claimRefund(detail.orderId);
+                toast.success("Refund processed! It will appear on your original payment method.");
+                await load();
+              } catch (e: any) {
+                toast.error(e?.response?.data?.detail || e.message || "Failed to claim refund");
+              } finally {
+                setClaiming(false);
+              }
+            }}
+            className="w-full sm:w-auto px-6 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-semibold text-sm transition"
+          >
+            {claiming ? "Processing…" : `Claim ${fmtAmount(refundable)}`}
+          </button>
         </div>
       )}
 

@@ -365,6 +365,72 @@ def get_deposit_detail(
     return _order_to_detail(order, db)
 
 
+@router.post("/{order_id}/claim-refund", status_code=200)
+def borrower_claim_refund(
+    order_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Borrower triggers the actual Stripe refund after admin sets deposit to refund_ready."""
+    order = db.query(Order).filter(Order.id == order_id).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    if current_user.user_id != order.borrower_id:
+        raise HTTPException(status_code=403, detail="Only the borrower can claim this refund")
+    if order.deposit_status != "refund_ready":
+        raise HTTPException(
+            status_code=409,
+            detail=f"Deposit is not ready to claim (current status: {order.deposit_status})",
+        )
+
+    total_cents = deposit_service._deposit_cents(order, db)
+    deducted = int(order.deposit_deducted_cents or 0)
+    to_refund = total_cents - deducted
+
+    if to_refund <= 0:
+        # Nothing to refund (full forfeit path should never reach here, but guard anyway)
+        order.deposit_status = "partially_deducted" if deducted > 0 else "released"
+        db.add(DepositAuditLog(
+            order_id=order.id, actor_id=current_user.user_id, actor_role="borrower",
+            action="release", amount_cents=0, note="Claim attempted but refund amount is zero.",
+        ))
+        db.commit()
+        return {"order_id": order.id, "refunded_cents": 0, "message": "No refund amount to process."}
+
+    stripe_refund = deposit_service._stripe_refund(
+        order.payment_id, to_refund, "Borrower claimed deposit refund"
+    )
+    deposit_service._persist_refund_record(
+        db, order.payment_id, stripe_refund, "Borrower claimed deposit refund"
+    )
+
+    order.deposit_status = "partially_deducted" if deducted > 0 else "released"
+
+    db.add(DepositAuditLog(
+        order_id=order.id, actor_id=current_user.user_id, actor_role="borrower",
+        action="release", amount_cents=to_refund,
+        note=f"Borrower claimed refund of ${to_refund/100:.2f}.",
+    ))
+
+    from services.notification_service import NotificationService
+    NotificationService.create(
+        db, user_id=order.borrower_id, order_id=order.id,
+        type="DEPOSIT_UPDATED",
+        title="Deposit Refund Processed",
+        message=f"Your deposit refund of ${to_refund/100:.2f} has been processed and will appear on your original payment method.",
+        commit=False,
+    )
+
+    db.commit()
+    db.refresh(order)
+    return {
+        "order_id": order.id,
+        "deposit_status": order.deposit_status,
+        "refunded_cents": to_refund,
+        "stripe_refund": stripe_refund,
+    }
+
+
 @router.post("/{order_id}/evidence", status_code=201)
 def submit_borrower_counter_evidence(
     order_id: str,

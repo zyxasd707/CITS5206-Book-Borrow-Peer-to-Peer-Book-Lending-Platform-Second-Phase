@@ -35,8 +35,12 @@ ORDER_TYPE_ENUM = ("borrow", "purchase")
 
 # Deposit lifecycle (MVP6-1)
 DEPOSIT_STATUS_ENUM = (
-    "held", "pending_review", "released", "partially_deducted", "forfeited"
+    "held", "pending_review", "released", "partially_deducted", "forfeited",
+    "refund_ready",
 )
+# DB migration required when deploying:
+# ALTER TABLE orders MODIFY COLUMN deposit_status
+#   ENUM('held','pending_review','released','partially_deducted','forfeited','refund_ready');
 DAMAGE_SEVERITY_ENUM = ("none", "light", "medium", "severe")
  
 class Order(Base):
@@ -44,7 +48,8 @@ class Order(Base):
     Order table - matches frontend Order interface exactly
     """
     __tablename__ = "orders"
-    
+    __table_args__ = {"mysql_charset": "utf8mb4", "mysql_collate": "utf8mb4_unicode_ci"}
+
     # Core fields
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     owner_id = Column(String(25), ForeignKey("users.user_id", ondelete="CASCADE"),
