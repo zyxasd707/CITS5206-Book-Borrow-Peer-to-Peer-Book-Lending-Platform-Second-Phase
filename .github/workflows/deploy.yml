@@ -3,7 +3,7 @@ name: Deploy to VPS
 on:
   push:
     branches:
-      - VPSdeployment
+      - main
   workflow_dispatch:
 
 concurrency:
@@ -26,7 +26,7 @@ jobs:
             set -euo pipefail
             cd /root/capstone15/Bookborrow
             git fetch origin
-            git pull --ff-only origin VPSdeployment
+            git pull --ff-only origin main
             docker compose -f compose.yaml build
             docker compose -f compose.yaml up -d
             docker compose -f compose.yaml exec -T backend alembic -c alembic.ini upgrade head
