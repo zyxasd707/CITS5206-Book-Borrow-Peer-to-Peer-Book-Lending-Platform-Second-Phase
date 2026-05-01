@@ -107,10 +107,12 @@ export default function OrderListPage() {
         });
         setUsersCache(cache);
 
-        // Fetch deposit summaries (covers both borrower- and lender-side rows)
+        // Fetch deposit summaries (covers both borrower- and lender-side rows).
+        // includeHeld=true: badge needs to surface "deposit at risk" / "deposit held"
+        // for live BORROWING/PENDING_SHIPMENT rows, which the default endpoint hides.
         if (user?.id) {
           try {
-            const deposits = await getMyDeposits(user.id);
+            const deposits = await getMyDeposits(user.id, { includeHeld: true });
             const map: Record<string, DepositSummaryItem> = {};
             deposits.forEach((d) => {
               map[d.orderId] = d;

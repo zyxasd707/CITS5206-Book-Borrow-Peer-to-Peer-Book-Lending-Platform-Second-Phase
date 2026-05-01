@@ -198,10 +198,14 @@ export async function adminUnrestrictUser(
 
 // ---------- User ----------
 
-export async function getMyDeposits(userId: string): Promise<DepositSummaryItem[]> {
+export async function getMyDeposits(
+  userId: string,
+  options?: { includeHeld?: boolean }
+): Promise<DepositSummaryItem[]> {
   const res = await axios.get(`${API_URL}/api/v1/deposits/user/${userId}`, {
     headers: authHeader(),
     withCredentials: true,
+    params: options?.includeHeld ? { include_held: true } : undefined,
   });
   return res.data.items as DepositSummaryItem[];
 }

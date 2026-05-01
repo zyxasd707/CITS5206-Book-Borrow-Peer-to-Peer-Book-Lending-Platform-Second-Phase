@@ -127,7 +127,8 @@ export default function LendingListPage() {
         if (alive) setItems(list);
 
         try {
-          const deposits = await getMyDeposits(user.id);
+          // includeHeld=true: badge needs live BORROWING/PENDING_SHIPMENT rows too.
+          const deposits = await getMyDeposits(user.id, { includeHeld: true });
           if (alive) {
             const map: Record<string, DepositSummaryItem> = {};
             deposits.forEach((d) => {
