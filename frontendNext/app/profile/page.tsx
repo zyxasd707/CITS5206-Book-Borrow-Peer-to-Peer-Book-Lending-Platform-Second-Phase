@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Star, MapPin, Calendar, Book, Edit, ListTodo } from "lucide-react";
+import { Star, MapPin, Calendar, Book, Edit } from "lucide-react";
 import { getCurrentUser, isAuthenticated, getUserById } from "../../utils/auth";
 import Link from "next/link";
 import Avatar from "@/app/components/ui/Avatar";
@@ -266,7 +266,6 @@ const ProfilePage: React.FC = () => {
                   {activityBadge > 99 ? "99+" : activityBadge}
                 </span>
               )}
-              <ListTodo className="w-5 h-5 mx-auto mb-1 text-rose-600" />
               <div className="text-xl font-bold text-rose-600 mb-1">
                 Activity &amp; Issues
               </div>
