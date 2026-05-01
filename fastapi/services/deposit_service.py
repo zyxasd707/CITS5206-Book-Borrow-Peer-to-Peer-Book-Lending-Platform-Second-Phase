@@ -57,6 +57,25 @@ def _deposit_cents(order: Order, db: Session) -> int:
     return int(round(float(order.deposit_or_sale_amount or 0) * 100))
 
 
+def _stripe_transfer_to_lender(order: Order, amount_cents: int) -> Optional[str]:
+    """Transfer deducted deposit amount to lender's connected Stripe account. Returns transfer_id or None."""
+    if not order.owner or not order.owner.stripe_account_id:
+        print(f"[WARN] lender {order.owner_id} has no stripe_account_id — skipping deposit transfer")
+        return None
+    if amount_cents <= 0:
+        return None
+    try:
+        tr = stripe.Transfer.create(
+            amount=amount_cents,
+            currency="aud",
+            destination=order.owner.stripe_account_id,
+        )
+        return tr.id
+    except stripe.error.StripeError as e:
+        print(f"[WARN] deposit transfer to lender failed: {e}")
+        return None
+
+
 def _stripe_refund(payment_id: str, amount_cents: int, reason: str) -> Dict[str, Any]:
     """Create a partial Stripe refund. Returns dict summary."""
     try:
@@ -173,34 +192,30 @@ def _notify_parties(db: Session, order: Order, title_lender: str, msg_lender: st
 # ----------------- Admin action entry points -----------------
 
 def admin_release(db: Session, order_id: str, admin: User, note: Optional[str] = None) -> Dict[str, Any]:
-    """Full release: refund the entire deposit to borrower, no damage attributed."""
+    """Full release: mark deposit as refund_ready. Borrower claims it via /claim-refund."""
     order = db.query(Order).filter(Order.id == order_id).first()
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
     _require_pending_review(order)
 
     amount = _deposit_cents(order, db)
-    stripe_refund = {"id": None, "amount": 0, "currency": "aud", "status": "skipped"}
-    if order.payment_id and amount > 0:
-        stripe_refund = _stripe_refund(order.payment_id, amount, "Admin release after damage report")
-        _persist_refund_record(db, order.payment_id, stripe_refund, "Admin release after damage report")
 
-    order.deposit_status = "released"
+    order.deposit_status = "refund_ready"
     order.deposit_deducted_cents = 0
     order.damage_severity_final = "none"
 
     db.add(DepositAuditLog(
         order_id=order.id, actor_id=admin.user_id, actor_role="admin",
         action="release", amount_cents=amount, final_severity="none",
-        note=note or "Admin released full deposit after review.",
+        note=note or "Admin approved full deposit release. Awaiting borrower claim.",
     ))
 
     _notify_parties(
         db, order,
-        title_lender="Deposit Released by Admin",
-        msg_lender="After review the admin released the full deposit to the borrower.",
-        title_borrower="Full Deposit Refund Approved",
-        msg_borrower=f"Admin reviewed the damage report and released your full deposit (${amount/100:.2f}).",
+        title_lender="Deposit Decision Made",
+        msg_lender="Admin reviewed the damage report and approved a full deposit release to the borrower.",
+        title_borrower="Your Deposit is Ready to Claim",
+        msg_borrower=f"Admin approved your full deposit refund (${amount/100:.2f}). Go to My Deposits to claim it.",
     )
 
     db.commit()
@@ -208,14 +223,13 @@ def admin_release(db: Session, order_id: str, admin: User, note: Optional[str] =
     return {
         "order_id": order.id,
         "deposit_status": order.deposit_status,
-        "refunded_cents": amount if stripe_refund.get("id") else 0,
-        "stripe_refund": stripe_refund,
+        "refund_ready_cents": amount,
     }
 
 
 def admin_deduct(db: Session, order_id: str, admin: User,
                  severity: Literal["light", "medium"], note: Optional[str] = None) -> Dict[str, Any]:
-    """Partial deduction: keep a % of deposit with lender, refund the rest to borrower."""
+    """Partial deduction: record deduction and mark refund_ready. Borrower claims remainder."""
     if severity not in DEDUCTION_PCT or severity == "severe":
         raise HTTPException(status_code=400, detail="Partial deduction severity must be 'light' or 'medium'")
 
@@ -232,12 +246,7 @@ def admin_deduct(db: Session, order_id: str, admin: User,
     deducted = total_cents * DEDUCTION_PCT[severity] // 100
     to_refund = total_cents - deducted
 
-    stripe_refund = {"id": None, "amount": 0, "currency": "aud", "status": "skipped"}
-    if order.payment_id and to_refund > 0:
-        stripe_refund = _stripe_refund(order.payment_id, to_refund, f"Admin partial deduction ({severity})")
-        _persist_refund_record(db, order.payment_id, stripe_refund, f"Admin partial deduction ({severity})")
-
-    order.deposit_status = "partially_deducted"
+    order.deposit_status = "refund_ready"
     order.deposit_deducted_cents = deducted
     order.damage_severity_final = severity
 
@@ -246,7 +255,7 @@ def admin_deduct(db: Session, order_id: str, admin: User,
     db.add(DepositAuditLog(
         order_id=order.id, actor_id=admin.user_id, actor_role="admin",
         action="partial_deduct", amount_cents=deducted, final_severity=severity,
-        note=note or f"Admin deducted {DEDUCTION_PCT[severity]}% for {severity} damage.",
+        note=note or f"Admin deducted {DEDUCTION_PCT[severity]}% for {severity} damage. Awaiting borrower claim.",
     ))
 
     if strike_signal["restrict_applied"]:
@@ -257,26 +266,30 @@ def admin_deduct(db: Session, order_id: str, admin: User,
 
     _notify_parties(
         db, order,
-        title_lender="Partial Deduction Applied",
-        msg_lender=f"Admin deducted ${deducted/100:.2f} from the deposit ({severity} damage). The rest went back to the borrower.",
-        title_borrower="Partial Deduction From Your Deposit",
+        title_lender="Deposit Decision Made",
+        msg_lender=f"Admin ruled {severity} damage and deducted ${deducted/100:.2f} from the deposit.",
+        title_borrower="Your Deposit Refund is Ready to Claim",
         msg_borrower=(
-            f"After review the admin deducted ${deducted/100:.2f} for {severity} damage. "
-            f"You received a refund of ${to_refund/100:.2f}."
-            + (f" This is strike {strike_signal['strike_count']}; your borrowing is now restricted."
+            f"Admin deducted ${deducted/100:.2f} for {severity} damage. "
+            f"You can claim the remaining ${to_refund/100:.2f} from My Deposits."
+            + (f" Note: this is strike {strike_signal['strike_count']}; your borrowing is now restricted."
                if strike_signal["restrict_applied"] else "")
         ),
     )
 
     db.commit()
     db.refresh(order)
+
+    # Transfer deducted portion to lender (compensation for damage)
+    transfer_id = _stripe_transfer_to_lender(order, deducted)
+
     return {
         "order_id": order.id,
         "deposit_status": order.deposit_status,
         "deducted_cents": deducted,
-        "refunded_cents": to_refund,
-        "stripe_refund": stripe_refund,
+        "refund_ready_cents": to_refund,
         "strike": strike_signal,
+        "lender_transfer_id": transfer_id,
     }
 
 
@@ -326,12 +339,17 @@ def admin_forfeit(db: Session, order_id: str, admin: User, note: Optional[str] =
 
     db.commit()
     db.refresh(order)
+
+    # Transfer full deposit to lender (severe damage / non-return)
+    transfer_id = _stripe_transfer_to_lender(order, total_cents)
+
     return {
         "order_id": order.id,
         "deposit_status": order.deposit_status,
         "deducted_cents": total_cents,
         "refunded_cents": 0,
         "strike": strike_signal,
+        "lender_transfer_id": transfer_id,
     }
 
 

@@ -2,6 +2,7 @@ services:
   db:             # Local MySQL database for development only;
     image: mysql:8.0
     container_name: mysql-db
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
     environment:
       MYSQL_ROOT_PASSWORD: rootpassword
       MYSQL_DATABASE: BookBorrow

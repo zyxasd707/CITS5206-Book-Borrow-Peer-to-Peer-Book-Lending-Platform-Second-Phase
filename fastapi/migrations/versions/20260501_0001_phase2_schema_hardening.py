@@ -40,6 +40,34 @@ def _execute_if_present(table_name: str, column_name: str, ddl: str) -> None:
     op.execute(text(ddl))
 
 
+def _ensure_deposit_status_enum() -> None:
+    ddl = (
+        "ALTER TABLE orders MODIFY COLUMN deposit_status "
+        "ENUM('held','pending_review','released','partially_deducted','forfeited','refund_ready') "
+        "NOT NULL DEFAULT 'held'"
+    )
+    if not _column_exists("orders", "deposit_status"):
+        op.execute(
+            text(
+                "ALTER TABLE orders ADD COLUMN deposit_status "
+                "ENUM('held','pending_review','released','partially_deducted','forfeited','refund_ready') "
+                "NOT NULL DEFAULT 'held'"
+            )
+        )
+        return
+
+    existing_type = op.get_bind().execute(
+        text(
+            "SELECT COLUMN_TYPE FROM INFORMATION_SCHEMA.COLUMNS "
+            "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'orders' "
+            "AND COLUMN_NAME = 'deposit_status'"
+        )
+    ).scalar()
+    if existing_type and "refund_ready" in existing_type:
+        return
+    op.execute(text(ddl))
+
+
 def upgrade() -> None:
     _execute_if_missing(
         "book",
@@ -56,13 +84,7 @@ def upgrade() -> None:
         "owner_income_amount",
         "ALTER TABLE orders ADD COLUMN owner_income_amount DECIMAL(10, 2) NOT NULL DEFAULT 0.00",
     )
-    _execute_if_missing(
-        "orders",
-        "deposit_status",
-        "ALTER TABLE orders ADD COLUMN deposit_status "
-        "ENUM('held','pending_review','released','partially_deducted','forfeited') "
-        "NOT NULL DEFAULT 'held'",
-    )
+    _ensure_deposit_status_enum()
     _execute_if_missing(
         "orders",
         "deposit_deducted_cents",
