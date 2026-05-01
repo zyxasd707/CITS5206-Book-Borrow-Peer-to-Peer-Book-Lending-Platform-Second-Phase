@@ -1,4 +1,4 @@
-﻿// app/complain/page.tsx
+﻿// app/supports-complaints/page.tsx
 "use client";
 
 import { useState, useEffect } from "react";
@@ -346,7 +346,7 @@ const ComplainPage: React.FC = () => {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="mb-8 flex justify-between items-center">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">Support & Complaints</h1>
+            <h1 className="text-3xl font-bold text-gray-900 mb-2">Supports & Complaints</h1>
             <p className="text-gray-600">Submit and track your complaints</p>
           </div>
           <div className="flex items-center space-x-3">
@@ -444,7 +444,7 @@ const ComplainPage: React.FC = () => {
                 <Card
                   key={complaint.id}
                   className="relative border border-gray-200 shadow-sm hover:shadow-md transition-shadow cursor-pointer"
-                  onClick={() => router.push(`/complain/${complaint.id}`)}
+                  onClick={() => router.push(`/supports-complaints/${complaint.id}`)}
                 >
                   {/* statuss*/}
                   <div

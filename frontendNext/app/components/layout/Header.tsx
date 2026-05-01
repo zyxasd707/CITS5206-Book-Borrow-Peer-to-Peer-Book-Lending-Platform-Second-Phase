@@ -299,11 +299,11 @@ const Header: React.FC = () => {
                       </Link>
 
                       <Link
-                        href="/complain"
+                        href="/supports-complaints"
                         className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
                         onClick={() => setShowProfileMenu(false)}
                       >
-                        <LifeBuoy className="w-4 h-4 mr-3" />Support
+                        <LifeBuoy className="w-4 h-4 mr-3" />Supports & Complaints
                       </Link>
 
                       {isAdminLikeUser(currentUser) && (

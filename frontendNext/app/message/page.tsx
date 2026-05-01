@@ -902,7 +902,7 @@ export default function MessagesPage() {
                         <button
                           onClick={() =>
                             router.push(
-                              `/complain?orderId=${selectedNotification.order_id}`
+                              `/supports-complaints?orderId=${selectedNotification.order_id}`
                             )
                           }
                           className="w-full py-4 bg-gray-200 text-gray-900 font-bold rounded-xl text-sm hover:bg-gray-300 transition-colors"

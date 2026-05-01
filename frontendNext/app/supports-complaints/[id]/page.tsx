@@ -76,7 +76,7 @@ const ComplaintDetailPage: React.FC = () => {
         const detail = await getComplaintDetail(complaintId);
         if (!detail || !detail.complaint) {
           alert("Complaint not found.");
-          router.push("/complain");
+          router.push("/supports-complaints");
           return;
         }
 
@@ -88,7 +88,7 @@ const ComplaintDetailPage: React.FC = () => {
           c.respondentId !== userData.id
         ) {
           alert("You don't have permission to view this complaint.");
-          router.push("/complain");
+          router.push("/supports-complaints");
           return;
         }
 
@@ -110,7 +110,7 @@ const ComplaintDetailPage: React.FC = () => {
       } catch (err) {
         console.error("Failed to load complaint:", err);
         alert("Unable to load complaint details.");
-        router.push("/complain");
+        router.push("/supports-complaints");
       } finally {
         setIsLoading(false);
       }
@@ -176,7 +176,7 @@ const ComplaintDetailPage: React.FC = () => {
       <div className="flex-1 flex flex-col justify-center items-center text-center text-gray-500">
         <AlertTriangle className="w-16 h-16 text-red-300 mb-4" />
         Complaint not found
-        <Button variant="outline" className="mt-4" onClick={() => router.push("/complain")}>
+        <Button variant="outline" className="mt-4" onClick={() => router.push("/supports-complaints")}>
           <ArrowLeft className="w-4 h-4 mr-2" /> Back
         </Button>
       </div>
@@ -188,7 +188,7 @@ const ComplaintDetailPage: React.FC = () => {
         {/* Header */}
         <div className="mb-8 flex justify-between items-center">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">Support Details</h1>
+            <h1 className="text-3xl font-bold text-gray-900">Supports & Complaints — Details</h1>
             <p className="text-gray-600">Case ID: {complaint.id}</p>
           </div>
           <div className={`flex items-center space-x-2 ${getStatusColor(complaint.status)}`}>

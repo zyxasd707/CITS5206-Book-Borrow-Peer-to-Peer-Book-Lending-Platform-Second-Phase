@@ -139,7 +139,7 @@ export default function AdminComplaintsPage() {
                       <span>Created: {new Date(item.createdAt).toLocaleString()}</span>
                     </div>
                   </div>
-                  <Link href={`/complain/${item.id}`} className="text-sm underline shrink-0">
+                  <Link href={`/supports-complaints/${item.id}`} className="text-sm underline shrink-0">
                     View detail
                   </Link>
                 </div>
