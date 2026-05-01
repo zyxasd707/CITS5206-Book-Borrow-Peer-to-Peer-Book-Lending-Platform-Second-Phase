@@ -695,16 +695,27 @@ class OrderService:
             except Exception as e:
                 logger.warning("Failed to send shipment status emails: %s", e)
 
-            # Distribute shipping fee via Stripe (best-effort, runs after commit above)
+            # Transfer lender income (rental fee + shipping) to lender's connected account.
+            # Deposit is intentionally excluded — it stays on the platform until return.
             try:
-                payment_id = order.payment_id
-                if payment_id:
-                    data = {"lender_account_id": order.owner.stripe_account_id}
-                    from services.payment_gateway_service import distribute_shipping_fee
-                    distribute_shipping_fee(payment_id, data, db=db)
+                if order.payment_id and order.owner and order.owner.stripe_account_id:
+                    from models.payment_split import PaymentSplit
+                    import stripe as _stripe
+                    sp = db.query(PaymentSplit).filter(
+                        PaymentSplit.order_id == order.id
+                    ).first()
+                    if sp and sp.transfer_amount_cents > 0 and sp.connected_account_id:
+                        tr = _stripe.Transfer.create(
+                            amount=sp.transfer_amount_cents,
+                            currency=sp.currency or "aud",
+                            destination=sp.connected_account_id,
+                        )
+                        sp.transfer_id = tr.id
+                        sp.transfer_status = tr.object
+                        db.commit()
             except Exception as e:
                 db.rollback()
-                print(f"[WARN] distribute_shipping_fee failed: {e}")
+                print(f"[WARN] lender income transfer failed: {e}")
                 
             
         elif order.status in ["BORROWING", "OVERDUE"]:

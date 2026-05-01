@@ -139,6 +139,28 @@ def ensure_user_damage_columns() -> None:
             print(f"Added missing users.{column_name} column")
 
 
+def ensure_deposit_status_refund_ready() -> None:
+    """Expand deposit_status ENUM to include 'refund_ready' (MVP6-1)."""
+    with engine.begin() as conn:
+        col_type = conn.execute(
+            text(
+                "SELECT COLUMN_TYPE FROM INFORMATION_SCHEMA.COLUMNS "
+                "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'orders' "
+                "AND COLUMN_NAME = 'deposit_status'"
+            )
+        ).scalar()
+        if col_type and "refund_ready" in (col_type or ""):
+            return
+        conn.execute(
+            text(
+                "ALTER TABLE orders MODIFY COLUMN deposit_status "
+                "ENUM('held','pending_review','released','partially_deducted','forfeited','refund_ready') "
+                "NOT NULL DEFAULT 'held'"
+            )
+        )
+        print("Expanded orders.deposit_status ENUM to include 'refund_ready'")
+
+
 def ensure_payment_columns() -> None:
     required_columns = {
         "checkout_id": (
@@ -181,6 +203,7 @@ async def lifespan(app: FastAPI):
     ensure_checkout_owner_income_amount_column()
     ensure_order_owner_income_amount_column()
     ensure_order_deposit_columns()
+    ensure_deposit_status_refund_ready()
     ensure_user_damage_columns()
     ensure_payment_columns()
     seed_sample_data()

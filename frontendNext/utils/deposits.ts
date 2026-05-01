@@ -50,7 +50,8 @@ export interface DepositSummaryItem {
     | "pending_review"
     | "released"
     | "partially_deducted"
-    | "forfeited";
+    | "forfeited"
+    | "refund_ready";
   damageSeverityFinal: "none" | "light" | "medium" | "severe" | null;
   depositCents: number;
   depositDeductedCents: number;
@@ -210,6 +211,20 @@ export async function getDepositDetail(orderId: string): Promise<DepositDetail> 
     headers: authHeader(),
     withCredentials: true,
   });
+  return res.data;
+}
+
+export async function claimRefund(orderId: string): Promise<{
+  order_id: string;
+  deposit_status: string;
+  refunded_cents: number;
+  message?: string;
+}> {
+  const res = await axios.post(
+    `${API_URL}/api/v1/deposits/${orderId}/claim-refund`,
+    {},
+    { headers: authHeader(), withCredentials: true }
+  );
   return res.data;
 }
 

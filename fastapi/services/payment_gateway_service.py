@@ -173,27 +173,9 @@ def initiate_payment(data: dict, db: Session):
             },
         }
 
-        # 1. Create Stripe PaymentIntent
-        if lender_account_id:
-            payment_intent_payload["transfer_data"] = {"destination": lender_account_id}
-
-        try:
-            intent = stripe.PaymentIntent.create(**payment_intent_payload)
-        except stripe.error.StripeError as e:
-            can_retry_without_destination = (
-                lender_account_id
-                and "stripe_balance.stripe_transfers" in str(e)
-            )
-            if not can_retry_without_destination:
-                raise
-
-            logger.warning(
-                "Falling back to platform payment because destination account %s "
-                "does not have transfers capability yet.",
-                lender_account_id,
-            )
-            payment_intent_payload.pop("transfer_data", None)
-            intent = stripe.PaymentIntent.create(**payment_intent_payload)
+        # Deposit stays on platform — lender income is transferred separately
+        # via transfer_for_order when the lender confirms shipment.
+        intent = stripe.PaymentIntent.create(**payment_intent_payload)
 
         # 2. Extract client_secret
         client_secret = intent.client_secret
@@ -384,11 +366,15 @@ def refund_payment(payment_id: str, data: dict, *, db: Session):
             raise HTTPException(status_code=400, detail=f"No refundable amount for refund_type='{refund_type}'")
 
         # 1. Create refund in Stripe (handle already-refunded gracefully)
+        # Stripe only accepts these three values for 'reason'; free-text reasons are stored in our DB only
+        _STRIPE_VALID_REASONS = {"duplicate", "fraudulent", "requested_by_customer"}
+        raw_reason = data.get("reason")
+        stripe_reason = raw_reason if raw_reason in _STRIPE_VALID_REASONS else "requested_by_customer"
         try:
             refund = stripe.Refund.create(
                 payment_intent=payment_id,
                 amount=refund_amount,
-                reason=data.get("reason"),
+                reason=stripe_reason,
             )
         except stripe.error.InvalidRequestError as e:
             if "charge_already_refunded" in str(e).lower():
