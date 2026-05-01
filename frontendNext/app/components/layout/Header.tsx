@@ -295,7 +295,7 @@ const Header: React.FC = () => {
                         className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
                         onClick={() => setShowProfileMenu(false)}
                       >
-                        <ListTodo className="w-4 h-4 mr-3" />Activity & Issues
+                        <ListTodo className="w-4 h-4 mr-3" />Activities & Issues
                       </Link>
 
                       <Link

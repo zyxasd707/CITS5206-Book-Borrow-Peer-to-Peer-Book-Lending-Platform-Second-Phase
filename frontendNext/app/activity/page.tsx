@@ -104,7 +104,7 @@ export default function ActivityPage() {
       <div className="flex-1 overflow-y-auto">
         <div className="max-w-5xl mx-auto p-6 space-y-6">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">Activity & Issues</h1>
+            <h1 className="text-3xl font-bold text-gray-900 mb-2">Activities & Issues</h1>
             <p className="text-gray-600">
               Your refund, deposit, and arbitration tasks across borrowing and lending —
               consolidated. Full complaint browsing and creation lives in{" "}

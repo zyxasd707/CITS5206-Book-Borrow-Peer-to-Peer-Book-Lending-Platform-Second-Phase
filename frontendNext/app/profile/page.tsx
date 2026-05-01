@@ -53,7 +53,7 @@ const ProfilePage: React.FC = () => {
         }
         setCurrentUser(userData);
 
-        // Hub badge for the Activity & Issues card. Reuse the same aggregator
+        // Hub badge for the Activities & Issues card. Reuse the same aggregator
         // that powers /activity so the count and the Awaiting tab can never
         // drift apart. Any upstream failure degrades to 0 — the card stays
         // visible without a misleading badge.
@@ -253,7 +253,7 @@ const ProfilePage: React.FC = () => {
               </div>
             </Link>
 
-            {/* Activity & Issues — Q1=A: badge counts awaiting-action items only */}
+            {/* Activities & Issues — Q1=A: badge counts awaiting-action items only */}
             <Link
               href="/activity"
               className="relative block bg-rose-50 border border-rose-200 rounded-lg p-4 text-center hover:bg-rose-100 transition"
@@ -267,7 +267,7 @@ const ProfilePage: React.FC = () => {
                 </span>
               )}
               <div className="text-xl font-bold text-rose-600 mb-1">
-                Activity &amp; Issues
+                Activities &amp; Issues
               </div>
               <div className="text-sm font-medium text-rose-800">
                 Awaiting my action
