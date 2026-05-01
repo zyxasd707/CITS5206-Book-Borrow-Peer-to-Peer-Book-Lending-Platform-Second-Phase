@@ -1,4 +1,4 @@
-version: "3.9"
+name: bookborrow
 
 services:
   db:
@@ -8,7 +8,7 @@ services:
       - "3307:3306"
     environment:
       MYSQL_ROOT_PASSWORD: rootpassword
-      MYSQL_DATABASE: BookHive
+      MYSQL_DATABASE: BookBorrow
       MYSQL_USER: myuser
       MYSQL_PASSWORD: "123456"
     volumes:
@@ -31,7 +31,13 @@ services:
 
   frontend:
     image: frontendnext:latest
-    build: ./frontendNext             # Path to frontend Dockerfile
+    build:
+      context: ./frontendNext             # Path to frontend Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+        NEXT_PUBLIC_WS_URL: ${NEXT_PUBLIC_WS_URL}
+        NEXT_PUBLIC_STRIPE_PK: ${NEXT_PUBLIC_STRIPE_PK}
+        NEXT_PUBLIC_STRIPE_TEST_DESTINATION_ACCOUNT_ID: ${NEXT_PUBLIC_STRIPE_TEST_DESTINATION_ACCOUNT_ID}
     container_name: next-frontend
     ports:
       - "3000:3000"          # Host:Container
@@ -64,6 +70,7 @@ services:
 
 volumes:
   mysql_data:
+    name: bookborrow_mysql_data
 
 networks:
   mynetwork:
