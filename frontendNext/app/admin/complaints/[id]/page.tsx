@@ -25,6 +25,7 @@ import {
 } from "lucide-react";
 
 import { getCurrentUser, getUserById } from "@/utils/auth";
+import { formatLocalDateTime, parseAsUtc } from "@/utils/datetime";
 import {
   addComplaintMessage,
   getComplaintDetail,
@@ -106,7 +107,7 @@ const ACTION_LABELS: Record<DepositAuditEntry["action"], string> = {
 };
 
 const fmtA = (cents: number) => `A$${(cents / 100).toFixed(2)}`;
-const fmtDate = (v?: string | null) => (v ? new Date(v).toLocaleString() : "—");
+const fmtDate = (v?: string | null) => formatLocalDateTime(v);
 
 function isAdminLikeUser(user: { is_admin?: boolean } | null) {
   return Boolean(user?.is_admin);
@@ -259,7 +260,7 @@ export default function AdminComplaintDetailPage() {
 
     items.push({
       key: `complaint-created-${complaint.id}`,
-      at: new Date(complaint.createdAt).getTime() || 0,
+      at: parseAsUtc(complaint.createdAt).getTime() || 0,
       iconKey: "complaint",
       actorRole: roleFor(complaint.complainantId),
       actorName: userLabel(complaint.complainantId),
@@ -270,7 +271,7 @@ export default function AdminComplaintDetailPage() {
     messages.forEach((m) => {
       items.push({
         key: `msg-${m.id}`,
-        at: new Date(m.createdAt).getTime() || 0,
+        at: parseAsUtc(m.createdAt).getTime() || 0,
         iconKey: "message",
         actorRole: roleFor(m.senderId),
         actorName: userLabel(m.senderId),
@@ -292,7 +293,7 @@ export default function AdminComplaintDetailPage() {
           : "restrict";
       items.push({
         key: `audit-${a.id}`,
-        at: new Date(a.createdAt || "").getTime() || 0,
+        at: a.createdAt ? parseAsUtc(a.createdAt).getTime() || 0 : 0,
         iconKey,
         actorRole: a.actorRole,
         actorName: a.actorId ? userLabel(a.actorId) : a.actorRole,
@@ -310,7 +311,7 @@ export default function AdminComplaintDetailPage() {
     if (complaint.adminResponse && (complaint.status === "resolved" || complaint.status === "closed")) {
       items.push({
         key: `complaint-resolution-${complaint.id}`,
-        at: new Date(complaint.updatedAt).getTime() || 0,
+        at: parseAsUtc(complaint.updatedAt).getTime() || 0,
         iconKey: complaint.status === "resolved" ? "release" : "system",
         actorRole: "admin",
         actorName: "Admin",
@@ -812,7 +813,7 @@ export default function AdminComplaintDetailPage() {
                   <span className="text-xs text-gray-500">{item.actorName}</span>
                   <span className="text-xs text-gray-400">·</span>
                   <span className="text-xs text-gray-400">
-                    {item.at ? new Date(item.at).toLocaleString() : "—"}
+                    {item.at ? formatLocalDateTime(new Date(item.at).toISOString()) : "—"}
                   </span>
                 </div>
                 {item.detail && (

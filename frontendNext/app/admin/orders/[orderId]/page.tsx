@@ -22,13 +22,14 @@ import {
   AdminOrderUser,
   getAdminOrderDetails,
 } from "@/utils/analytics";
+import { formatLocalDateTime } from "@/utils/datetime";
 
 function isAdminLikeUser(user: { is_admin?: boolean } | null) {
   return Boolean(user?.is_admin);
 }
 
 function fmtDate(value?: string | null) {
-  return value ? new Date(value).toLocaleString() : "-";
+  return formatLocalDateTime(value, "-");
 }
 
 function fmtMoney(value?: number | null) {

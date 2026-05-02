@@ -28,6 +28,7 @@ import {
   DepositAuditEntry,
   ArbitrationDepositAction,
 } from "@/utils/deposits";
+import { formatLocalDateTime } from "@/utils/datetime";
 
 // Phase B.2 — rental refund default by complaint type (BRD §6.8 step 5).
 // damage-on-receipt / wrong-item / rental-defect → toggle pre-checked.
@@ -72,12 +73,7 @@ function fmtAmount(cents: number | null) {
 }
 
 function fmtDate(v: string | null) {
-  if (!v) return "-";
-  try {
-    return new Date(v).toLocaleString();
-  } catch {
-    return "-";
-  }
+  return formatLocalDateTime(v, "-");
 }
 
 function EvidencePanel({

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Ban, ShieldCheck, ShieldX, UserRoundSearch } from "lucide-react";
 import { createBan, getCurrentUser, getUserById, listBans, unban, type BanItem } from "@/utils/auth";
+import { formatLocalDateTime } from "@/utils/datetime";
 
 type LookupResult = {
   id: string;
@@ -196,7 +197,7 @@ export default function AdminUsersPage() {
                 <div className="text-sm">
                   <p><span className="font-medium">User:</span> {item.user_id}</p>
                   <p><span className="font-medium">Reason:</span> {item.reason}</p>
-                  <p className="text-gray-500">Banned at: {new Date(item.banned_at).toLocaleString()}</p>
+                  <p className="text-gray-500">Banned at: {formatLocalDateTime(item.banned_at)}</p>
                 </div>
                 <button
                   onClick={() => handleUnban(item.ban_id)}

@@ -827,7 +827,7 @@ export default function OrderDetailPage() {
                     <p className="text-xs text-gray-500 mt-1">{r.reason}</p>
                   )}
                   <p className="text-xs text-gray-400 mt-1">
-                    {new Date(r.created_at).toLocaleString()}
+                    {formatLocalDateTime(r.created_at)}
                   </p>
                 </div>
                 <div className="text-right shrink-0">

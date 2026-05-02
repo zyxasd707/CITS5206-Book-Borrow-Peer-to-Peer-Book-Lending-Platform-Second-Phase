@@ -16,6 +16,7 @@ import {
     type AdminBookListing,
     type BookListingType,
 } from "@/utils/analytics";
+import { formatLocalDate } from "@/utils/datetime";
 
 ChartJS.register(ArcElement, Tooltip, Legend);
 
@@ -62,8 +63,7 @@ const listingTitles: Record<BookListingType, string> = {
 const listingPageSize = 20;
 
 function formatDate(value: string | null) {
-    if (!value) return "-";
-    return new Date(value).toLocaleDateString();
+    return formatLocalDate(value, "-");
 }
 
 function formatAmount(value: number) {
@@ -617,9 +617,7 @@ export default function BookMetricsPage() {
                                             {book.can_sell ? "Yes" : "No"}
                                         </td>
                                         <td className="py-3 px-4">
-                                            {book.date_added
-                                                ? new Date(book.date_added).toLocaleDateString()
-                                                : "-"}
+                                            {formatLocalDate(book.date_added, "-")}
                                         </td>
                                     </tr>
                                 ))

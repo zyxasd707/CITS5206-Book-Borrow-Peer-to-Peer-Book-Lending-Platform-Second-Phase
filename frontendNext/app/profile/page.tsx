@@ -18,6 +18,7 @@ import { getMyDeposits } from "@/utils/deposits";
 import { getUserRefunds } from "@/utils/payments";
 import { getComplaints } from "@/utils/complaints";
 import { buildActivityBuckets, type UserRefundItem } from "@/utils/activity";
+import { formatJoinMonth, formatLocalDate } from "@/utils/datetime";
 
 const ProfilePage: React.FC = () => {
   const router = useRouter();
@@ -141,11 +142,8 @@ const ProfilePage: React.FC = () => {
   }
 
 
-  // Format join date from createdAt
-  const joinDate = new Date(currentUser.createdAt).toLocaleDateString("en-US", {
-    year: "numeric",
-    month: "long",
-  });
+  // Format join date from createdAt — Perth time, displayed as "May 2026" etc.
+  const joinDate = formatJoinMonth(currentUser.createdAt);
 
   return (
     <div className="flex-1 bg-gray-50 py-8">
@@ -315,7 +313,7 @@ const ProfilePage: React.FC = () => {
                         </Link>
                       </span>
                       <span className="text-xs text-gray-500">
-                        {new Date(review.createdAt).toLocaleDateString("en-US")}
+                        {formatLocalDate(review.createdAt)}
                       </span>
                     </div>
                     <div className="flex items-center mb-2">
@@ -344,7 +342,7 @@ const ProfilePage: React.FC = () => {
                         </Link>
                       </span>
                     <span className="text-xs text-gray-500">
-                      {new Date(review.createdAt).toLocaleDateString("en-US")}
+                      {formatLocalDate(review.createdAt)}
                     </span>
                   </div>
                   <div className="flex items-center mb-2">

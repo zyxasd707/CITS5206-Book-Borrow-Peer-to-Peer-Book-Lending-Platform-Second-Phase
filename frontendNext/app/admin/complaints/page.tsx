@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { getCurrentUser } from "@/utils/auth";
 import { getComplaints, type Complaint } from "@/utils/complaints";
+import { formatLocalDateTime, parseAsUtc } from "@/utils/datetime";
 
 type TabKey = "all" | "pending" | "financial" | "non-financial";
 
@@ -119,7 +120,7 @@ export default function AdminComplaintsPage() {
     const openFinancial = complaints.filter((c) => isOpen(c) && isFinancial(c)).length;
     const resolved30d = complaints.filter((c) => {
       if (c.status !== "resolved" && c.status !== "closed") return false;
-      const t = c.updatedAt ? new Date(c.updatedAt).getTime() : 0;
+      const t = c.updatedAt ? parseAsUtc(c.updatedAt).getTime() : 0;
       return now - t <= THIRTY_DAYS_MS;
     }).length;
     return { pending, investigating, openFinancial, resolved30d };
@@ -330,10 +331,10 @@ export default function AdminComplaintsPage() {
                         {c.orderId ? c.orderId.slice(0, 12) + "…" : "—"}
                       </td>
                       <td className="px-4 py-3 text-xs text-gray-500">
-                        {new Date(c.createdAt).toLocaleString()}
+                        {formatLocalDateTime(c.createdAt)}
                       </td>
                       <td className="px-4 py-3 text-xs text-gray-500">
-                        {new Date(c.updatedAt).toLocaleString()}
+                        {formatLocalDateTime(c.updatedAt)}
                       </td>
                     </tr>
                   );

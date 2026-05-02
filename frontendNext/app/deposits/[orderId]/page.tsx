@@ -23,6 +23,7 @@ import {
   DepositEvidence,
   DepositAuditEntry,
 } from "@/utils/deposits";
+import { formatLocalDateTime, parseAsUtc } from "@/utils/datetime";
 import { toast } from "sonner";
 
 const SEVERITY_META: Record<string, { label: string; className: string }> = {
@@ -48,12 +49,7 @@ function fmtAmount(cents: number | null) {
   return `A$${(cents / 100).toFixed(2)}`;
 }
 function fmtDate(v: string | null) {
-  if (!v) return "-";
-  try {
-    return new Date(v).toLocaleString();
-  } catch {
-    return "-";
-  }
+  return formatLocalDateTime(v, "-");
 }
 
 function EvidenceBlock({ title, evidence, emptyHint }: {
@@ -182,7 +178,7 @@ function CounterEvidenceForm({
             {deadline && (
               <>
                 {" "}
-                <b>Deadline: {deadline.toLocaleString()}</b>.
+                <b>Deadline: {formatLocalDateTime(deadline.toISOString())}</b>.
               </>
             )}
           </div>
@@ -363,7 +359,7 @@ export default function MyDepositDetailPage() {
   const hasBorrowerEv = detail.borrowerEvidence.length > 0;
   const deadline = lenderEv?.submittedAt
     ? new Date(
-        new Date(lenderEv.submittedAt).getTime() +
+        parseAsUtc(lenderEv.submittedAt).getTime() +
           COUNTER_EVIDENCE_WINDOW_DAYS * 24 * 3600 * 1000
       )
     : null;
@@ -493,7 +489,7 @@ export default function MyDepositDetailPage() {
         <div className="rounded-xl border border-gray-300 bg-gray-50 p-3 flex items-start gap-2 text-sm text-gray-700">
           <Clock className="w-4 h-4 shrink-0 mt-0.5" />
           <div>
-            The 7-day counter-evidence window closed on {deadline!.toLocaleString()}. Admin will
+            The 7-day counter-evidence window closed on {formatLocalDateTime(deadline!.toISOString())}. Admin will
             arbitrate based on the lender's evidence.
           </div>
         </div>

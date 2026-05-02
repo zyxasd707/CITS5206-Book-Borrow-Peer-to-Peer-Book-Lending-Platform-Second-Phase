@@ -23,6 +23,7 @@ import {
   resolveComplaint,
   type Complaint,
 } from "@/utils/complaints";
+import { formatLocalDateTime } from "@/utils/datetime";
 import type { User } from "@/app/types/user";
 import { handlePaymentDispute, compensatePayment } from "@/utils/payments";
 import { getOrderById } from "@/utils/borrowingOrders";
@@ -233,9 +234,7 @@ const ComplaintDetailPage: React.FC = () => {
                   <Calendar className="w-4 h-4 mr-2" />
                   <span>
                     Created:&nbsp;
-                    {complaint.createdAt
-                      ? new Date(complaint.createdAt).toLocaleString("en-AU")
-                      : "N/A"}
+                    {formatLocalDateTime(complaint.createdAt, "N/A")}
                   </span>
                 </div>
 
@@ -243,7 +242,7 @@ const ComplaintDetailPage: React.FC = () => {
                   <div className="flex items-center">
                     <span>
                       Last updated:&nbsp;
-                      {new Date(complaint.updatedAt).toLocaleString("en-AU")}
+                      {formatLocalDateTime(complaint.updatedAt)}
                     </span>
                   </div>
                 )}
@@ -465,7 +464,7 @@ const ComplaintDetailPage: React.FC = () => {
                       <p className="text-sm font-medium mb-1">{isMe ? "You" : senderName}</p>
                       <p>{m.body}</p>
                       <p className="text-xs text-gray-500 mt-1">
-                        {new Date(m.createdAt).toLocaleString("en-AU")}
+                        {formatLocalDateTime(m.createdAt)}
                       </p>
                     </div>
                   </div>
