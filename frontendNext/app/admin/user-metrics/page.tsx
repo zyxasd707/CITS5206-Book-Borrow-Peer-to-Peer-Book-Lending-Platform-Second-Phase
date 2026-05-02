@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { BookMarked, MapPin, UserPlus, Users } from "lucide-react";
 import { getApiUrl, getToken } from "@/utils/auth";
+import { formatLocalDate } from "@/utils/datetime";
 
 type UserMetricsData = {
     total_users: number;
@@ -267,7 +268,7 @@ export default function UserMetricsPage() {
                                         <tr key={user.user_id} className="hover:bg-gray-50">
                                             <td className="px-4 py-3">{user.name || "-"}</td>
                                             <td className="px-4 py-3">{user.email || "-"}</td>
-                                            <td className="px-4 py-3">{user.created_at ? new Date(user.created_at).toLocaleDateString() : "-"}</td>
+                                            <td className="px-4 py-3">{formatLocalDate(user.created_at, "-")}</td>
                                             <td className="px-4 py-3">{user.city || "-"}</td>
                                             <td className="px-4 py-3">{user.state || "-"}</td>
                                             <td className="px-4 py-3">{user.country || "-"}</td>

@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { getCurrentUser } from "@/utils/auth";
 import { getAdminRefundDetail, retryRefund } from "@/utils/payments";
+import { formatLocalDateTime } from "@/utils/datetime";
 
 const STATUS_META: Record<string, { label: string; className: string; icon: string }> = {
   succeeded: { label: "Completed", className: "bg-green-100 text-green-700 border-green-200", icon: "check" },
@@ -96,14 +97,7 @@ export default function AdminRefundDetailPage() {
     return `${sym}${dollars}`;
   };
 
-  const fmtDate = (v?: string | null) => {
-    if (!v) return "-";
-    try {
-      return new Date(v).toLocaleString();
-    } catch {
-      return "-";
-    }
-  };
+  const fmtDate = (v?: string | null) => formatLocalDateTime(v, "-");
 
   if (loading) {
     return <div className="p-6">Loading refund details...</div>;

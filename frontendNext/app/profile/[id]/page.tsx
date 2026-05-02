@@ -14,6 +14,7 @@ import {
   getUserRatingSummary,
   getReviewsByUser,
 } from "@/utils/review";
+import { formatJoinMonth, formatLocalDate } from "@/utils/datetime";
 
 
 const UserProfilePage: React.FC = () => {
@@ -206,10 +207,7 @@ const UserProfilePage: React.FC = () => {
     return <div className="p-8 text-gray-500">User not found</div>;
   }
 
-  const joinDate = new Date(user.createdAt).toLocaleDateString("en-US", {
-    year: "numeric",
-    month: "long",
-  });
+  const joinDate = formatJoinMonth(user.createdAt);
 
   if (isBlocked) {
     return (
@@ -311,7 +309,7 @@ const UserProfilePage: React.FC = () => {
                         Reviewer: {review.reviewerName}
                       </span>
                       <span className="text-xs text-gray-500">
-                        {new Date(review.createdAt).toLocaleDateString("en-US")}
+                        {formatLocalDate(review.createdAt)}
                       </span>
                     </div>
                     <StarRating rating={review.rating} readonly size="sm" />

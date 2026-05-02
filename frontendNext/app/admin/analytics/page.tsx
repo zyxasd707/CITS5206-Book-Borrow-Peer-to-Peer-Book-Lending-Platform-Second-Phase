@@ -8,6 +8,7 @@ import {
     getToken,
     isAuthenticated,
 } from "@/utils/auth";
+import { formatLocalDate } from "@/utils/datetime";
 
 type SignupDetail = {
     name: string | null;
@@ -227,9 +228,7 @@ export default function AdminAnalyticsPage() {
                                             <td className="py-3 pr-4 text-gray-900">{user.name || "-"}</td>
                                             <td className="py-3 pr-4 text-gray-700">{user.email}</td>
                                             <td className="py-3 pr-4 text-gray-700">
-                                                {user.created_at
-                                                    ? new Date(user.created_at).toLocaleDateString()
-                                                    : "-"}
+                                                {formatLocalDate(user.created_at, "-")}
                                             </td>
                                             <td className="py-3 pr-4 text-gray-700">{user.city || "-"}</td>
                                             <td className="py-3 pr-4 text-gray-700">{user.state || "-"}</td>

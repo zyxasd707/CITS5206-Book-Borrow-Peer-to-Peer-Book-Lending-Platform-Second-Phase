@@ -51,6 +51,9 @@ class Refund(Base):
     currency = Column(String(10), default="usd")
     status = Column(String(50), default="succeeded")
     reason = Column(String(255), nullable=True)
+    # Phase B.2 — provenance for refunds dispatched by complaint flows
+    source = Column(String(32), nullable=True)
+    source_complaint_id = Column(String(36), nullable=True)
 
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())

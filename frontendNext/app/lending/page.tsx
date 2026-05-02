@@ -13,12 +13,13 @@ import { getBooks, updateBook, deleteBook } from "@/utils/books";
 import { getOrderById, getOrdersByBookId } from "@/utils/borrowingOrders";
 import { getMyDeposits, type DepositSummaryItem } from "@/utils/deposits";
 import { getDepositBadge } from "@/utils/depositBadge";
+import { formatLocalDate } from "@/utils/datetime";
 import type { ApiOrder, OrderStatus } from "@/app/types/order";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
 const formatDisplayDate = (value?: string | null) =>
-  value ? new Date(value).toLocaleDateString() : null;
+  value ? formatLocalDate(value) : null;
 
 const getBookStatusDisplay = (book: Book, order?: ApiOrder) => {
   if (order) {

@@ -7,6 +7,7 @@ import { Wallet, ShieldOff, ArrowRight } from "lucide-react";
 import { getCurrentUser } from "@/utils/auth";
 import type { User } from "@/app/types/user";
 import { getMyDeposits, DepositSummaryItem } from "@/utils/deposits";
+import { formatLocalDateTime } from "@/utils/datetime";
 
 const STATUS_META: Record<string, { label: string; className: string }> = {
   pending_review: { label: "Pending Review", className: "bg-yellow-100 text-yellow-700" },
@@ -26,12 +27,7 @@ function fmtAmount(cents: number) {
 }
 
 function fmtDate(v: string | null) {
-  if (!v) return "-";
-  try {
-    return new Date(v).toLocaleString();
-  } catch {
-    return "-";
-  }
+  return formatLocalDateTime(v, "-");
 }
 
 export default function MyDepositsPage() {

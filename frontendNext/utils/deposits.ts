@@ -109,6 +109,36 @@ export interface AdminActionResult {
   strike?: StrikeSignal;
 }
 
+// Phase B.2 (Q4=B) — combined deposit + rental arbitration.
+export type ArbitrationDepositAction =
+  | "release"
+  | "deduct_25"
+  | "deduct_50"
+  | "forfeit";
+export type ArbitrationRentalAction = "keep" | "refund_full";
+
+export interface ArbitrationDecideBody {
+  deposit_action: ArbitrationDepositAction;
+  rental_action: ArbitrationRentalAction;
+  complaint_id?: string | null;
+  note?: string | null;
+}
+
+export interface ArbitrationDecideResult {
+  order_id: string;
+  deposit_action: ArbitrationDepositAction;
+  rental_action: ArbitrationRentalAction;
+  deposit_status: string;
+  deposit_deducted_cents: number;
+  rental_total_cents: number;
+  rental_kept_cents: number;
+  rental_refund_cents_pending_claim: number;
+  complaint_id: string | null;
+  complaint_status: string | null;
+  strike?: StrikeSignal;
+  lender_transfer_id?: string | null;
+}
+
 // ---------- Admin ----------
 
 export async function getAdminDeposits(params: {
@@ -168,6 +198,26 @@ export async function adminForfeitDeposit(
   const res = await axios.post(
     `${API_URL}/api/v1/deposits/admin/${orderId}/forfeit`,
     { note: note || null },
+    { headers: authHeader(), withCredentials: true }
+  );
+  return res.data;
+}
+
+// Phase B.2 (Q4=B) one-shot arbitration: deposit_action + rental_action.
+// Replaces the legacy 3 endpoints above for the admin/deposits/[orderId]
+// page; the legacy endpoints are kept exported for backwards compatibility.
+export async function adminArbitrationDecide(
+  orderId: string,
+  body: ArbitrationDecideBody
+): Promise<ArbitrationDecideResult> {
+  const res = await axios.post(
+    `${API_URL}/api/v1/deposits/admin/arbitration/${orderId}/decide`,
+    {
+      deposit_action: body.deposit_action,
+      rental_action: body.rental_action,
+      complaint_id: body.complaint_id || null,
+      note: body.note || null,
+    },
     { headers: authHeader(), withCredentials: true }
   );
   return res.data;

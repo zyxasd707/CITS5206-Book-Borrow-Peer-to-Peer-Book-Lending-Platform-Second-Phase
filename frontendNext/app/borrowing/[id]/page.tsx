@@ -90,6 +90,9 @@ export default function OrderDetailPage() {
   const [damagePhotos, setDamagePhotos] = useState<File[]>([]);
   const [confirmSubmitting, setConfirmSubmitting] = useState(false);
 
+  // Phase B.1 (Q5=A): second-confirm modal before lender submits a damage report.
+  const [damageConfirmOpen, setDamageConfirmOpen] = useState(false);
+
   // Refund modal state (from complaint redirect)
   const [showRefundModal, setShowRefundModal] = useState(false);
   const [refundReason, setRefundReason] = useState("");
@@ -824,7 +827,7 @@ export default function OrderDetailPage() {
                     <p className="text-xs text-gray-500 mt-1">{r.reason}</p>
                   )}
                   <p className="text-xs text-gray-400 mt-1">
-                    {new Date(r.created_at).toLocaleString()}
+                    {formatLocalDateTime(r.created_at)}
                   </p>
                 </div>
                 <div className="text-right shrink-0">
@@ -1170,6 +1173,13 @@ export default function OrderDetailPage() {
             <Button
               disabled={confirmSubmitting}
               onClick={async () => {
+                // Q5=A (Phase B.1): non-trivial action — gate damage reports
+                // behind a second confirmation so lenders consciously accept
+                // the downstream consequences (complaint case + borrower hold).
+                if (damageSeverity !== "none") {
+                  setDamageConfirmOpen(true);
+                  return;
+                }
                 await handleConfirmReceive(order!.id);
                 setConfirmReceiveModalOpen(false);
               }}
@@ -1179,6 +1189,58 @@ export default function OrderDetailPage() {
                 : damageSeverity === "none"
                 ? "Confirm & Release Deposit"
                 : "Submit Damage Report"}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        isOpen={damageConfirmOpen}
+        onClose={() => {
+          if (confirmSubmitting) return;
+          setDamageConfirmOpen(false);
+        }}
+        title="Confirm Damage Report"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-gray-700">
+            Reporting <span className="font-semibold capitalize">{damageSeverity}</span> damage will:
+          </p>
+          <ul className="space-y-2 text-sm text-gray-700">
+            <li className="flex gap-2">
+              <span className="text-green-600">&#10003;</span>
+              <span>Submit a damage claim against the borrower</span>
+            </li>
+            <li className="flex gap-2">
+              <span className="text-green-600">&#10003;</span>
+              <span>Hold the borrower&apos;s deposit pending admin review</span>
+            </li>
+            <li className="flex gap-2">
+              <span className="text-green-600">&#10003;</span>
+              <span>Trigger a complaint case (with full audit trail)</span>
+            </li>
+          </ul>
+          <div className="rounded-md bg-amber-50 border border-amber-200 p-3 text-xs text-amber-800">
+            The borrower will be notified and has 7 days to upload counter-evidence.
+            An admin will arbitrate the final deduction.
+          </div>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button
+              variant="outline"
+              disabled={confirmSubmitting}
+              onClick={() => setDamageConfirmOpen(false)}
+            >
+              Back
+            </Button>
+            <Button
+              disabled={confirmSubmitting}
+              onClick={async () => {
+                await handleConfirmReceive(order!.id);
+                setDamageConfirmOpen(false);
+                setConfirmReceiveModalOpen(false);
+              }}
+            >
+              {confirmSubmitting ? "Submitting..." : "Confirm & Submit"}
             </Button>
           </div>
         </div>

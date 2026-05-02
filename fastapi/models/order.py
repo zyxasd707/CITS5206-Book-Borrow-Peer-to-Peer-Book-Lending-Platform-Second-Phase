@@ -111,6 +111,11 @@ class Order(Base):
         Enum(*DAMAGE_SEVERITY_ENUM, name="damage_severity_final_enum"),
         nullable=True
     )
+    # Phase B.2 (Q4=B): rental kept by the lender after admin arbitration.
+    # 0 = full rental refunded to borrower; full rental fee = no rental refund.
+    # Combined with deposit_deducted_cents at borrower-claim time to compute a
+    # single Stripe.Refund.create amount (see borrower_claim_refund).
+    rental_deducted_cents = Column(Integer, nullable=True, default=0)
 
     # payment id
     payment_id = Column(String(255), ForeignKey("payments.payment_id", ondelete="SET NULL"), nullable=True)
