@@ -8,6 +8,7 @@ schema validation, authorization, and response shaping.
 """
 
 import json
+import uuid
 from datetime import datetime, timedelta
 from typing import Optional, List, Literal, Dict, Any
 
@@ -23,6 +24,7 @@ from models.book import Book
 from models.deposit_evidence import DepositEvidence
 from models.deposit_audit_log import DepositAuditLog
 from models.payment_gateway import Payment
+from models.complaint import Complaint, ComplaintMessage
 from services import deposit_service
 from services.notification_service import NotificationService
 
@@ -494,6 +496,28 @@ def submit_borrower_counter_evidence(
     if existing:
         raise HTTPException(status_code=409, detail="Borrower evidence already submitted for this order")
 
+    # Phase B.1: try to attach counter-evidence to the system_generated
+    # Complaint that wraps the lender's damage report. Look up by lender's
+    # source_complaint_id first (most accurate), then fall back to scanning
+    # for a linked_arbitration_order_id match.
+    linked_complaint: Optional[Complaint] = None
+    if lender_ev.source_complaint_id:
+        linked_complaint = (
+            db.query(Complaint)
+            .filter(Complaint.id == lender_ev.source_complaint_id)
+            .first()
+        )
+    if linked_complaint is None:
+        linked_complaint = (
+            db.query(Complaint)
+            .filter(
+                Complaint.linked_arbitration_order_id == order.id,
+                Complaint.system_generated == True,  # noqa: E712
+            )
+            .order_by(Complaint.created_at.desc())
+            .first()
+        )
+
     ev = DepositEvidence(
         order_id=order.id,
         submitter_id=current_user.user_id,
@@ -501,6 +525,7 @@ def submit_borrower_counter_evidence(
         photos=json.dumps(body.photos or []),
         claimed_severity=body.claimed_severity,
         note=body.note,
+        source_complaint_id=linked_complaint.id if linked_complaint else None,
     )
     db.add(ev)
     db.add(DepositAuditLog(
@@ -512,7 +537,7 @@ def submit_borrower_counter_evidence(
         note=body.note or "Borrower submitted counter-evidence.",
     ))
 
-    # Notify the lender so they know admin now has both sides
+    # Existing notification — keep so lender's Bell history is unchanged.
     NotificationService.create(
         db, user_id=order.owner_id, order_id=order.id,
         type="DEPOSIT_EVIDENCE_RECEIVED",
@@ -523,6 +548,47 @@ def submit_borrower_counter_evidence(
         ),
         commit=False,
     )
+
+    # Phase B.1 — append a counter-evidence reply to the linked Complaint
+    # and emit COMPLAINT_REPLY notifications. Closes Hotfix #1's second
+    # trigger scenario (admin blind to counter-evidence). Pre-B.1 orders
+    # have no linked complaint — skip notifications quietly per BRD §15.1.1.
+    if linked_complaint is not None:
+        photo_count = len(body.photos or [])
+        reply_body = (
+            f"[Counter-evidence] Borrower claims {body.claimed_severity} damage "
+            f"and uploaded {photo_count} photo(s)."
+        )
+        if (body.note or "").strip():
+            reply_body += f" Note: {body.note.strip()}"
+        db.add(ComplaintMessage(
+            id=str(uuid.uuid4()),
+            complaint_id=linked_complaint.id,
+            sender_id=current_user.user_id,
+            body=reply_body,
+        ))
+
+        NotificationService.create(
+            db, user_id=order.owner_id, order_id=order.id,
+            type="COMPLAINT_REPLY",
+            title="Counter-Evidence Filed by Borrower",
+            message=(
+                f"The borrower replied to your damage complaint with counter-evidence "
+                f"(claimed severity: {body.claimed_severity})."
+            ),
+            commit=False,
+        )
+        for admin in db.query(User).filter(User.is_admin == True).all():  # noqa: E712
+            NotificationService.create(
+                db, user_id=admin.user_id, order_id=order.id,
+                type="COMPLAINT_REPLY",
+                title="Counter-Evidence Awaiting Arbitration",
+                message=(
+                    f"Borrower filed counter-evidence on order {order.id} "
+                    f"(claimed: {body.claimed_severity}). Both sides are now on file."
+                ),
+                commit=False,
+            )
 
     db.commit()
     db.refresh(ev)

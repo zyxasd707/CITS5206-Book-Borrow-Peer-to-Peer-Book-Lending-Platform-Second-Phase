@@ -1053,6 +1053,7 @@ class OrderService:
         from models.deposit_evidence import DepositEvidence
         from models.deposit_audit_log import DepositAuditLog
         import json
+        import uuid
 
         if severity == "none":
             # Clean return → auto release
@@ -1101,6 +1102,13 @@ class OrderService:
             order.deposit_status = "pending_review"
             order.damage_severity_final = None  # cleared until admin rules
 
+            # Phase B.1: also wrap the lender's report in a system_generated
+            # Complaint so the admin master arbitration view (Phase A.4) and
+            # /admin/complaints can surface it through the unified Complaint
+            # source-of-truth. Pre-allocate the complaint id so we can back-link
+            # the DepositEvidence row in the same flush.
+            complaint_id = str(uuid.uuid4())
+
             db.add(DepositEvidence(
                 order_id=order.id,
                 submitter_id=order.owner_id,
@@ -1108,6 +1116,7 @@ class OrderService:
                 photos=json.dumps(evidence_photos or []),
                 claimed_severity=severity,
                 note=note,
+                source_complaint_id=complaint_id,
             ))
             db.add(DepositAuditLog(
                 order_id=order.id,
@@ -1118,6 +1127,29 @@ class OrderService:
                 note=(note or "").strip() or f"Lender reported damage: {severity}",
             ))
 
+            severity_label = severity.capitalize()
+            complaint_description = (note or "").strip() or (
+                f"Lender reported {severity} damage on the returned book. "
+                "Awaiting admin arbitration of the deposit deduction."
+            )
+            db.add(Complaint(
+                id=complaint_id,
+                order_id=order.id,
+                complainant_id=order.owner_id,
+                respondent_id=order.borrower_id,
+                type="damage-on-return",
+                subject=f"{severity_label} damage reported on returned book",
+                description=complaint_description,
+                status="pending",
+                damage_severity=severity,
+                evidence_photos=json.dumps(evidence_photos or []),
+                linked_arbitration_order_id=order.id,
+                auto_action_taken="deposit_pending_review",
+                system_generated=True,
+            ))
+
+            # Existing DEPOSIT_UPDATED notifications stay so Bell history
+            # remains backwards-compatible with the pre-B.1 flow.
             NotificationService.create(
                 db, user_id=order.borrower_id, order_id=order.id,
                 type="DEPOSIT_UPDATED",
@@ -1139,6 +1171,33 @@ class OrderService:
                 ),
                 commit=False,
             )
+
+            # Phase B.1 — COMPLAINT_CREATED notifications. Borrower needs the
+            # signal even though they already received DEPOSIT_UPDATED, because
+            # /activity Awaiting My Action surfaces complaints separately.
+            # All admins are notified — closes Hotfix #1 (admin notification
+            # blind spot, BRD §15.1.1).
+            NotificationService.create(
+                db, user_id=order.borrower_id, order_id=order.id,
+                type="COMPLAINT_CREATED",
+                title="Damage Claim Filed Against You",
+                message=(
+                    f"The lender filed a {severity} damage complaint on the returned book. "
+                    "Upload counter-evidence within 7 days if you disagree."
+                ),
+                commit=False,
+            )
+            for admin in db.query(User).filter(User.is_admin == True).all():  # noqa: E712
+                NotificationService.create(
+                    db, user_id=admin.user_id, order_id=order.id,
+                    type="COMPLAINT_CREATED",
+                    title="New Damage Complaint Awaiting Arbitration",
+                    message=(
+                        f"Lender filed a {severity} damage complaint (order {order.id}). "
+                        "Review evidence and decide the deposit deduction."
+                    ),
+                    commit=False,
+                )
 
             db.commit()
             db.refresh(order)
