@@ -8,7 +8,7 @@ import Input from "../ui/Input";
 import ProfileIncompleteModal from "../ui/ProfileIncompleteModal";
 import { isProfileComplete } from "@/utils/profileValidation";
 
-import { User as UserIcon, LogOut, Plus, Truck, Mail, LifeBuoy, ShoppingBag, ShieldCheck, Wallet } from "lucide-react";
+import { User as UserIcon, LogOut, Plus, Truck, Mail, LifeBuoy, ShoppingBag, ShieldCheck, ListTodo } from "lucide-react";
 import { logoutUser, isAuthenticated, getCurrentUser, getApiUrl, getToken } from "@/utils/auth";
 
 import Avatar from "@/app/components/ui/Avatar";
@@ -291,19 +291,19 @@ const Header: React.FC = () => {
                       </Link>
 
                       <Link
-                        href="/deposits"
+                        href="/activity"
                         className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
                         onClick={() => setShowProfileMenu(false)}
                       >
-                        <Wallet className="w-4 h-4 mr-3" />My Deposits
+                        <ListTodo className="w-4 h-4 mr-3" />Activities & Issues
                       </Link>
 
                       <Link
-                        href="/complain"
+                        href="/supports-complaints"
                         className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
                         onClick={() => setShowProfileMenu(false)}
                       >
-                        <LifeBuoy className="w-4 h-4 mr-3" />Support
+                        <LifeBuoy className="w-4 h-4 mr-3" />Supports & Complaints
                       </Link>
 
                       {isAdminLikeUser(currentUser) && (

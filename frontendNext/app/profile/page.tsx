@@ -14,6 +14,10 @@ import {
   getReviewsByUser,
   getReviewsByReviewer,
 } from "@/utils/review";
+import { getMyDeposits } from "@/utils/deposits";
+import { getUserRefunds } from "@/utils/payments";
+import { getComplaints } from "@/utils/complaints";
+import { buildActivityBuckets, type UserRefundItem } from "@/utils/activity";
 
 const ProfilePage: React.FC = () => {
   const router = useRouter();
@@ -30,6 +34,7 @@ const ProfilePage: React.FC = () => {
 
   const [receivedReviews, setReceivedReviews] = useState<Comment[]>([]);
   const [givenReviews, setGivenReviews] = useState<Comment[]>([]);
+  const [activityBadge, setActivityBadge] = useState<number>(0);
 
   // Check authentication and load user data
   useEffect(() => {
@@ -48,15 +53,36 @@ const ProfilePage: React.FC = () => {
         }
         setCurrentUser(userData);
 
-        const [stats, received, given] = await Promise.all([
+        // Hub badge for the Activities & Issues card. Reuse the same aggregator
+        // that powers /activity so the count and the Awaiting tab can never
+        // drift apart. Any upstream failure degrades to 0 — the card stays
+        // visible without a misleading badge.
+        const computeAwaitingCount = async (uid: string): Promise<number> => {
+          const [deposits, refundsRes, complaints] = await Promise.all([
+            getMyDeposits(uid, { includeHeld: true }).catch(() => []),
+            getUserRefunds(uid).catch(() => ({ refunds: [] as UserRefundItem[] })),
+            getComplaints("mine").catch(() => []),
+          ]);
+          const buckets = await buildActivityBuckets({
+            currentUserId: uid,
+            deposits,
+            refunds: (refundsRes.refunds || []) as UserRefundItem[],
+            complaints,
+          });
+          return buckets.awaiting.length;
+        };
+
+        const [stats, received, given, awaitingCount] = await Promise.all([
           getUserRatingSummary(userData.id),
           getReviewsByUser(userData.id),
           getReviewsByReviewer(userData.id),
+          computeAwaitingCount(userData.id).catch(() => 0),
         ]);
 
         setRatingStats(stats);
         setReceivedReviews(received);
         setGivenReviews(given);
+        setActivityBadge(awaitingCount);
       } catch (error) {
         console.error("Failed to load user data:", error);
         router.push("/auth");
@@ -187,7 +213,7 @@ const ProfilePage: React.FC = () => {
             My Book Hub
           </h2>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {/* Lending */}
             <Link
               href="/lending"
@@ -224,6 +250,27 @@ const ProfilePage: React.FC = () => {
               </div>
               <div className="text-sm font-medium text-orange-800">
                 Books in transit
+              </div>
+            </Link>
+
+            {/* Activities & Issues — Q1=A: badge counts awaiting-action items only */}
+            <Link
+              href="/activity"
+              className="relative block bg-rose-50 border border-rose-200 rounded-lg p-4 text-center hover:bg-rose-100 transition"
+            >
+              {activityBadge > 0 && (
+                <span
+                  aria-label={`${activityBadge} item${activityBadge === 1 ? "" : "s"} awaiting your action`}
+                  className="absolute -top-2 -right-2 inline-flex items-center justify-center min-w-[1.5rem] h-6 px-1.5 rounded-full bg-red-600 text-white text-xs font-semibold shadow"
+                >
+                  {activityBadge > 99 ? "99+" : activityBadge}
+                </span>
+              )}
+              <div className="text-xl font-bold text-rose-600 mb-1">
+                Activities &amp; Issues
+              </div>
+              <div className="text-sm font-medium text-rose-800">
+                Awaiting my action
               </div>
             </Link>
           </div>

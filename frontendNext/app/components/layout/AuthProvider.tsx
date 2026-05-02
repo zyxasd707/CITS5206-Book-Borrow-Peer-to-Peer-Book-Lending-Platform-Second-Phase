@@ -20,7 +20,7 @@ export default function AuthProvider({ children }: AuthProviderProps) {
   // routes need to login 
   const protectedRoutes = ["/profile", "/orders", "/lending", "/borrowing", 
     "/cart", "/checkout",
-    "/message", "/shipping", "/complain", "/admin"
+    "/message", "/shipping", "/supports-complaints", "/admin"
   ];
 
   // Special rule: only protect sub-routes under /books (e.g. /books/123)
