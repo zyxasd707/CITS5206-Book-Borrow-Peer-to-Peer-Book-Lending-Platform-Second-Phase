@@ -49,6 +49,12 @@ const SEVERITY_META: Record<string, { label: string; className: string }> = {
 
 const STATUS_META: Record<string, { label: string; className: string }> = {
   pending_review: { label: "Pending Review", className: "bg-yellow-100 text-yellow-700 border-yellow-200" },
+  // PR #97 mid-state: admin already decided, borrower has not claimed yet.
+  // Pre-B.2 this page lacked the key, so the status banner fell back to "Held"
+  // (gray) right after a successful arbitration — confusing because the
+  // arbitration was actually done. Match the green emerald used by
+  // /admin/complaints/[id]'s DEPOSIT_STATUS_META.
+  refund_ready: { label: "Refund Ready (awaiting borrower claim)", className: "bg-emerald-100 text-emerald-700 border-emerald-200" },
   released: { label: "Released", className: "bg-green-100 text-green-700 border-green-200" },
   partially_deducted: { label: "Partially Deducted", className: "bg-orange-100 text-orange-700 border-orange-200" },
   forfeited: { label: "Forfeited", className: "bg-red-100 text-red-700 border-red-200" },
