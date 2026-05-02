@@ -651,17 +651,16 @@ export default function AdminComplaintDetailPage() {
           <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 flex gap-2">
             <Info className="w-4 h-4 mt-0.5 shrink-0" />
             <div>
-              <div className="font-medium">Before you decide — how deposit refunds work</div>
-              <ul className="list-disc list-inside text-xs mt-1 space-y-0.5">
+              <div className="font-medium">Before you decide — how your call moves money</div>
+              <ul className="list-disc list-inside text-xs mt-1 space-y-1">
                 <li>
-                  <b>Release</b> / <b>Deduct (light/medium)</b>: deposit moves to{" "}
-                  <code className="bg-white px-1 rounded">refund_ready</code>. The borrower must
-                  click <b>Claim My Refund</b> on their <code>/deposits</code> page before money
-                  actually moves. Do not mark this complaint resolved until that happens.
+                  <b>Release</b> / <b>Deduct (light/medium)</b>: the borrower must claim their
+                  refund before money actually moves. Wait for them to claim before marking this
+                  resolved.
                 </li>
                 <li>
-                  <b>Forfeit</b>: terminal — full deposit transfers to lender immediately, no
-                  borrower action needed. You can resolve the complaint right after.
+                  <b>Forfeit</b>: money transfers to the lender immediately &mdash; no borrower
+                  action needed. You can mark resolved right away.
                 </li>
               </ul>
             </div>
@@ -676,20 +675,17 @@ export default function AdminComplaintDetailPage() {
           </div>
         )}
 
-        {/* Primary CTA: drill into deposit arbitration view */}
-        {orderId && financial && (
-          <div className="flex flex-wrap gap-2">
+        {/* Action row — drill-in CTA + status controls share the same row;
+            wraps to multiple lines on narrow screens. */}
+        <div className="flex flex-wrap gap-2">
+          {orderId && financial && (
             <Link
               href={`/admin/deposits/${orderId}`}
               className="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 inline-flex items-center gap-1"
             >
               Open Deposit Arbitration <ExternalLink className="w-4 h-4" />
             </Link>
-          </div>
-        )}
-
-        {/* Status-update controls */}
-        <div className="flex flex-wrap gap-2 pt-2">
+          )}
           {complaint.status === "pending" && (
             <button
               disabled={submitting}
