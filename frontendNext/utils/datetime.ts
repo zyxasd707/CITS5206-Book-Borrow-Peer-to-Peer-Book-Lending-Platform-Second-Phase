@@ -6,16 +6,20 @@
 
 const PERTH_TZ = "Australia/Perth";
 const HAS_TZ_SUFFIX = /Z$|[+-]\d{2}:?\d{2}$/;
+type DateInput = string | Date;
 
 // Exported for callers that need an epoch-ms or Date for sorting/maths and
 // must respect the same naive-string convention as the formatters.
-export function parseAsUtc(value: string): Date {
+export function parseAsUtc(value: DateInput): Date {
+  if (value instanceof Date) {
+    return value;
+  }
   const trimmed = value.trim();
   const normalised = HAS_TZ_SUFFIX.test(trimmed) ? trimmed : trimmed + "Z";
   return new Date(normalised);
 }
 
-export function formatLocalDateTime(value?: string | null, fallback = "—"): string {
+export function formatLocalDateTime(value?: DateInput | null, fallback = "—"): string {
   if (!value) return fallback;
   const dt = parseAsUtc(value);
   if (Number.isNaN(dt.getTime())) return fallback;
@@ -26,7 +30,7 @@ export function formatLocalDateTime(value?: string | null, fallback = "—"): st
   }).format(dt);
 }
 
-export function formatLocalDate(value?: string | null, fallback = "—"): string {
+export function formatLocalDate(value?: DateInput | null, fallback = "—"): string {
   if (!value) return fallback;
   const dt = parseAsUtc(value);
   if (Number.isNaN(dt.getTime())) return fallback;
@@ -36,7 +40,7 @@ export function formatLocalDate(value?: string | null, fallback = "—"): string
   }).format(dt);
 }
 
-export function formatJoinMonth(value?: string | null, fallback = "—"): string {
+export function formatJoinMonth(value?: DateInput | null, fallback = "—"): string {
   if (!value) return fallback;
   const dt = parseAsUtc(value);
   if (Number.isNaN(dt.getTime())) return fallback;
