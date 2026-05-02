@@ -1141,32 +1141,6 @@ class OrderService:
                 commit=False,
             )
 
-            existing_complaint = (
-                db.query(Complaint)
-                .filter(
-                    Complaint.order_id == order.id,
-                    Complaint.type == "book-condition",
-                    Complaint.status.in_(("pending", "investigating")),
-                )
-                .first()
-            )
-            if not existing_complaint:
-                ComplaintService.create(
-                    db,
-                    complainant_id=order.owner_id,
-                    respondent_id=order.borrower_id,
-                    order_id=order.id,
-                    type="book-condition",
-                    subject=f"Damage reported on returned book ({severity})",
-                    description=(
-                        (note or "").strip()
-                        or f"The lender reported {severity} damage when confirming the returned book."
-                    ),
-                    evidence_photos=evidence_photos or [],
-                    damage_severity=severity,
-                    commit=False,
-                )
-
             admins = db.query(User).filter(User.is_admin == True).all()
             for admin in admins:
                 NotificationService.create(
