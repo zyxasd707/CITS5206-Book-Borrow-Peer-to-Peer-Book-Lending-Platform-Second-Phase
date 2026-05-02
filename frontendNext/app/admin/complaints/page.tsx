@@ -21,7 +21,11 @@ import { getComplaints, type Complaint } from "@/utils/complaints";
 
 type TabKey = "all" | "pending" | "financial" | "non-financial";
 
-const FINANCIAL_TYPES: ReadonlyArray<Complaint["type"]> = ["book-condition", "overdue"];
+const FINANCIAL_TYPES: ReadonlyArray<Complaint["type"]> = [
+  "book-condition",
+  "overdue",
+  "damage-on-return",
+];
 
 const STATUS_META: Record<Complaint["status"], { label: string; className: string }> = {
   pending: { label: "Pending", className: "bg-yellow-100 text-yellow-700" },
@@ -36,6 +40,7 @@ const TYPE_LABELS: Record<Complaint["type"], string> = {
   "user-behavior": "User Behavior",
   other: "Other",
   overdue: "Overdue",
+  "damage-on-return": "Damage on Return",
 };
 
 function isAdminLikeUser(user: { is_admin?: boolean } | null) {

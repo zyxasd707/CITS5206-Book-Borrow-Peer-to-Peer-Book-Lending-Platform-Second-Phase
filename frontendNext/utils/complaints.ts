@@ -8,7 +8,7 @@ export type Complaint = {
   orderId?: string;
   complainantId: string;
   respondentId?: string;
-  type: "book-condition" | "delivery" | "user-behavior" | "other" | "overdue";
+  type: "book-condition" | "delivery" | "user-behavior" | "other" | "overdue" | "damage-on-return";
   subject: string;
   description: string;
   status: "pending" | "investigating" | "resolved" | "closed";

@@ -40,7 +40,11 @@ import { getAdminRefunds } from "@/utils/payments";
 import { getOrderById } from "@/utils/borrowingOrders";
 import type { User } from "@/app/types/user";
 
-const FINANCIAL_TYPES: ReadonlyArray<Complaint["type"]> = ["book-condition", "overdue"];
+const FINANCIAL_TYPES: ReadonlyArray<Complaint["type"]> = [
+  "book-condition",
+  "overdue",
+  "damage-on-return",
+];
 
 const STATUS_META: Record<Complaint["status"], { label: string; className: string }> = {
   pending: { label: "Pending", className: "bg-yellow-100 text-yellow-700" },
@@ -55,6 +59,7 @@ const TYPE_LABELS: Record<Complaint["type"], string> = {
   "user-behavior": "User Behavior",
   other: "Other",
   overdue: "Overdue",
+  "damage-on-return": "Damage on Return",
 };
 
 const DEPOSIT_STATUS_META: Record<string, { label: string; className: string }> = {

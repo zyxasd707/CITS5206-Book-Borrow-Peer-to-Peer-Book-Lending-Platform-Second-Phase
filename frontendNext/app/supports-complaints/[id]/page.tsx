@@ -164,6 +164,7 @@ const ComplaintDetailPage: React.FC = () => {
       case "user-behavior": return "User Behavior";
       case "other": return "Other";
       case "overdue": return "Overdue (System)";
+      case "damage-on-return": return "Damage on Return (System)";
       default: return "Unknown";
     }
   };
