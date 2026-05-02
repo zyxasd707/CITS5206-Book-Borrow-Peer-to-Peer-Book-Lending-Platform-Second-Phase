@@ -3,7 +3,7 @@
 // /admin/complaints/[id] — Phase A.4 master arbitration detail.
 // Five sections: Related Order, Both-Side Evidence, Linked Arbitration/Refund,
 // Admin Decision Panel, Audit Trail. All financial actions delegate to
-// /admin/deposits/[orderId] (PR #97 model — borrower must claim refund there).
+// /admin/deposits/[orderId]; borrowers must explicitly claim their refund there.
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
@@ -646,12 +646,12 @@ export default function AdminComplaintDetailPage() {
           <ShieldCheck className="w-5 h-5" /> 4 · Admin Decision
         </h2>
 
-        {/* PR #97 model tooltip — always show on financial cases */}
+        {/* Educational tooltip — always show on financial cases */}
         {financial && orderId && (
           <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 flex gap-2">
             <Info className="w-4 h-4 mt-0.5 shrink-0" />
             <div>
-              <div className="font-medium">PR #97 deposit model — read before deciding</div>
+              <div className="font-medium">Before you decide — how deposit refunds work</div>
               <ul className="list-disc list-inside text-xs mt-1 space-y-0.5">
                 <li>
                   <b>Release</b> / <b>Deduct (light/medium)</b>: deposit moves to{" "}
@@ -685,12 +685,6 @@ export default function AdminComplaintDetailPage() {
             >
               Open Deposit Arbitration <ExternalLink className="w-4 h-4" />
             </Link>
-            <button
-              onClick={() => router.push(`/admin/deposits/${orderId}`)}
-              className="px-3 py-2 rounded-lg border text-sm hover:bg-gray-50"
-            >
-              Release / Deduct / Forfeit →
-            </button>
           </div>
         )}
 
