@@ -38,6 +38,10 @@ class Complaint(Base):
     system_generated            = Column(Boolean, nullable=False, default=False, server_default="0")
     # Phase B.2 — Stripe Refund id when a complaint resolves into a manual refund
     linked_refund_id            = Column(String(255), nullable=True)
+    # Phase B.4 — TRUE iff this row was synthesized by the deposit-evidence backfill
+    # (scripts/backfill_deposit_evidence_to_complaint.py). Used by admin UI to flag
+    # historical context and by the rollback path to delete only its own rows.
+    migrated_from_deposit_evidence = Column(Boolean, nullable=False, default=False, server_default="0")
 
     created_at      = Column(DateTime, server_default=func.now(), nullable=False, index=True)
     updated_at      = Column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)

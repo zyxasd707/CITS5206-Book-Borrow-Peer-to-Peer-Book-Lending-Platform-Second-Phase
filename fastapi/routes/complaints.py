@@ -35,6 +35,7 @@ def _to_read(c: Complaint) -> dict:
         "adminResponse": c.admin_response,
         "evidencePhotos": evidence_photos,
         "damageSeverity": c.damage_severity,
+        "migratedFromDepositEvidence": bool(getattr(c, "migrated_from_deposit_evidence", False)),
         "createdAt": c.created_at,
         "updatedAt": c.updated_at,
     }

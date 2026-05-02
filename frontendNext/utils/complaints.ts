@@ -31,9 +31,13 @@ export type Complaint = {
   adminResponse?: string;
   evidencePhotos?: string[] | null;
   damageSeverity?: "none" | "light" | "medium" | "severe" | null;
+  // Phase B.4 — TRUE iff this complaint was synthesized by the deposit-evidence
+  // backfill (admin UI shows a protective banner so the reviewer knows the row
+  // came from pre-Phase-B data and didn't go through the live workflow).
+  migratedFromDepositEvidence?: boolean;
   createdAt: string;
   updatedAt: string;
-  
+
 };
 
 export type Message = {
