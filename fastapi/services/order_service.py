@@ -18,7 +18,9 @@ import logging
 from services.email_service import (
     send_order_confirmation_receipt_email,
     send_shipment_status_email,
+    send_admin_damage_review_email,
 )
+from core.config import settings
 
 logger = logging.getLogger(__name__)
 PLATFORM_SERVICE_FEE_AMOUNT = 2.0
@@ -666,7 +668,6 @@ class OrderService:
             # so a Stripe failure in distribute_shipping_fee can't rollback these changes.
             db.commit()
             db.refresh(order)
-
             try:
                 borrower_name = (order.borrower.name if order.borrower and order.borrower.name else "there")
                 owner_name = (order.owner.name if order.owner and order.owner.name else "there")
@@ -966,7 +967,8 @@ class OrderService:
         now = now.replace(tzinfo=None)
         orders = db.query(Order).filter(
             Order.status == "RETURNED",
-            Order.returned_at.isnot(None)
+            Order.returned_at.isnot(None),
+            Order.deposit_status != "pending_review",
         ).all()
         
         count = 0
@@ -1037,24 +1039,23 @@ class OrderService:
         if severity not in {"none", "light", "medium", "severe"}:
             raise HTTPException(status_code=400, detail="Invalid damage_severity")
 
-        # Order lifecycle: always advance to COMPLETED. Deposit lifecycle is tracked separately.
-        order.status = "COMPLETED"
-        order.completed_at = datetime.now(timezone.utc)
-
-        # Restore book availability for borrow orders
-        if order.action_type == "borrow":
-            for order_book in order.books:
-                if order_book.book:
-                    book = db.query(Book).filter(Book.id == order_book.book_id).first()
-                    if book and book.status == "lent":
-                        book.status = "listed"
-
         # Deferred imports to avoid circular refs
         from models.deposit_evidence import DepositEvidence
         from models.deposit_audit_log import DepositAuditLog
         import json
 
         if severity == "none":
+            order.status = "COMPLETED"
+            order.completed_at = datetime.now(timezone.utc)
+
+            # Restore book availability for clean borrow returns.
+            if order.action_type == "borrow":
+                for order_book in order.books:
+                    if order_book.book:
+                        book = db.query(Book).filter(Book.id == order_book.book_id).first()
+                        if book and book.status == "lent":
+                            book.status = "listed"
+
             # Clean return → auto release
             order.deposit_status = "released"
             order.deposit_deducted_cents = 0
@@ -1140,8 +1141,66 @@ class OrderService:
                 commit=False,
             )
 
+            existing_complaint = (
+                db.query(Complaint)
+                .filter(
+                    Complaint.order_id == order.id,
+                    Complaint.type == "book-condition",
+                    Complaint.status.in_(("pending", "investigating")),
+                )
+                .first()
+            )
+            if not existing_complaint:
+                ComplaintService.create(
+                    db,
+                    complainant_id=order.owner_id,
+                    respondent_id=order.borrower_id,
+                    order_id=order.id,
+                    type="book-condition",
+                    subject=f"Damage reported on returned book ({severity})",
+                    description=(
+                        (note or "").strip()
+                        or f"The lender reported {severity} damage when confirming the returned book."
+                    ),
+                    evidence_photos=evidence_photos or [],
+                    damage_severity=severity,
+                    commit=False,
+                )
+
+            admins = db.query(User).filter(User.is_admin == True).all()
+            for admin in admins:
+                NotificationService.create(
+                    db,
+                    user_id=admin.user_id,
+                    order_id=order.id,
+                    type="ADMIN_REVIEW_REQUIRED",
+                    title="Returned Book Damage Needs Review",
+                    message=(
+                        f"Order {order.id} was returned with {severity} damage reported by the lender. "
+                        "Resolve the damage review before completing the order."
+                    ),
+                    commit=False,
+                )
+
             db.commit()
             db.refresh(order)
+            review_url = f"{settings.FRONTEND_URL.rstrip('/')}/admin/orders/{order.id}"
+            for admin in admins:
+                if not admin.email:
+                    continue
+                try:
+                    send_admin_damage_review_email(
+                        admin_email=admin.email,
+                        admin_name=admin.name,
+                        order_id=order.id,
+                        lender_name=order.owner.name if order.owner else None,
+                        borrower_name=order.borrower.name if order.borrower else None,
+                        severity=severity,
+                        note=note,
+                        review_url=review_url,
+                    )
+                except Exception as e:
+                    logger.exception("Failed to send admin damage review email for order %s: %s", order.id, e)
             # NO automatic refund — admin will trigger partial/full via /deposits/admin endpoints
 
         return True

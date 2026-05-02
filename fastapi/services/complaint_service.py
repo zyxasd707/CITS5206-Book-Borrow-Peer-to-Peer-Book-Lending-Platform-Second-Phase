@@ -1,11 +1,16 @@
 from uuid import uuid4
 from typing import List, Optional, Tuple
+import logging
 from sqlalchemy.orm import Session
 from sqlalchemy import select, or_, and_
 
 from models.complaint import Complaint, ComplaintMessage, COMPLAINT_STATUS_ENUM, COMPLAINT_TYPE_ENUM
 from models.user import User
 from services.notification_service import NotificationService
+from services.email_service import send_admin_notification_email
+from core.config import settings
+
+logger = logging.getLogger(__name__)
 
 class ComplaintService:
 
@@ -53,6 +58,10 @@ class ComplaintService:
             
             # Notify all admins about the new complaint
             admins = db.query(User).filter(User.is_admin == True).all()
+            complainant = db.query(User).filter(User.user_id == complainant_id).first()
+            sender_name = complainant.name if complainant else None
+            sender_email = complainant.email if complainant else None
+            detail_url = f"{settings.FRONTEND_URL.rstrip('/')}/complain/{c.id}"
             for admin in admins:
                 NotificationService.create(
                     db,
@@ -63,6 +72,23 @@ class ComplaintService:
                     order_id=order_id,
                     commit=True,
                 )
+                if admin.email:
+                    try:
+                        send_admin_notification_email(
+                            admin_email=admin.email,
+                            admin_name=admin.name,
+                            notification_type="Complaint",
+                            title=subject,
+                            sender_name=sender_name,
+                            sender_email=sender_email,
+                            message=(
+                                f"{sender_name or sender_email or 'A user'} submitted a "
+                                f"{type} complaint/support request. Please log in to review it."
+                            ),
+                            detail_url=detail_url,
+                        )
+                    except Exception as e:
+                        logger.exception("Failed to send admin complaint email for complaint %s: %s", c.id, e)
         return c
 
     # List (by user role)

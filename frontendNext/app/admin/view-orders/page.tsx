@@ -16,7 +16,7 @@ type OrderItem = {
     books: string[];
 };
 
-const FILTER_OPTIONS = ["ALL", "COMPLETED", "OVERDUE", "BORROWING"];
+const FILTER_OPTIONS = ["ALL", "RETURNED", "COMPLETED", "OVERDUE", "BORROWING"];
 
 function getStatusBadgeClass(status: string) {
     switch (status) {
@@ -26,6 +26,8 @@ function getStatusBadgeClass(status: string) {
             return "bg-red-100 text-red-700";
         case "BORROWING":
             return "bg-yellow-100 text-yellow-700";
+        case "RETURNED":
+            return "bg-amber-200 text-amber-900 ring-2 ring-amber-400";
         default:
             return "bg-gray-100 text-gray-700";
     }
@@ -88,6 +90,7 @@ export default function ViewOrdersPage() {
     const completedCount = orders.filter((o) => o.status === "COMPLETED").length;
     const overdueCount = orders.filter((o) => o.status === "OVERDUE").length;
     const borrowingCount = orders.filter((o) => o.status === "BORROWING").length;
+    const returnedCount = orders.filter((o) => o.status === "RETURNED").length;
 
     return (
         <div className="max-w-7xl mx-auto p-6 space-y-6">
@@ -102,10 +105,16 @@ export default function ViewOrdersPage() {
                 </Link>
             </div>
 
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-4">
                 <div className="rounded-xl border bg-white p-4">
                     <div className="text-sm text-gray-500 mb-1">Total Orders</div>
                     <div className="text-2xl font-bold">{totalOrders}</div>
+                </div>
+
+                <div className="rounded-xl border border-amber-300 bg-amber-50 p-4">
+                    <div className="text-sm text-amber-800 mb-1">Returned</div>
+                    <div className="text-2xl font-bold text-amber-900">{returnedCount}</div>
+                    <div className="text-xs text-amber-700">needs attention</div>
                 </div>
 
                 <div className="rounded-xl border bg-white p-4">
@@ -167,7 +176,14 @@ export default function ViewOrdersPage() {
                         <tbody>
                             {orders.length > 0 ? (
                                 orders.map((order) => (
-                                    <tr key={order.id} className="border-b hover:bg-gray-50 align-top">
+                                    <tr
+                                        key={order.id}
+                                        className={`border-b align-top ${
+                                            order.status === "RETURNED"
+                                                ? "bg-amber-50 hover:bg-amber-100"
+                                                : "hover:bg-gray-50"
+                                        }`}
+                                    >
                                         <td className="py-3 px-4">
                                             <Link
                                                 href={`/admin/orders/${order.id}`}
@@ -184,6 +200,11 @@ export default function ViewOrdersPage() {
                                             >
                                                 {order.status}
                                             </span>
+                                            {order.status === "RETURNED" && (
+                                                <div className="mt-1 text-xs font-medium text-amber-800">
+                                                    Awaiting admin review
+                                                </div>
+                                            )}
                                         </td>
                                         <td className="py-3 px-4">{order.action_type || "-"}</td>
                                         <td className="py-3 px-4">{order.owner_name || "-"}</td>

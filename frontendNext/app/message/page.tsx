@@ -674,14 +674,21 @@ export default function MessagesPage() {
                 </div>
 
                 <div className="flex-1 overflow-y-auto p-4 space-y-3">
-                  {selectedThread.messages?.map((msg) => {
+                  {selectedThread.messages?.map((msg, index) => {
                     const isOwn = msg.sender_email === currentUser?.email;
                     const displayName = isOwn
                       ? currentUser?.name || "You"
                       : selectedThread.user.name;
+                    const messageKey = [
+                      msg.id || "message",
+                      msg.sender_email,
+                      msg.receiver_email,
+                      msg.timestamp,
+                      index,
+                    ].join("-");
                     return (
                       <div
-                        key={msg.id}
+                        key={messageKey}
                         className={`flex ${isOwn ? "justify-end" : "justify-start"}`}
                       >
                         <div

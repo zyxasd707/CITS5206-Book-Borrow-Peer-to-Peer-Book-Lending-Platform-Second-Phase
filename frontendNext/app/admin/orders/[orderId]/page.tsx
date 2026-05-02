@@ -56,6 +56,8 @@ function statusClass(status?: string | null) {
     case "pending":
     case "PENDING_SHIPMENT":
       return "bg-yellow-100 text-yellow-700";
+    case "RETURNED":
+      return "bg-amber-200 text-amber-900 ring-2 ring-amber-400";
     case "OVERDUE":
     case "forfeited":
     case "open":
@@ -177,6 +179,7 @@ export default function AdminOrderDetailsPage() {
   }
 
   const order = detail.order;
+  const needsDamageReview = order.status === "RETURNED" && detail.deposit.status === "pending_review";
 
   return (
     <div className="max-w-7xl mx-auto p-6 space-y-6">
@@ -221,6 +224,36 @@ export default function AdminOrderDetailsPage() {
           <div className="text-2xl font-bold capitalize">{detail.deposit.status}</div>
         </div>
       </div>
+
+      {needsDamageReview && (
+        <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-4">
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div>
+              <div className="font-semibold text-yellow-900">Admin review required</div>
+              <p className="text-sm text-yellow-800">
+                The lender reported damage after return. This order must stay RETURNED until the
+                deposit review is resolved.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Link
+                href={`/admin/deposits/${order.id}`}
+                className="rounded-md bg-black px-3 py-2 text-sm text-white hover:bg-gray-800"
+              >
+                Resolve Deposit
+              </Link>
+              {detail.complaints[0] && (
+                <Link
+                  href={`/complain/${detail.complaints[0].id}`}
+                  className="rounded-md border bg-white px-3 py-2 text-sm hover:bg-gray-50"
+                >
+                  View Complaint
+                </Link>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
         <Section title="Order Summary" icon={ReceiptText}>
