@@ -39,6 +39,10 @@ class DepositAuditLog(Base):
                     nullable=False, index=True)
 
     amount_cents = Column(Integer, nullable=True)
+    # Phase B.2: rental refund amount (cents) booked for this audit entry.
+    # Populated by arbitration_service.admin_decide; consumed at borrower
+    # claim-refund time to compute the combined Stripe.Refund total.
+    rental_refunded_cents = Column(Integer, nullable=True, default=0)
     final_severity = Column(Enum(*AUDIT_SEVERITY_ENUM, name="audit_severity_enum"),
                             nullable=True)
     note = Column(Text, nullable=True)

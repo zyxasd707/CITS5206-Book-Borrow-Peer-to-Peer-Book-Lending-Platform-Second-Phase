@@ -8,7 +8,23 @@ export type Complaint = {
   orderId?: string;
   complainantId: string;
   respondentId?: string;
-  type: "book-condition" | "delivery" | "user-behavior" | "other" | "overdue" | "damage-on-return";
+  type:
+    | "book-condition"
+    | "delivery"
+    | "user-behavior"
+    | "other"
+    | "overdue"
+    | "damage-on-return"
+    // Phase B.2 — auto-dispatched complaint types (BRD §13.2 / §6.8).
+    // Backend models.complaint.COMPLAINT_TYPE_ENUM is the source of truth.
+    | "damage-on-receipt"
+    | "rental-defect"
+    | "no-return"
+    | "lender-no-ship"
+    | "package-lost"
+    | "wrong-item"
+    | "object-clean-return"
+    | "lender-reverse";
   subject: string;
   description: string;
   status: "pending" | "investigating" | "resolved" | "closed";

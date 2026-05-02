@@ -21,10 +21,20 @@ import { getComplaints, type Complaint } from "@/utils/complaints";
 
 type TabKey = "all" | "pending" | "financial" | "non-financial";
 
+// Financial = the complaint can move money. Phase B.2 added arbitration and
+// manual-refund dispatched types — both are financial. Ticket-only types
+// (user-behavior, other, object-clean-return, lender-reverse) stay non-financial.
 const FINANCIAL_TYPES: ReadonlyArray<Complaint["type"]> = [
   "book-condition",
   "overdue",
   "damage-on-return",
+  "damage-on-receipt",
+  "rental-defect",
+  "wrong-item",
+  "delivery",
+  "package-lost",
+  "lender-no-ship",
+  "no-return",
 ];
 
 const STATUS_META: Record<Complaint["status"], { label: string; className: string }> = {
@@ -41,6 +51,14 @@ const TYPE_LABELS: Record<Complaint["type"], string> = {
   other: "Other",
   overdue: "Overdue",
   "damage-on-return": "Damage on Return",
+  "damage-on-receipt": "Damage on Receipt",
+  "rental-defect": "Rental Defect",
+  "no-return": "No Return",
+  "lender-no-ship": "Lender Did Not Ship",
+  "package-lost": "Package Lost",
+  "wrong-item": "Wrong Item",
+  "object-clean-return": "Object Clean Return",
+  "lender-reverse": "Lender Reverse",
 };
 
 function isAdminLikeUser(user: { is_admin?: boolean } | null) {

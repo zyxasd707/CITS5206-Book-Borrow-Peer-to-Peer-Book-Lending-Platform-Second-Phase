@@ -5,7 +5,11 @@ from models.base import Base
 COMPLAINT_STATUS_ENUM   = ("pending", "investigating", "resolved", "closed")
 COMPLAINT_TYPE_ENUM     = (
     "book-condition", "delivery", "user-behavior", "other", "overdue",
+    # Phase B.1
     "damage-on-return",
+    # Phase B.2 (auto-dispatched complaint types — see complaint_service.create)
+    "damage-on-receipt", "rental-defect", "no-return", "lender-no-ship",
+    "package-lost", "wrong-item", "object-clean-return", "lender-reverse",
 )
 COMPLAINT_SEVERITY_ENUM = ("none", "light", "medium", "severe")
 
@@ -32,6 +36,8 @@ class Complaint(Base):
     linked_arbitration_order_id = Column(String(36), nullable=True)
     auto_action_taken           = Column(String(32), nullable=True)
     system_generated            = Column(Boolean, nullable=False, default=False, server_default="0")
+    # Phase B.2 — Stripe Refund id when a complaint resolves into a manual refund
+    linked_refund_id            = Column(String(255), nullable=True)
 
     created_at      = Column(DateTime, server_default=func.now(), nullable=False, index=True)
     updated_at      = Column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)

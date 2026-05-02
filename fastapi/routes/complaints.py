@@ -52,7 +52,14 @@ def _msg_to_read(m: ComplaintMessage) -> dict:
 class ComplaintCreateBody(BaseModel):
     orderId: Optional[str] = None
     respondentId: Optional[str] = None
-    type: Literal["book-condition","delivery","user-behavior","other","overdue"]
+    # Stays in sync with models.complaint.COMPLAINT_TYPE_ENUM.
+    # Phase B.2: B.1 added "damage-on-return"; B.2 adds 8 dispatched types.
+    type: Literal[
+        "book-condition", "delivery", "user-behavior", "other", "overdue",
+        "damage-on-return",
+        "damage-on-receipt", "rental-defect", "no-return", "lender-no-ship",
+        "package-lost", "wrong-item", "object-clean-return", "lender-reverse",
+    ]
     subject: constr(min_length=1, max_length=255)
     description: constr(min_length=1)
     evidencePhotos: Optional[List[str]] = None

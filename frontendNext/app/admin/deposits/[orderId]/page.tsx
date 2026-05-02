@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -19,16 +19,26 @@ import {
 import { getCurrentUser } from "@/utils/auth";
 import {
   getAdminDepositDetail,
-  adminReleaseDeposit,
-  adminDeductDeposit,
-  adminForfeitDeposit,
+  adminArbitrationDecide,
   adminRestrictUser,
   adminUnrestrictUser,
   DepositDetail,
   StrikeSignal,
   DepositEvidence,
   DepositAuditEntry,
+  ArbitrationDepositAction,
 } from "@/utils/deposits";
+
+// Phase B.2 — rental refund default by complaint type (BRD §6.8 step 5).
+// damage-on-receipt / wrong-item / rental-defect → toggle pre-checked.
+// damage-on-return → toggle unchecked (rental was already enjoyed).
+// Anything else (delivery / no-return / no complaint context) → unchecked,
+// admin opts in explicitly.
+const RENTAL_REFUND_DEFAULT_TYPES: ReadonlyArray<string> = [
+  "damage-on-receipt",
+  "wrong-item",
+  "rental-defect",
+];
 
 const SEVERITY_META: Record<string, { label: string; className: string }> = {
   none: { label: "None", className: "bg-gray-100 text-gray-700" },
@@ -231,7 +241,10 @@ function AuditTimeline({ entries }: { entries: DepositAuditEntry[] }) {
 export default function AdminDepositDetailPage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const orderId = params.orderId as string;
+  const complaintId = searchParams?.get("complaintId") || null;
+  const complaintType = searchParams?.get("complaintType") || null;
 
   const [loading, setLoading] = useState(true);
   const [meAdmin, setMeAdmin] = useState(false);
@@ -239,6 +252,9 @@ export default function AdminDepositDetailPage() {
   const [submitting, setSubmitting] = useState(false);
 
   const [note, setNote] = useState("");
+  const [refundRental, setRefundRental] = useState<boolean>(
+    complaintType ? RENTAL_REFUND_DEFAULT_TYPES.includes(complaintType) : false,
+  );
   const [strikePopup, setStrikePopup] = useState<StrikeSignal | null>(null);
 
   const load = useCallback(async () => {
@@ -270,20 +286,37 @@ export default function AdminDepositDetailPage() {
 
   const handleAction = async (kind: "release" | "light" | "medium" | "forfeit") => {
     if (!detail) return;
+    // Phase B.2: 4-tier UI labels mapped onto deposit_action terms used by
+    // the new arbitration endpoint.
+    const depositAction: ArbitrationDepositAction =
+      kind === "release"
+        ? "release"
+        : kind === "forfeit"
+        ? "forfeit"
+        : kind === "light"
+        ? "deduct_25"
+        : "deduct_50";
+    const rentalAction = refundRental ? "refund_full" : "keep";
+
     const label =
       kind === "release"
         ? "release the full deposit"
         : kind === "forfeit"
         ? "forfeit the full deposit"
         : `deduct ${kind === "light" ? "25%" : "50%"} for ${kind} damage`;
-    if (!confirm(`Are you sure you want to ${label}?`)) return;
+    const rentalNote = refundRental
+      ? " AND refund the full rental fee to the borrower"
+      : "";
+    if (!confirm(`Are you sure you want to ${label}${rentalNote}?`)) return;
 
     try {
       setSubmitting(true);
-      let result;
-      if (kind === "release") result = await adminReleaseDeposit(orderId, note);
-      else if (kind === "forfeit") result = await adminForfeitDeposit(orderId, note);
-      else result = await adminDeductDeposit(orderId, kind, note);
+      const result = await adminArbitrationDecide(orderId, {
+        deposit_action: depositAction,
+        rental_action: rentalAction,
+        complaint_id: complaintId,
+        note,
+      });
 
       setNote("");
       await load();
@@ -464,6 +497,11 @@ export default function AdminDepositDetailPage() {
           </h2>
           <p className="text-sm text-gray-600">
             Pick an outcome. Deduction rates are fixed: light 25%, medium 50%, severe 100% (forfeit).
+            {complaintType && (
+              <span className="ml-1 text-gray-500">
+                Complaint type: <code className="text-xs">{complaintType}</code>.
+              </span>
+            )}
           </p>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -477,6 +515,26 @@ export default function AdminDepositDetailPage() {
               className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
             />
           </div>
+
+          {/* Phase B.2 — rental refund toggle (Q4=B). Combined into the same
+              Stripe.Refund.create at borrower-claim time. */}
+          <label className="flex items-start gap-2 rounded-lg border bg-blue-50 px-3 py-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={refundRental}
+              onChange={(e) => setRefundRental(e.target.checked)}
+              className="mt-0.5"
+            />
+            <div className="text-sm">
+              <div className="font-medium text-blue-900">Also refund the full rental fee</div>
+              <div className="text-xs text-blue-800/80 mt-0.5">
+                Pre-checked for damage-on-receipt / wrong-item / rental-defect cases. Leave
+                unchecked when the borrower already enjoyed the rental (e.g. damage-on-return).
+                If checked, the rental refund will be combined with the deposit refund into a
+                single Stripe refund when the borrower claims.
+              </div>
+            </div>
+          </label>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
             <button
               disabled={submitting}

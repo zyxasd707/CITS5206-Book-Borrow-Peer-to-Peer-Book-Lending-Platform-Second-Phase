@@ -165,6 +165,17 @@ const ComplaintDetailPage: React.FC = () => {
       case "other": return "Other";
       case "overdue": return "Overdue (System)";
       case "damage-on-return": return "Damage on Return (System)";
+      // Phase B.2 — auto-dispatched types. "(System)" suffix flags rows the
+      // user did not file themselves so they're not confused by complaints
+      // that appeared on their /supports-complaints/Awaiting list.
+      case "damage-on-receipt": return "Damage on Receipt";
+      case "rental-defect": return "Rental Defect";
+      case "no-return": return "No Return (System)";
+      case "lender-no-ship": return "Lender Did Not Ship";
+      case "package-lost": return "Package Lost";
+      case "wrong-item": return "Wrong Item Received";
+      case "object-clean-return": return "Object Clean Return (System)";
+      case "lender-reverse": return "Lender Reverse";
       default: return "Unknown";
     }
   };

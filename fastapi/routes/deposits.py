@@ -26,6 +26,7 @@ from models.deposit_audit_log import DepositAuditLog
 from models.payment_gateway import Payment
 from models.complaint import Complaint, ComplaintMessage
 from services import deposit_service
+from services import arbitration_service
 from services.notification_service import NotificationService
 
 
@@ -298,6 +299,38 @@ def admin_forfeit_deposit(
     return deposit_service.admin_forfeit(db, order_id, admin, note=(body.note if body else None))
 
 
+# ----------------- Phase B.2: combined arbitration (deposit + rental) ----
+
+class AdminArbitrationDecideBody(BaseModel):
+    deposit_action: Literal["release", "deduct_25", "deduct_50", "forfeit"]
+    rental_action: Literal["keep", "refund_full"]
+    complaint_id: Optional[str] = None
+    note: Optional[str] = None
+
+
+@router.post("/admin/arbitration/{order_id}/decide")
+def admin_arbitration_decide(
+    order_id: str,
+    body: AdminArbitrationDecideBody,
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_current_admin),
+):
+    """Resolve a deposit + rental dispute in a single decision.
+
+    See services/arbitration_service.admin_decide for the contract. The legacy
+    /admin/{order_id}/release|deduct|forfeit endpoints are kept untouched for
+    backwards compatibility (deposit-only path).
+    """
+    return arbitration_service.admin_decide(
+        db, order_id,
+        deposit_action=body.deposit_action,
+        rental_action=body.rental_action,
+        admin=admin,
+        complaint_id=body.complaint_id,
+        note=body.note,
+    )
+
+
 @router.post("/admin/users/{user_id}/restrict")
 def admin_restrict_user(
     user_id: str,
@@ -395,10 +428,17 @@ def borrower_claim_refund(
 
     total_cents = deposit_service._deposit_cents(order, db)
     deducted = int(order.deposit_deducted_cents or 0)
-    to_refund = total_cents - deducted
+    deposit_refund_cents = total_cents - deducted
 
-    if to_refund <= 0:
-        # Nothing to refund (full forfeit path should never reach here, but guard anyway)
+    # Phase B.2 — pull pending rental refund booked by arbitration_service.
+    # `pending_rental_refund_cents` sums DepositAuditLog.rental_refunded_cents
+    # for this order. After we issue the combined refund we zero out the audit
+    # rows so a re-call cannot double-pay.
+    rental_refund_cents = arbitration_service.pending_rental_refund_cents(db, order)
+    combined = max(deposit_refund_cents, 0) + max(rental_refund_cents, 0)
+
+    if combined <= 0:
+        # Nothing to refund (full forfeit + keep rental path lands here)
         order.deposit_status = "partially_deducted" if deducted > 0 else "released"
         db.add(DepositAuditLog(
             order_id=order.id, actor_id=current_user.user_id, actor_role="borrower",
@@ -408,26 +448,64 @@ def borrower_claim_refund(
         return {"order_id": order.id, "refunded_cents": 0, "message": "No refund amount to process."}
 
     stripe_refund = deposit_service._stripe_refund(
-        order.payment_id, to_refund, "Borrower claimed deposit refund"
+        order.payment_id, combined,
+        "Borrower claimed combined deposit + rental refund"
+        if rental_refund_cents > 0 else "Borrower claimed deposit refund",
     )
     deposit_service._persist_refund_record(
-        db, order.payment_id, stripe_refund, "Borrower claimed deposit refund"
+        db, order.payment_id, stripe_refund,
+        "Borrower claimed combined deposit + rental refund"
+        if rental_refund_cents > 0 else "Borrower claimed deposit refund",
     )
 
     order.deposit_status = "partially_deducted" if deducted > 0 else "released"
 
+    deposit_audit_note = f"Borrower claimed deposit refund of ${deposit_refund_cents/100:.2f}."
+    if rental_refund_cents > 0:
+        deposit_audit_note += (
+            f" Combined with rental refund of ${rental_refund_cents/100:.2f} "
+            f"into a single Stripe.Refund (total ${combined/100:.2f})."
+        )
     db.add(DepositAuditLog(
         order_id=order.id, actor_id=current_user.user_id, actor_role="borrower",
-        action="release", amount_cents=to_refund,
-        note=f"Borrower claimed refund of ${to_refund/100:.2f}.",
+        action="release", amount_cents=deposit_refund_cents,
+        rental_refunded_cents=0,  # claim row itself does not book new rental refund
+        note=deposit_audit_note,
     ))
 
+    # Mark every prior rental_refunded_cents row as paid out. We rewrite their
+    # rental_refunded_cents to 0 so a re-claim cannot re-add the rental. The
+    # original arbitration audit row's note still records what was decided.
+    if rental_refund_cents > 0:
+        prior = (
+            db.query(DepositAuditLog)
+              .filter(
+                  DepositAuditLog.order_id == order.id,
+                  DepositAuditLog.rental_refunded_cents > 0,
+              )
+              .all()
+        )
+        for log in prior:
+            log.note = (log.note or "") + f" [paid out via Stripe refund {stripe_refund.get('id') or 'n/a'}]"
+            log.rental_refunded_cents = 0
+
     from services.notification_service import NotificationService
+    if rental_refund_cents > 0:
+        msg = (
+            f"Your combined refund of ${combined/100:.2f} "
+            f"(deposit ${deposit_refund_cents/100:.2f} + rental ${rental_refund_cents/100:.2f}) "
+            f"has been processed and will appear on your original payment method."
+        )
+    else:
+        msg = (
+            f"Your deposit refund of ${deposit_refund_cents/100:.2f} "
+            f"has been processed and will appear on your original payment method."
+        )
     NotificationService.create(
         db, user_id=order.borrower_id, order_id=order.id,
         type="DEPOSIT_UPDATED",
         title="Deposit Refund Processed",
-        message=f"Your deposit refund of ${to_refund/100:.2f} has been processed and will appear on your original payment method.",
+        message=msg,
         commit=False,
     )
 
@@ -436,7 +514,9 @@ def borrower_claim_refund(
     return {
         "order_id": order.id,
         "deposit_status": order.deposit_status,
-        "refunded_cents": to_refund,
+        "refunded_cents": combined,
+        "deposit_refund_cents": deposit_refund_cents,
+        "rental_refund_cents": rental_refund_cents,
         "stripe_refund": stripe_refund,
     }
 

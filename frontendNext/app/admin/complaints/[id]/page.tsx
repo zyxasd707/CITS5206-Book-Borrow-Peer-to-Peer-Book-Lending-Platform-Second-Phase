@@ -40,10 +40,18 @@ import { getAdminRefunds } from "@/utils/payments";
 import { getOrderById } from "@/utils/borrowingOrders";
 import type { User } from "@/app/types/user";
 
+// Keep this list in sync with /admin/complaints page.tsx FINANCIAL_TYPES.
 const FINANCIAL_TYPES: ReadonlyArray<Complaint["type"]> = [
   "book-condition",
   "overdue",
   "damage-on-return",
+  "damage-on-receipt",
+  "rental-defect",
+  "wrong-item",
+  "delivery",
+  "package-lost",
+  "lender-no-ship",
+  "no-return",
 ];
 
 const STATUS_META: Record<Complaint["status"], { label: string; className: string }> = {
@@ -60,6 +68,14 @@ const TYPE_LABELS: Record<Complaint["type"], string> = {
   other: "Other",
   overdue: "Overdue",
   "damage-on-return": "Damage on Return",
+  "damage-on-receipt": "Damage on Receipt",
+  "rental-defect": "Rental Defect",
+  "no-return": "No Return",
+  "lender-no-ship": "Lender Did Not Ship",
+  "package-lost": "Package Lost",
+  "wrong-item": "Wrong Item",
+  "object-clean-return": "Object Clean Return",
+  "lender-reverse": "Lender Reverse",
 };
 
 const DEPOSIT_STATUS_META: Record<string, { label: string; className: string }> = {
@@ -595,7 +611,7 @@ export default function AdminComplaintDetailPage() {
                     </div>
                   </div>
                   <Link
-                    href={`/admin/deposits/${orderId}`}
+                    href={`/admin/deposits/${orderId}?complaintId=${complaint.id}&complaintType=${complaint.type}`}
                     className="inline-flex items-center gap-1 text-sm text-blue-600 hover:underline mt-1"
                   >
                     Open deposit arbitration view <ExternalLink className="w-3 h-3" />
@@ -680,7 +696,7 @@ export default function AdminComplaintDetailPage() {
         <div className="flex flex-wrap gap-2">
           {orderId && financial && (
             <Link
-              href={`/admin/deposits/${orderId}`}
+              href={`/admin/deposits/${orderId}?complaintId=${complaint.id}&complaintType=${complaint.type}`}
               className="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 inline-flex items-center gap-1"
             >
               Open Deposit Arbitration <ExternalLink className="w-4 h-4" />
