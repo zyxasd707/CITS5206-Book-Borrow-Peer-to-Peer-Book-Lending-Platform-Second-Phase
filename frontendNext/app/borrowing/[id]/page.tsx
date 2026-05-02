@@ -915,7 +915,7 @@ export default function OrderDetailPage() {
                 variant="outline"
                 className="border-black text-black hover:bg-black hover:text-white"
                 onClick={() =>
-                  handleAuthRequired(`/complain?orderId=${order.id}`)
+                  handleAuthRequired(`/supports-complaints?orderId=${order.id}`)
                 }
               >
                 Support

@@ -2,7 +2,7 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
-import { Search, Filter, BookOpen, MoreHorizontal } from "lucide-react";
+import { Search, Filter, BookOpen, MoreHorizontal, MessageSquare } from "lucide-react";
 import Card from "../components/ui/Card";
 import Button from "../components/ui/Button";
 import CoverImg from "../components/ui/CoverImg";
@@ -11,7 +11,9 @@ import type { Book } from "@/app/types/book";
 import { getApiUrl, getCurrentUser, getToken } from "@/utils/auth";
 import { getBooks, updateBook, deleteBook } from "@/utils/books";
 import { getOrderById, getOrdersByBookId } from "@/utils/borrowingOrders";
-import type { ApiOrder } from "@/app/types/order";
+import { getMyDeposits, type DepositSummaryItem } from "@/utils/deposits";
+import { getDepositBadge } from "@/utils/depositBadge";
+import type { ApiOrder, OrderStatus } from "@/app/types/order";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
@@ -102,6 +104,7 @@ export default function LendingListPage() {
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const [trackingNumber, setTrackingNumber] = useState("");
   const [carrier, setCarrier] = useState("AUSPOST");
+  const [depositMap, setDepositMap] = useState<Record<string, DepositSummaryItem>>({});
 
   // recode which book openes ...（null means no one）
   const [openId, setOpenId] = useState<string | null>(null);
@@ -122,6 +125,20 @@ export default function LendingListPage() {
 
         const list = await getBooks({ ownerId: user.id, page: 1, pageSize: 100 });
         if (alive) setItems(list);
+
+        try {
+          // includeHeld=true: badge needs live BORROWING/PENDING_SHIPMENT rows too.
+          const deposits = await getMyDeposits(user.id, { includeHeld: true });
+          if (alive) {
+            const map: Record<string, DepositSummaryItem> = {};
+            deposits.forEach((d) => {
+              map[d.orderId] = d;
+            });
+            setDepositMap(map);
+          }
+        } catch (e) {
+          console.error("Failed to load deposit summaries:", e);
+        }
       } catch (e: any) {
         if (alive) setErr(e?.message || "loading fail");
       } finally {
@@ -395,6 +412,19 @@ export default function LendingListPage() {
                   book.status === "lent" || book.status === "sold";
                 const counterpartyLabel = book.status === "sold" ? "Buyer" : "Borrower";
                 const statusDisplay = getBookStatusDisplay(book, currentOrder);
+                const depositSummary = activeOrderId
+                  ? depositMap[activeOrderId]
+                  : undefined;
+                const financialBadge =
+                  currentOrder && depositSummary
+                    ? getDepositBadge({
+                        orderStatus: currentOrder.status as OrderStatus,
+                        depositStatus: depositSummary.depositStatus,
+                        depositCents: depositSummary.depositCents,
+                        depositDeductedCents: depositSummary.depositDeductedCents,
+                        isBorrower: false, // /lending shows the lender's view
+                      })
+                    : null;
 
                 return (
                 <Card key={book.id} className="relative overflow-visible flex gap-4 p-4 border border-gray-200 rounded-xl hover:shadow-md transition">
@@ -468,6 +498,17 @@ export default function LendingListPage() {
                         <span className={statusDisplay.className}>{statusDisplay.label}</span>
                         {statusDisplay.dateLabel && ` · ${statusDisplay.dateLabel}`}
                       </p>
+
+                      {/* Financial badge (deposit-state surfacing per BRD §6.7) */}
+                      {financialBadge && (
+                        <div className="mt-2">
+                          <span
+                            className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-semibold ${financialBadge.className}`}
+                          >
+                            {financialBadge.label}
+                          </span>
+                        </div>
+                      )}
                     </div>
 
                     {/* Button */}
@@ -555,6 +596,22 @@ export default function LendingListPage() {
                           >
                             {`Message ${counterpartyLabel}`}
                           </Button>
+
+                          {activeOrderId && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="border-gray-300 text-gray-700 hover:bg-gray-100 flex items-center gap-1"
+                              onClick={() =>
+                                router.push(
+                                  `/supports-complaints?orderId=${activeOrderId}`
+                                )
+                              }
+                            >
+                              <MessageSquare className="w-3.5 h-3.5" />
+                              Open Complaint
+                            </Button>
+                          )}
 
                           {/* due date info when book lent-out */}
 

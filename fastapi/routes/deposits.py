@@ -320,6 +320,15 @@ def admin_unrestrict_user(
 @router.get("/user/{user_id}")
 def list_my_deposits(
     user_id: str,
+    include_held: bool = Query(
+        False,
+        description=(
+            "When true, also return orders whose deposit is still 'held' "
+            "(i.e. live borrowing flow, no admin action yet). The legacy "
+            "/deposits page leaves this off; the /borrowing and /lending "
+            "row badges (Phase A.3) need it on."
+        ),
+    ),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -330,13 +339,12 @@ def list_my_deposits(
     if not current_user.is_admin and current_user.user_id != user_id:
         raise HTTPException(status_code=403, detail="Forbidden")
 
-    orders = (
-        db.query(Order)
-        .filter(or_(Order.borrower_id == user_id, Order.owner_id == user_id))
-        .filter(Order.deposit_status != "held")
-        .order_by(Order.updated_at.desc())
-        .all()
+    q = db.query(Order).filter(
+        or_(Order.borrower_id == user_id, Order.owner_id == user_id)
     )
+    if not include_held:
+        q = q.filter(Order.deposit_status != "held")
+    orders = q.order_by(Order.updated_at.desc()).all()
     return {
         "items": [
             {
