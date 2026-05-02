@@ -154,7 +154,7 @@ def add_message(
     """
 
     c = ComplaintService.get(db, complaint_id)
-    if user.user_id not in (c.complainant_id, c.respondent_id) and user.user_id != "admin":  # TODO: Change the admin to a proper judging logic
+    if user.user_id not in (c.complainant_id, c.respondent_id) and not user.is_admin:
         raise HTTPException(status_code=403, detail="Forbidden")
     m = ComplaintService.add_message(
         db, complaint_id=complaint_id, sender_id=user.user_id, body=body.body
