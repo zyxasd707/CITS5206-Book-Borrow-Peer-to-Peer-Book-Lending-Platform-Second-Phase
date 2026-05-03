@@ -11,6 +11,7 @@ BookHive-to-BookBorrow migration.
 - Public URL: `https://www.bookborrow.org`
 - Database: Docker MySQL container `mysql-db`, database `BookBorrow`
 - Database volume: `bookborrow_mysql_data`
+- Uploaded media volume: `bookborrow_media`
 
 ## Standard Deployment
 
@@ -18,6 +19,8 @@ BookHive-to-BookBorrow migration.
 cd /root/capstone15/Bookborrow
 git fetch origin
 git pull --ff-only origin main
+# Run this once before the first deployment that introduces bookborrow_media.
+bash scripts/vps/migrate_media_volume.sh
 docker compose -f compose.yaml build
 docker compose -f compose.yaml up -d
 docker compose -f compose.yaml exec backend alembic -c alembic.ini upgrade head
@@ -26,6 +29,8 @@ docker compose -f compose.yaml ps
 
 Run migrations after the containers are healthy and before accepting traffic
 for schema-dependent changes.
+After the media volume has been introduced once, `migrate_media_volume.sh`
+does not need to be part of every standard deployment.
 
 ## Production Smoke Checks
 
@@ -92,23 +97,45 @@ Example cron entry:
 
 ## Backups
 
-Manual backup:
+Database backup:
 
 ```bash
 cd /root/capstone15/Bookborrow
 bash scripts/vps/backup_db.sh
 ```
 
+Media backup:
+
+```bash
+cd /root/capstone15/Bookborrow
+bash scripts/vps/backup_media.sh
+```
+
 Recommended daily cron:
 
 ```cron
 15 18 * * * cd /root/capstone15/Bookborrow && bash scripts/vps/backup_db.sh >> /var/log/bookborrow-backup.log 2>&1
+25 18 * * * cd /root/capstone15/Bookborrow && bash scripts/vps/backup_media.sh >> /var/log/bookborrow-media-backup.log 2>&1
 ```
 
 The default backup directory is:
 
 ```text
 /root/capstone15/backups/bookborrow-db
+/root/capstone15/backups/bookborrow-media
+```
+
+## Media Volume Migration
+
+Uploaded files are stored under `/app/media` and served through `/media/...`.
+Before the first deployment that introduces the `bookborrow_media` Docker
+volume, copy the current container media files into the named volume:
+
+```bash
+cd /root/capstone15/Bookborrow
+bash scripts/vps/migrate_media_volume.sh
+docker compose -f compose.yaml up -d backend nginx
+curl -k -I https://www.bookborrow.org/media/<known-upload-path>
 ```
 
 ## Restore Drill

@@ -22,6 +22,12 @@ health: ## Run production health checks
 backup-db: ## Create a Docker MySQL database backup
 	bash scripts/vps/backup_db.sh
 
+backup-media: ## Create a Docker media volume backup
+	bash scripts/vps/backup_media.sh
+
+migrate-media: ## Copy current backend /app/media into the persistent media volume
+	bash scripts/vps/migrate_media_volume.sh
+
 rollback: ## Roll back to a git ref and rebuild production containers (usage: make rollback REF=<ref>)
 	bash scripts/vps/rollback.sh $(REF)
 
