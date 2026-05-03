@@ -36,5 +36,9 @@ class DepositEvidence(Base):
 
     submitted_at = Column(DateTime, server_default=func.now(), nullable=False, index=True)
 
+    # Phase B.1 — back-link to the system_generated Complaint that wraps this evidence.
+    # Nullable: legacy rows pre-B.1 and counter-evidence rows when linkage is unavailable.
+    source_complaint_id = Column(String(36), nullable=True)
+
     order = relationship("Order", foreign_keys=[order_id])
     submitter = relationship("User", foreign_keys=[submitter_id])

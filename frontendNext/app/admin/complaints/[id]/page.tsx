@@ -3,13 +3,14 @@
 // /admin/complaints/[id] — Phase A.4 master arbitration detail.
 // Five sections: Related Order, Both-Side Evidence, Linked Arbitration/Refund,
 // Admin Decision Panel, Audit Trail. All financial actions delegate to
-// /admin/deposits/[orderId] (PR #97 model — borrower must claim refund there).
+// /admin/deposits/[orderId]; borrowers must explicitly claim their refund there.
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import {
   AlertTriangle,
+  Archive,
   ArrowLeft,
   CheckCircle2,
   Clock3,
@@ -24,6 +25,7 @@ import {
 } from "lucide-react";
 
 import { getCurrentUser, getUserById } from "@/utils/auth";
+import { formatLocalDateTime, parseAsUtc } from "@/utils/datetime";
 import {
   addComplaintMessage,
   getComplaintDetail,
@@ -40,7 +42,19 @@ import { getAdminRefunds } from "@/utils/payments";
 import { getOrderById } from "@/utils/borrowingOrders";
 import type { User } from "@/app/types/user";
 
-const FINANCIAL_TYPES: ReadonlyArray<Complaint["type"]> = ["book-condition", "overdue"];
+// Keep this list in sync with /admin/complaints page.tsx FINANCIAL_TYPES.
+const FINANCIAL_TYPES: ReadonlyArray<Complaint["type"]> = [
+  "book-condition",
+  "overdue",
+  "damage-on-return",
+  "damage-on-receipt",
+  "rental-defect",
+  "wrong-item",
+  "delivery",
+  "package-lost",
+  "lender-no-ship",
+  "no-return",
+];
 
 const STATUS_META: Record<Complaint["status"], { label: string; className: string }> = {
   pending: { label: "Pending", className: "bg-yellow-100 text-yellow-700" },
@@ -55,6 +69,15 @@ const TYPE_LABELS: Record<Complaint["type"], string> = {
   "user-behavior": "User Behavior",
   other: "Other",
   overdue: "Overdue",
+  "damage-on-return": "Damage on Return",
+  "damage-on-receipt": "Damage on Receipt",
+  "rental-defect": "Rental Defect",
+  "no-return": "No Return",
+  "lender-no-ship": "Lender Did Not Ship",
+  "package-lost": "Package Lost",
+  "wrong-item": "Wrong Item",
+  "object-clean-return": "Object Clean Return",
+  "lender-reverse": "Lender Reverse",
 };
 
 const DEPOSIT_STATUS_META: Record<string, { label: string; className: string }> = {
@@ -84,7 +107,7 @@ const ACTION_LABELS: Record<DepositAuditEntry["action"], string> = {
 };
 
 const fmtA = (cents: number) => `A$${(cents / 100).toFixed(2)}`;
-const fmtDate = (v?: string | null) => (v ? new Date(v).toLocaleString() : "—");
+const fmtDate = (v?: string | null) => formatLocalDateTime(v);
 
 function isAdminLikeUser(user: { is_admin?: boolean } | null) {
   return Boolean(user?.is_admin);
@@ -237,7 +260,7 @@ export default function AdminComplaintDetailPage() {
 
     items.push({
       key: `complaint-created-${complaint.id}`,
-      at: new Date(complaint.createdAt).getTime() || 0,
+      at: parseAsUtc(complaint.createdAt).getTime() || 0,
       iconKey: "complaint",
       actorRole: roleFor(complaint.complainantId),
       actorName: userLabel(complaint.complainantId),
@@ -248,7 +271,7 @@ export default function AdminComplaintDetailPage() {
     messages.forEach((m) => {
       items.push({
         key: `msg-${m.id}`,
-        at: new Date(m.createdAt).getTime() || 0,
+        at: parseAsUtc(m.createdAt).getTime() || 0,
         iconKey: "message",
         actorRole: roleFor(m.senderId),
         actorName: userLabel(m.senderId),
@@ -270,7 +293,7 @@ export default function AdminComplaintDetailPage() {
           : "restrict";
       items.push({
         key: `audit-${a.id}`,
-        at: new Date(a.createdAt || "").getTime() || 0,
+        at: a.createdAt ? parseAsUtc(a.createdAt).getTime() || 0 : 0,
         iconKey,
         actorRole: a.actorRole,
         actorName: a.actorId ? userLabel(a.actorId) : a.actorRole,
@@ -288,7 +311,7 @@ export default function AdminComplaintDetailPage() {
     if (complaint.adminResponse && (complaint.status === "resolved" || complaint.status === "closed")) {
       items.push({
         key: `complaint-resolution-${complaint.id}`,
-        at: new Date(complaint.updatedAt).getTime() || 0,
+        at: parseAsUtc(complaint.updatedAt).getTime() || 0,
         iconKey: complaint.status === "resolved" ? "release" : "system",
         actorRole: "admin",
         actorName: "Admin",
@@ -432,6 +455,28 @@ export default function AdminComplaintDetailPage() {
           </button>
         </div>
       </div>
+
+      {/* Phase B.4 — protective banner for backfilled complaints. Tells the
+          reviewer this row was synthesized from a pre-Phase-B DepositEvidence
+          and didn't go through the live B.1+ flow, so the audit trail and
+          notifications won't look like a fresh case. */}
+      {complaint.migratedFromDepositEvidence && (
+        <div className="rounded-xl border border-slate-300 bg-slate-50 p-4 flex gap-3 text-sm text-slate-700">
+          <Archive className="w-5 h-5 mt-0.5 text-slate-500 flex-shrink-0" />
+          <div className="space-y-1">
+            <div className="font-semibold text-slate-900">
+              Migrated from pre-Phase-B deposit evidence
+            </div>
+            <div>
+              This case was generated by the Phase B.4 backfill from a legacy
+              DepositEvidence row. Money state on the order is already final —
+              treat this view as historical context, not an open arbitration.
+              The audit trail and notifications below may be sparse compared to
+              cases filed under the current workflow.
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Section 1: Related Order */}
       <section className="rounded-xl border bg-white p-5 space-y-3">
@@ -590,7 +635,7 @@ export default function AdminComplaintDetailPage() {
                     </div>
                   </div>
                   <Link
-                    href={`/admin/deposits/${orderId}`}
+                    href={`/admin/deposits/${orderId}?complaintId=${complaint.id}&complaintType=${complaint.type}`}
                     className="inline-flex items-center gap-1 text-sm text-blue-600 hover:underline mt-1"
                   >
                     Open deposit arbitration view <ExternalLink className="w-3 h-3" />
@@ -641,22 +686,21 @@ export default function AdminComplaintDetailPage() {
           <ShieldCheck className="w-5 h-5" /> 4 · Admin Decision
         </h2>
 
-        {/* PR #97 model tooltip — always show on financial cases */}
+        {/* Educational tooltip — always show on financial cases */}
         {financial && orderId && (
           <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 flex gap-2">
             <Info className="w-4 h-4 mt-0.5 shrink-0" />
             <div>
-              <div className="font-medium">PR #97 deposit model — read before deciding</div>
-              <ul className="list-disc list-inside text-xs mt-1 space-y-0.5">
+              <div className="font-medium">Before you decide — how your call moves money</div>
+              <ul className="list-disc list-inside text-xs mt-1 space-y-1">
                 <li>
-                  <b>Release</b> / <b>Deduct (light/medium)</b>: deposit moves to{" "}
-                  <code className="bg-white px-1 rounded">refund_ready</code>. The borrower must
-                  click <b>Claim My Refund</b> on their <code>/deposits</code> page before money
-                  actually moves. Do not mark this complaint resolved until that happens.
+                  <b>Release</b> / <b>Deduct (light/medium)</b>: the borrower must claim their
+                  refund before money actually moves. Wait for them to claim before marking this
+                  resolved.
                 </li>
                 <li>
-                  <b>Forfeit</b>: terminal — full deposit transfers to lender immediately, no
-                  borrower action needed. You can resolve the complaint right after.
+                  <b>Forfeit</b>: money transfers to the lender immediately &mdash; no borrower
+                  action needed. You can mark resolved right away.
                 </li>
               </ul>
             </div>
@@ -671,26 +715,17 @@ export default function AdminComplaintDetailPage() {
           </div>
         )}
 
-        {/* Primary CTA: drill into deposit arbitration view */}
-        {orderId && financial && (
-          <div className="flex flex-wrap gap-2">
+        {/* Action row — drill-in CTA + status controls share the same row;
+            wraps to multiple lines on narrow screens. */}
+        <div className="flex flex-wrap gap-2">
+          {orderId && financial && (
             <Link
-              href={`/admin/deposits/${orderId}`}
+              href={`/admin/deposits/${orderId}?complaintId=${complaint.id}&complaintType=${complaint.type}`}
               className="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 inline-flex items-center gap-1"
             >
               Open Deposit Arbitration <ExternalLink className="w-4 h-4" />
             </Link>
-            <button
-              onClick={() => router.push(`/admin/deposits/${orderId}`)}
-              className="px-3 py-2 rounded-lg border text-sm hover:bg-gray-50"
-            >
-              Release / Deduct / Forfeit →
-            </button>
-          </div>
-        )}
-
-        {/* Status-update controls */}
-        <div className="flex flex-wrap gap-2 pt-2">
+          )}
           {complaint.status === "pending" && (
             <button
               disabled={submitting}
@@ -778,7 +813,7 @@ export default function AdminComplaintDetailPage() {
                   <span className="text-xs text-gray-500">{item.actorName}</span>
                   <span className="text-xs text-gray-400">·</span>
                   <span className="text-xs text-gray-400">
-                    {item.at ? new Date(item.at).toLocaleString() : "—"}
+                    {item.at ? formatLocalDateTime(new Date(item.at).toISOString()) : "—"}
                   </span>
                 </div>
                 {item.detail && (

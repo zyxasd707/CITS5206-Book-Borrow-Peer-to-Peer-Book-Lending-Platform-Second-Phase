@@ -24,6 +24,8 @@ services:
       - "8000:8000"          # Host:Container
     env_file:
       - ./.env
+    volumes:
+      - bookborrow_media:/app/media
     depends_on:
       - db
     networks:
@@ -71,6 +73,8 @@ services:
 volumes:
   mysql_data:
     name: bookborrow_mysql_data
+  bookborrow_media:
+    name: bookborrow_media
 
 networks:
   mynetwork:

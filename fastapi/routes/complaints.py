@@ -35,6 +35,7 @@ def _to_read(c: Complaint) -> dict:
         "adminResponse": c.admin_response,
         "evidencePhotos": evidence_photos,
         "damageSeverity": c.damage_severity,
+        "migratedFromDepositEvidence": bool(getattr(c, "migrated_from_deposit_evidence", False)),
         "createdAt": c.created_at,
         "updatedAt": c.updated_at,
     }
@@ -52,7 +53,14 @@ def _msg_to_read(m: ComplaintMessage) -> dict:
 class ComplaintCreateBody(BaseModel):
     orderId: Optional[str] = None
     respondentId: Optional[str] = None
-    type: Literal["book-condition","delivery","user-behavior","other","overdue"]
+    # Stays in sync with models.complaint.COMPLAINT_TYPE_ENUM.
+    # Phase B.2: B.1 added "damage-on-return"; B.2 adds 8 dispatched types.
+    type: Literal[
+        "book-condition", "delivery", "user-behavior", "other", "overdue",
+        "damage-on-return",
+        "damage-on-receipt", "rental-defect", "no-return", "lender-no-ship",
+        "package-lost", "wrong-item", "object-clean-return", "lender-reverse",
+    ]
     subject: constr(min_length=1, max_length=255)
     description: constr(min_length=1)
     evidencePhotos: Optional[List[str]] = None
@@ -154,7 +162,7 @@ def add_message(
     """
 
     c = ComplaintService.get(db, complaint_id)
-    if user.user_id not in (c.complainant_id, c.respondent_id) and user.user_id != "admin":  # TODO: Change the admin to a proper judging logic
+    if user.user_id not in (c.complainant_id, c.respondent_id) and not user.is_admin:
         raise HTTPException(status_code=403, detail="Forbidden")
     m = ComplaintService.add_message(
         db, complaint_id=complaint_id, sender_id=user.user_id, body=body.body

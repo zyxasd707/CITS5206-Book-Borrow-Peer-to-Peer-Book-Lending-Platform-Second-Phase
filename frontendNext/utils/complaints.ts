@@ -8,16 +8,36 @@ export type Complaint = {
   orderId?: string;
   complainantId: string;
   respondentId?: string;
-  type: "book-condition" | "delivery" | "user-behavior" | "other" | "overdue";
+  type:
+    | "book-condition"
+    | "delivery"
+    | "user-behavior"
+    | "other"
+    | "overdue"
+    | "damage-on-return"
+    // Phase B.2 — auto-dispatched complaint types (BRD §13.2 / §6.8).
+    // Backend models.complaint.COMPLAINT_TYPE_ENUM is the source of truth.
+    | "damage-on-receipt"
+    | "rental-defect"
+    | "no-return"
+    | "lender-no-ship"
+    | "package-lost"
+    | "wrong-item"
+    | "object-clean-return"
+    | "lender-reverse";
   subject: string;
   description: string;
   status: "pending" | "investigating" | "resolved" | "closed";
   adminResponse?: string;
   evidencePhotos?: string[] | null;
   damageSeverity?: "none" | "light" | "medium" | "severe" | null;
+  // Phase B.4 — TRUE iff this complaint was synthesized by the deposit-evidence
+  // backfill (admin UI shows a protective banner so the reviewer knows the row
+  // came from pre-Phase-B data and didn't go through the live workflow).
+  migratedFromDepositEvidence?: boolean;
   createdAt: string;
   updatedAt: string;
-  
+
 };
 
 export type Message = {

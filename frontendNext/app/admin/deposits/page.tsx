@@ -19,6 +19,7 @@ import {
   DepositSummaryItem,
   AdminListResponse,
 } from "@/utils/deposits";
+import { formatLocalDateTime } from "@/utils/datetime";
 
 const DEPOSIT_STATUS_META: Record<
   string,
@@ -48,12 +49,7 @@ function fmtAmount(cents: number) {
 }
 
 function fmtDate(v: string | null) {
-  if (!v) return "-";
-  try {
-    return new Date(v).toLocaleString();
-  } catch {
-    return "-";
-  }
+  return formatLocalDateTime(v, "-");
 }
 
 export default function AdminDepositsPage() {

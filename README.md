@@ -370,6 +370,8 @@ make logs
 make migrate
 make health
 make backup-db
+make backup-media
+make migrate-media
 ```
 
 ### Development

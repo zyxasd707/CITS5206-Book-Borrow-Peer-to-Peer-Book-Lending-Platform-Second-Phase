@@ -668,6 +668,7 @@ class OrderService:
             # so a Stripe failure in distribute_shipping_fee can't rollback these changes.
             db.commit()
             db.refresh(order)
+
             try:
                 borrower_name = (order.borrower.name if order.borrower and order.borrower.name else "there")
                 owner_name = (order.owner.name if order.owner and order.owner.name else "there")
@@ -967,8 +968,7 @@ class OrderService:
         now = now.replace(tzinfo=None)
         orders = db.query(Order).filter(
             Order.status == "RETURNED",
-            Order.returned_at.isnot(None),
-            Order.deposit_status != "pending_review",
+            Order.returned_at.isnot(None)
         ).all()
         
         count = 0
@@ -1039,23 +1039,25 @@ class OrderService:
         if severity not in {"none", "light", "medium", "severe"}:
             raise HTTPException(status_code=400, detail="Invalid damage_severity")
 
+        # Order lifecycle: always advance to COMPLETED. Deposit lifecycle is tracked separately.
+        order.status = "COMPLETED"
+        order.completed_at = datetime.now(timezone.utc)
+
+        # Restore book availability for borrow orders
+        if order.action_type == "borrow":
+            for order_book in order.books:
+                if order_book.book:
+                    book = db.query(Book).filter(Book.id == order_book.book_id).first()
+                    if book and book.status == "lent":
+                        book.status = "listed"
+
         # Deferred imports to avoid circular refs
         from models.deposit_evidence import DepositEvidence
         from models.deposit_audit_log import DepositAuditLog
         import json
+        import uuid
 
         if severity == "none":
-            order.status = "COMPLETED"
-            order.completed_at = datetime.now(timezone.utc)
-
-            # Restore book availability for clean borrow returns.
-            if order.action_type == "borrow":
-                for order_book in order.books:
-                    if order_book.book:
-                        book = db.query(Book).filter(Book.id == order_book.book_id).first()
-                        if book and book.status == "lent":
-                            book.status = "listed"
-
             # Clean return → auto release
             order.deposit_status = "released"
             order.deposit_deducted_cents = 0
@@ -1102,6 +1104,13 @@ class OrderService:
             order.deposit_status = "pending_review"
             order.damage_severity_final = None  # cleared until admin rules
 
+            # Phase B.1: also wrap the lender's report in a system_generated
+            # Complaint so the admin master arbitration view (Phase A.4) and
+            # /admin/complaints can surface it through the unified Complaint
+            # source-of-truth. Pre-allocate the complaint id so we can back-link
+            # the DepositEvidence row in the same flush.
+            complaint_id = str(uuid.uuid4())
+
             db.add(DepositEvidence(
                 order_id=order.id,
                 submitter_id=order.owner_id,
@@ -1109,6 +1118,7 @@ class OrderService:
                 photos=json.dumps(evidence_photos or []),
                 claimed_severity=severity,
                 note=note,
+                source_complaint_id=complaint_id,
             ))
             db.add(DepositAuditLog(
                 order_id=order.id,
@@ -1119,6 +1129,29 @@ class OrderService:
                 note=(note or "").strip() or f"Lender reported damage: {severity}",
             ))
 
+            severity_label = severity.capitalize()
+            complaint_description = (note or "").strip() or (
+                f"Lender reported {severity} damage on the returned book. "
+                "Awaiting admin arbitration of the deposit deduction."
+            )
+            db.add(Complaint(
+                id=complaint_id,
+                order_id=order.id,
+                complainant_id=order.owner_id,
+                respondent_id=order.borrower_id,
+                type="damage-on-return",
+                subject=f"{severity_label} damage reported on returned book",
+                description=complaint_description,
+                status="pending",
+                damage_severity=severity,
+                evidence_photos=json.dumps(evidence_photos or []),
+                linked_arbitration_order_id=order.id,
+                auto_action_taken="deposit_pending_review",
+                system_generated=True,
+            ))
+
+            # Existing DEPOSIT_UPDATED notifications stay so Bell history
+            # remains backwards-compatible with the pre-B.1 flow.
             NotificationService.create(
                 db, user_id=order.borrower_id, order_id=order.id,
                 type="DEPOSIT_UPDATED",
@@ -1141,17 +1174,30 @@ class OrderService:
                 commit=False,
             )
 
-            admins = db.query(User).filter(User.is_admin == True).all()
+            # Phase B.1 — COMPLAINT_CREATED notifications. Borrower needs the
+            # signal even though they already received DEPOSIT_UPDATED, because
+            # /activity Awaiting My Action surfaces complaints separately.
+            # All admins are notified — closes Hotfix #1 (admin notification
+            # blind spot, BRD §15.1.1).
+            NotificationService.create(
+                db, user_id=order.borrower_id, order_id=order.id,
+                type="COMPLAINT_CREATED",
+                title="Damage Claim Filed Against You",
+                message=(
+                    f"The lender filed a {severity} damage complaint on the returned book. "
+                    "Upload counter-evidence within 7 days if you disagree."
+                ),
+                commit=False,
+            )
+            admins = db.query(User).filter(User.is_admin == True).all()  # noqa: E712
             for admin in admins:
                 NotificationService.create(
-                    db,
-                    user_id=admin.user_id,
-                    order_id=order.id,
-                    type="ADMIN_REVIEW_REQUIRED",
-                    title="Returned Book Damage Needs Review",
+                    db, user_id=admin.user_id, order_id=order.id,
+                    type="COMPLAINT_CREATED",
+                    title="New Damage Complaint Awaiting Arbitration",
                     message=(
-                        f"Order {order.id} was returned with {severity} damage reported by the lender. "
-                        "Resolve the damage review before completing the order."
+                        f"Lender filed a {severity} damage complaint (order {order.id}). "
+                        "Review evidence and decide the deposit deduction."
                     ),
                     commit=False,
                 )
@@ -1174,7 +1220,11 @@ class OrderService:
                         review_url=review_url,
                     )
                 except Exception as e:
-                    logger.exception("Failed to send admin damage review email for order %s: %s", order.id, e)
+                    logger.exception(
+                        "Failed to send admin damage review email for order %s: %s",
+                        order.id,
+                        e,
+                    )
             # NO automatic refund — admin will trigger partial/full via /deposits/admin endpoints
 
         return True

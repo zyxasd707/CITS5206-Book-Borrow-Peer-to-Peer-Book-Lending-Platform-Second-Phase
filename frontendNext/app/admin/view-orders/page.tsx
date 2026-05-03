@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { getApiUrl } from "@/utils/auth";
+import { formatLocalDate } from "@/utils/datetime";
 
 type OrderItem = {
     id: string;
@@ -226,14 +227,10 @@ export default function ViewOrdersPage() {
                                             )}
                                         </td>
                                         <td className="py-3 px-4">
-                                            {order.created_at
-                                                ? new Date(order.created_at).toLocaleDateString()
-                                                : "-"}
+                                            {formatLocalDate(order.created_at, "-")}
                                         </td>
                                         <td className="py-3 px-4">
-                                            {order.due_at
-                                                ? new Date(order.due_at).toLocaleDateString()
-                                                : "-"}
+                                            {formatLocalDate(order.due_at, "-")}
                                         </td>
                                         <td className="py-3 px-4">
                                             ${Number(order.total_paid_amount || 0).toFixed(2)}

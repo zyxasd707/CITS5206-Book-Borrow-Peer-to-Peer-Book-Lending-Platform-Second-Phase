@@ -10,6 +10,7 @@ import {
   Truck,
 } from "lucide-react";
 import { getCurrentUser } from "@/utils/auth";
+import { formatLocalDate } from "@/utils/datetime";
 import {
   getShippingMetrics,
   ShippingMetricsData,
@@ -41,8 +42,7 @@ function isAdminLikeUser(user: { is_admin?: boolean } | null) {
 }
 
 function formatDate(value: string | null) {
-  if (!value) return "-";
-  return new Date(value).toLocaleDateString();
+  return formatLocalDate(value, "-");
 }
 
 function statusClass(status: string | null) {

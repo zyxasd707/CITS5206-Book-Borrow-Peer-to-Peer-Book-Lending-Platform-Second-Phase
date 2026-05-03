@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { getCurrentUser } from "@/utils/auth";
 import { getAdminRefunds, manualAdminRefund } from "@/utils/payments";
+import { formatLocalDateTime } from "@/utils/datetime";
 
 type RefundStatus = "succeeded" | "pending" | "failed";
 
@@ -203,14 +204,7 @@ export default function AdminRefundsPage() {
     return `${sym}${dollars}`;
   };
 
-  const fmtDate = (v?: string | null) => {
-    if (!v) return "-";
-    try {
-      return new Date(v).toLocaleString();
-    } catch {
-      return "-";
-    }
-  };
+  const fmtDate = (v?: string | null) => formatLocalDateTime(v, "-");
 
   if (!meAdmin && !loading) {
     return (

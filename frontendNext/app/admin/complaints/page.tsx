@@ -18,10 +18,25 @@ import {
 } from "lucide-react";
 import { getCurrentUser } from "@/utils/auth";
 import { getComplaints, type Complaint } from "@/utils/complaints";
+import { formatLocalDateTime, parseAsUtc } from "@/utils/datetime";
 
 type TabKey = "all" | "pending" | "financial" | "non-financial";
 
-const FINANCIAL_TYPES: ReadonlyArray<Complaint["type"]> = ["book-condition", "overdue"];
+// Financial = the complaint can move money. Phase B.2 added arbitration and
+// manual-refund dispatched types — both are financial. Ticket-only types
+// (user-behavior, other, object-clean-return, lender-reverse) stay non-financial.
+const FINANCIAL_TYPES: ReadonlyArray<Complaint["type"]> = [
+  "book-condition",
+  "overdue",
+  "damage-on-return",
+  "damage-on-receipt",
+  "rental-defect",
+  "wrong-item",
+  "delivery",
+  "package-lost",
+  "lender-no-ship",
+  "no-return",
+];
 
 const STATUS_META: Record<Complaint["status"], { label: string; className: string }> = {
   pending: { label: "Pending", className: "bg-yellow-100 text-yellow-700" },
@@ -36,6 +51,15 @@ const TYPE_LABELS: Record<Complaint["type"], string> = {
   "user-behavior": "User Behavior",
   other: "Other",
   overdue: "Overdue",
+  "damage-on-return": "Damage on Return",
+  "damage-on-receipt": "Damage on Receipt",
+  "rental-defect": "Rental Defect",
+  "no-return": "No Return",
+  "lender-no-ship": "Lender Did Not Ship",
+  "package-lost": "Package Lost",
+  "wrong-item": "Wrong Item",
+  "object-clean-return": "Object Clean Return",
+  "lender-reverse": "Lender Reverse",
 };
 
 function isAdminLikeUser(user: { is_admin?: boolean } | null) {
@@ -96,7 +120,7 @@ export default function AdminComplaintsPage() {
     const openFinancial = complaints.filter((c) => isOpen(c) && isFinancial(c)).length;
     const resolved30d = complaints.filter((c) => {
       if (c.status !== "resolved" && c.status !== "closed") return false;
-      const t = c.updatedAt ? new Date(c.updatedAt).getTime() : 0;
+      const t = c.updatedAt ? parseAsUtc(c.updatedAt).getTime() : 0;
       return now - t <= THIRTY_DAYS_MS;
     }).length;
     return { pending, investigating, openFinancial, resolved30d };
@@ -307,10 +331,10 @@ export default function AdminComplaintsPage() {
                         {c.orderId ? c.orderId.slice(0, 12) + "…" : "—"}
                       </td>
                       <td className="px-4 py-3 text-xs text-gray-500">
-                        {new Date(c.createdAt).toLocaleString()}
+                        {formatLocalDateTime(c.createdAt)}
                       </td>
                       <td className="px-4 py-3 text-xs text-gray-500">
-                        {new Date(c.updatedAt).toLocaleString()}
+                        {formatLocalDateTime(c.updatedAt)}
                       </td>
                     </tr>
                   );

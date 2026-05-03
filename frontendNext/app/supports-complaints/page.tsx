@@ -23,6 +23,7 @@ import {
   type Complaint,
   type CreateComplaintRequest
 } from "@/utils/complaints";
+import { formatLocalDate } from "@/utils/datetime";
 import { getOrderById } from "@/utils/borrowingOrders";
 import { createPaymentDispute } from "@/utils/payments";
 import { uploadFile } from "@/utils/books";
@@ -486,7 +487,7 @@ const ComplainPage: React.FC = () => {
                           : "N/A"}
                       </p>
 
-                      <p>Created: {new Date(complaint.createdAt).toLocaleDateString()}</p>
+                      <p>Created: {formatLocalDate(complaint.createdAt)}</p>
                     </div>
                   </div>
                 </Card>

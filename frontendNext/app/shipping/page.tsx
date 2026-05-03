@@ -6,10 +6,11 @@ import { Package, Truck, CheckCircle } from "lucide-react";
 import Card from "@/app/components/ui/Card";
 import { getCurrentUser, isAuthenticated } from "@/utils/auth";
 import { getUserShipments, type TrackingNumberItem } from "@/utils/shipping";
+import { formatLocalDateTime } from "@/utils/datetime";
 import clsx from "clsx";
 
 const formatDateTime = (value?: string | null) =>
-  value ? new Date(value).toLocaleString("en-AU") : "—";
+  formatLocalDateTime(value);
 
 const trackingHref = (item: TrackingNumberItem): string | null => {
   if (!item.tracking_number) return null;
