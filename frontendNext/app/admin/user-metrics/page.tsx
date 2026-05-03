@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { BookMarked, MapPin, UserPlus, Users } from "lucide-react";
+import { BookMarked, CalendarDays, Filter, MapPin, UserPlus, Users } from "lucide-react";
 import { getApiUrl, getToken } from "@/utils/auth";
 import { formatLocalDate } from "@/utils/datetime";
 
@@ -25,6 +25,44 @@ type SignupUser = {
     state: string | null;
     country: string | null;
 };
+
+function DistributionPanel({
+    title,
+    emptyLabel,
+    items,
+}: {
+    title: string;
+    emptyLabel: string;
+    items: { label: string; count: number }[];
+}) {
+    const max = Math.max(...items.map((item) => item.count), 0);
+
+    return (
+        <section className="rounded-lg border bg-white p-5">
+            <h2 className="text-base font-semibold text-gray-950">{title}</h2>
+            <div className="mt-4 space-y-4">
+                {items.length > 0 ? (
+                    items.map((item) => {
+                        const width = max > 0 ? `${Math.max((item.count / max) * 100, 6)}%` : "0%";
+                        return (
+                            <div key={item.label} className="space-y-1.5">
+                                <div className="flex items-center justify-between gap-3 text-sm">
+                                    <span className="truncate text-gray-700">{item.label}</span>
+                                    <span className="font-semibold text-gray-950">{item.count}</span>
+                                </div>
+                                <div className="h-2 rounded-full bg-gray-100">
+                                    <div className="h-2 rounded-full bg-gray-900" style={{ width }} />
+                                </div>
+                            </div>
+                        );
+                    })
+                ) : (
+                    <p className="text-sm text-gray-500">{emptyLabel}</p>
+                )}
+            </div>
+        </section>
+    );
+}
 
 export default function UserMetricsPage() {
     const [metrics, setMetrics] = useState<UserMetricsData>({
@@ -159,170 +197,191 @@ export default function UserMetricsPage() {
         return <p className="text-red-600">{error}</p>;
     }
 
+    const ageItems = Object.entries(demographics.age_groups).map(([label, count]) => ({
+        label,
+        count,
+    }));
+    const locationItems = Object.entries(demographics.locations).map(([label, count]) => ({
+        label,
+        count,
+    }));
+    const readingItems = demographics.reading_preferences.map((item) => ({
+        label: item.category,
+        count: item.count,
+    }));
+    const cards = [
+        {
+            title: "Total Registered Users",
+            value: metrics.total_users,
+            icon: Users,
+            className: "text-blue-600",
+        },
+        {
+            title: "Sign-ups Selected",
+            value: totalSignups,
+            icon: UserPlus,
+            className: "text-green-600",
+        },
+        {
+            title: "Reading Prefs",
+            value: demographics.reading_preferences.length,
+            icon: BookMarked,
+            className: "text-violet-600",
+        },
+        {
+            title: "Locations",
+            value: Object.keys(demographics.locations).length,
+            icon: MapPin,
+            className: "text-orange-600",
+        },
+    ];
+
     return (
-        <div className="max-w-7xl mx-auto p-6 space-y-6">
-            {/* Header */}
-            <div className="flex items-center justify-between">
+        <div className="mx-auto max-w-7xl p-6">
+            <div className="flex flex-col gap-3 border-b border-gray-200 pb-5 md:flex-row md:items-end md:justify-between">
                 <div>
-                    <h1 className="text-2xl font-bold">User Metrics</h1>
-                    <p className="text-gray-600">Overview of registered users and demographics.</p>
+                    <h1 className="text-2xl font-semibold text-gray-950">User Metrics</h1>
+                    <p className="mt-1 text-sm text-gray-600">
+                        Monitor user growth, signup geography, and reading preference patterns.
+                    </p>
                 </div>
-                <Link href="/admin" className="text-sm underline self-center">
+                <Link href="/admin" className="text-sm font-medium text-gray-700 underline">
                     Back to Dashboard
                 </Link>
             </div>
 
-            {/* KPI Cards */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div className="rounded-xl border bg-white p-4">
-                    <div className="flex items-center gap-2 text-blue-600 text-sm mb-1">
-                        <Users className="w-4 h-4" /> Total Registered Users
-                    </div>
-                    <div className="text-2xl font-bold">{metrics.total_users}</div>
-                </div>
-
-                <div className="rounded-xl border bg-white p-4">
-                    <div className="flex items-center gap-2 text-green-600 text-sm mb-1">
-                        <UserPlus className="w-4 h-4" /> Sign-ups Selected
-                    </div>
-                    <div className="text-2xl font-bold">{totalSignups}</div>
-                </div>
-
-                <div className="rounded-xl border bg-white p-4">
-                    <div className="flex items-center gap-2 text-violet-600 text-sm mb-1">
-                        <BookMarked className="w-4 h-4" /> Reading Prefs
-                    </div>
-                    <div className="text-2xl font-bold">{demographics.reading_preferences.length}</div>
-                </div>
-
-                <div className="rounded-xl border bg-white p-4">
-                    <div className="flex items-center gap-2 text-orange-600 text-sm mb-1">
-                        <MapPin className="w-4 h-4" /> Locations
-                    </div>
-                    <div className="text-2xl font-bold">{Object.keys(demographics.locations).length}</div>
-                </div>
+            <div className="mt-6 grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+                {cards.map((card) => {
+                    const Icon = card.icon;
+                    return (
+                        <div
+                            key={card.title}
+                            className="bg-white rounded-xl shadow-sm border p-5 text-left"
+                        >
+                            <div className={`flex items-center gap-2 text-sm mb-1 ${card.className}`}>
+                                <Icon className="w-4 h-4" /> {card.title}
+                            </div>
+                            <h2 className="text-2xl font-bold mt-2">{card.value}</h2>
+                        </div>
+                    );
+                })}
             </div>
 
-            {/* Filters */}
-            <div className="bg-white rounded-xl shadow-sm border p-4 space-y-3">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+            <section className="mt-6 rounded-lg border bg-white p-5">
+                <div className="flex items-center gap-2">
+                    <CalendarDays className="h-5 w-5 text-gray-500" />
+                    <h2 className="text-base font-semibold text-gray-950">Signup Date Range</h2>
+                </div>
+                <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-[1fr_1fr_180px]">
                     <div>
-                        <label className="block text-sm font-medium mb-2">From</label>
+                        <label className="mb-2 block text-sm font-medium text-gray-700">From</label>
                         <input
                             type="date"
                             value={fromDate}
                             onChange={(e) => setFromDate(e.target.value)}
-                            className="w-full rounded-lg border px-3 py-2"
+                            className="h-11 w-full rounded-md border border-gray-300 px-3 text-sm focus:border-gray-900 focus:outline-none focus:ring-1 focus:ring-gray-900"
                         />
                     </div>
-
                     <div>
-                        <label className="block text-sm font-medium mb-2">To</label>
+                        <label className="mb-2 block text-sm font-medium text-gray-700">To</label>
                         <input
                             type="date"
                             value={toDate}
                             onChange={(e) => setToDate(e.target.value)}
-                            className="w-full rounded-lg border px-3 py-2"
+                            className="h-11 w-full rounded-md border border-gray-300 px-3 text-sm focus:border-gray-900 focus:outline-none focus:ring-1 focus:ring-gray-900"
                         />
                     </div>
+                    <button
+                        onClick={fetchSignups}
+                        disabled={signupLoading}
+                        className="inline-flex h-11 items-center justify-center gap-2 self-end rounded-md bg-gray-950 px-4 text-sm font-semibold text-white hover:bg-gray-800 disabled:opacity-60"
+                    >
+                        <Filter className="h-4 w-4" />
+                        {signupLoading ? "Filtering..." : "Filter"}
+                    </button>
+                </div>
+                {error && fromDate && toDate && (
+                    <p className="mt-3 text-sm text-red-600">{error}</p>
+                )}
+            </section>
 
+            <section className="mt-6 rounded-lg border bg-white">
+                <div className="flex flex-col gap-2 border-b border-gray-100 px-5 py-4 md:flex-row md:items-center md:justify-between">
                     <div>
-                        <button
-                            onClick={fetchSignups}
-                            className="w-full rounded-lg bg-blue-600 text-white px-4 py-2 font-medium hover:bg-blue-700"
-                        >
-                            Filter
-                        </button>
+                        <h2 className="text-base font-semibold text-gray-950">User Sign-up Details</h2>
+                        <p className="mt-1 text-sm text-gray-500">
+                            {users.length > 0
+                                ? `${users.length} user${users.length === 1 ? "" : "s"} found for the selected range`
+                                : "Select a date range to inspect new accounts"}
+                        </p>
                     </div>
+                    {fromDate && toDate && (
+                        <span className="rounded-md bg-gray-100 px-3 py-1 text-xs font-medium text-gray-700">
+                            {fromDate} to {toDate}
+                        </span>
+                    )}
                 </div>
-            </div>
 
-            {signupLoading && (
-                <p className="text-gray-600 mb-4">Loading sign-up data...</p>
-            )}
-
-            {error && fromDate && toDate && (
-                <p className="text-red-600 mb-4">{error}</p>
-            )}
-
-            {/* Table */}
-            <div className="rounded-xl border bg-white overflow-hidden">
-                <div className="p-6">
-                    <h2 className="text-xl font-semibold mb-4">User Sign-up Details</h2>
-
-                    <div className="overflow-x-auto">
-                        <table className="w-full text-sm">
-                            <thead className="bg-gray-50 border-b">
-                                <tr>
-                                    <th className="text-left px-4 py-3 font-medium text-gray-600">Name</th>
-                                    <th className="text-left px-4 py-3 font-medium text-gray-600">Email</th>
-                                    <th className="text-left px-4 py-3 font-medium text-gray-600">Created Date</th>
-                                    <th className="text-left px-4 py-3 font-medium text-gray-600">City</th>
-                                    <th className="text-left px-4 py-3 font-medium text-gray-600">State</th>
-                                    <th className="text-left px-4 py-3 font-medium text-gray-600">Country</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y">
-                                {users.length > 0 ? (
-                                    users.map((user) => (
-                                        <tr key={user.user_id} className="hover:bg-gray-50">
-                                            <td className="px-4 py-3">{user.name || "-"}</td>
-                                            <td className="px-4 py-3">{user.email || "-"}</td>
-                                            <td className="px-4 py-3">{formatLocalDate(user.created_at, "-")}</td>
-                                            <td className="px-4 py-3">{user.city || "-"}</td>
-                                            <td className="px-4 py-3">{user.state || "-"}</td>
-                                            <td className="px-4 py-3">{user.country || "-"}</td>
-                                        </tr>
-                                    ))
-                                ) : (
-                                    <tr>
-                                        <td colSpan={6} className="p-8 text-center text-gray-500">
-                                            No sign-ups found for the selected period.
-                                        </td>
+                <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                        <thead className="bg-gray-50 text-gray-600">
+                            <tr>
+                                <th className="px-5 py-3 text-left font-medium">Name</th>
+                                <th className="px-5 py-3 text-left font-medium">Email</th>
+                                <th className="px-5 py-3 text-left font-medium">Created Date</th>
+                                <th className="px-5 py-3 text-left font-medium">City</th>
+                                <th className="px-5 py-3 text-left font-medium">State</th>
+                                <th className="px-5 py-3 text-left font-medium">Country</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100">
+                            {users.length > 0 ? (
+                                users.map((user) => (
+                                    <tr key={user.user_id} className="hover:bg-gray-50">
+                                        <td className="px-5 py-4 font-medium text-gray-950">{user.name || "-"}</td>
+                                        <td className="px-5 py-4 text-gray-700">{user.email || "-"}</td>
+                                        <td className="px-5 py-4 text-gray-700">{formatLocalDate(user.created_at, "-")}</td>
+                                        <td className="px-5 py-4 text-gray-700">{user.city || "-"}</td>
+                                        <td className="px-5 py-4 text-gray-700">{user.state || "-"}</td>
+                                        <td className="px-5 py-4 text-gray-700">{user.country || "-"}</td>
                                     </tr>
-                                )}
-                            </tbody>
-                        </table>
-                    </div>
+                                ))
+                            ) : (
+                                <tr>
+                                    <td colSpan={6} className="px-5 py-12 text-center">
+                                        <div className="mx-auto max-w-sm">
+                                            <Users className="mx-auto h-8 w-8 text-gray-300" />
+                                            <p className="mt-3 font-medium text-gray-700">
+                                                No sign-ups found
+                                            </p>
+                                            <p className="mt-1 text-sm text-gray-500">
+                                                Choose a different date range to check user registrations.
+                                            </p>
+                                        </div>
+                                    </td>
+                                </tr>
+                            )}
+                        </tbody>
+                    </table>
                 </div>
-            </div>
+            </section>
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <div className="bg-white rounded-xl shadow-sm border p-5">
-                    <h2 className="text-xl font-semibold mb-4">Age Distribution</h2>
-                    <div className="space-y-2">
-                        {Object.entries(demographics.age_groups).map(([group, count]) => (
-                            <div key={group} className="flex justify-between">
-                                <span>{group}</span>
-                                <span className="font-semibold">{count}</span>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-
-                <div className="bg-white rounded-xl shadow-sm border p-5">
-                    <h2 className="text-xl font-semibold mb-4">Location Distribution</h2>
-                    <div className="space-y-2">
-                        {Object.entries(demographics.locations).map(([location, count]) => (
-                            <div key={location} className="flex justify-between">
-                                <span>{location}</span>
-                                <span className="font-semibold">{count}</span>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-
-                <div className="bg-white rounded-xl shadow-sm border p-5">
-                    <h2 className="text-xl font-semibold mb-4">Reading Preferences</h2>
-                    <div className="space-y-2">
-                        {demographics.reading_preferences.map((item) => (
-                            <div key={item.category} className="flex justify-between">
-                                <span>{item.category}</span>
-                                <span className="font-semibold">{item.count}</span>
-                            </div>
-                        ))}
-                    </div>
-                </div>
+            <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-3">
+                <DistributionPanel
+                    title="Age Distribution"
+                    emptyLabel="No age data available."
+                    items={ageItems}
+                />
+                <DistributionPanel
+                    title="Location Distribution"
+                    emptyLabel="No location data available."
+                    items={locationItems}
+                />
+                <DistributionPanel
+                    title="Reading Preferences"
+                    emptyLabel="No reading preference data available."
+                    items={readingItems}
+                />
             </div>
         </div>
     );

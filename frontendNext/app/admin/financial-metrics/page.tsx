@@ -3,7 +3,14 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { getCurrentUser } from "@/utils/auth";
-import { BarChart3, CircleDollarSign, ReceiptText, TrendingUp } from "lucide-react";
+import {
+    BarChart3,
+    CalendarRange,
+    CircleDollarSign,
+    ReceiptText,
+    SlidersHorizontal,
+    TrendingUp,
+} from "lucide-react";
 import {
     getFinancialMetrics,
     getPlatformFeeSetting,
@@ -55,14 +62,20 @@ export default function FinancialMetricsPage() {
         }
     };
 
-    const fetchFinancialMetrics = async (useFilter = false) => {
+    const fetchFinancialMetrics = async (
+        useFilter = false,
+        overrideDates?: { fromDate?: string; toDate?: string }
+    ) => {
         if (useFilter) setFilterLoading(true);
         setError("");
 
         try {
             const params: { from_date?: string; to_date?: string } = {};
-            if (fromDate) params.from_date = fromDate;
-            if (toDate) params.to_date = toDate;
+            const selectedFromDate = overrideDates?.fromDate ?? fromDate;
+            const selectedToDate = overrideDates?.toDate ?? toDate;
+
+            if (selectedFromDate) params.from_date = selectedFromDate;
+            if (selectedToDate) params.to_date = selectedToDate;
 
             const result = await getFinancialMetrics(params);
             setMetrics(result);
@@ -142,6 +155,42 @@ export default function FinancialMetricsPage() {
         await fetchFinancialMetrics(true);
     };
 
+    const formatDateInput = (date: Date) => {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, "0");
+        const day = String(date.getDate()).padStart(2, "0");
+        return `${year}-${month}-${day}`;
+    };
+
+    const handleQuickFilter = async (range: "today" | "week" | "month" | "clear") => {
+        let nextFromDate = "";
+        let nextToDate = "";
+
+        if (range !== "clear") {
+            const today = new Date();
+            const from = new Date(today);
+
+            if (range === "week") {
+                from.setDate(today.getDate() - 6);
+            }
+
+            if (range === "month") {
+                from.setDate(1);
+            }
+
+            nextFromDate = formatDateInput(from);
+            nextToDate = formatDateInput(today);
+        }
+
+        setFromDate(nextFromDate);
+        setToDate(nextToDate);
+        setDateError("");
+        await fetchFinancialMetrics(true, {
+            fromDate: nextFromDate,
+            toDate: nextToDate,
+        });
+    };
+
     if (loading) {
         return <p className="text-gray-600">Loading financial metrics...</p>;
     }
@@ -167,87 +216,6 @@ export default function FinancialMetricsPage() {
                 <Link href="/admin" className="text-sm underline self-center">
                     Back to Dashboard
                 </Link>
-            </div>
-
-            {error && (
-                <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-                    {error}
-                </div>
-            )}
-
-            {successMessage && (
-                <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">
-                    {successMessage}
-                </div>
-            )}
-
-            <div className="bg-white rounded-xl shadow-sm border p-5">
-                <h2 className="text-lg font-semibold mb-2">Platform Fee Setting</h2>
-                <p className="text-sm text-gray-600 mb-4">
-                </p>
-
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
-                    <div>
-                        <label className="block text-sm font-medium mb-2">
-                            Max Value / Fee per Transaction (AUD)
-                        </label>
-                        <input
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            value={platformFee}
-                            onChange={(e) => setPlatformFee(Number(e.target.value))}
-                            className="w-full rounded-lg border px-3 py-2"
-                        />
-                    </div>
-
-                    <button
-                        onClick={handleUpdatePlatformFee}
-                        disabled={feeSaving}
-                        className="rounded-lg bg-green-600 text-white px-4 py-2 font-medium hover:bg-green-700 disabled:opacity-60"
-                    >
-                        {feeSaving ? "Saving..." : "Update Fee"}
-                    </button>
-                </div>
-            </div>
-
-            <div className="bg-white rounded-xl shadow-sm border p-5 mb-8">
-                <h2 className="text-lg font-semibold mb-4">Filter Transactions</h2>
-
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
-                    <div>
-                        <label className="block text-sm font-medium mb-2">From</label>
-                        <input
-                            type="date"
-                            value={fromDate}
-                            onChange={(e) => setFromDate(e.target.value)}
-                            className="w-full rounded-lg border px-3 py-2"
-                        />
-                    </div>
-
-                    <div>
-                        <label className="block text-sm font-medium mb-2">To</label>
-                        <input
-                            type="date"
-                            value={toDate}
-                            onChange={(e) => setToDate(e.target.value)}
-                            className="w-full rounded-lg border px-3 py-2"
-                        />
-                    </div>
-
-                    <div>
-                        <button
-                            onClick={handleFilter}
-                            disabled={filterLoading || !!dateError}
-                            className="w-full rounded-lg bg-blue-600 text-white px-4 py-2 font-medium hover:bg-blue-700 disabled:opacity-60"
-                        >
-                            {filterLoading ? "Loading..." : "Filter"}
-                        </button>
-                        {dateError && (
-                            <p className="text-sm text-red-600 mt-2">{dateError}</p>
-                        )}
-                    </div>
-                </div>
             </div>
 
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
@@ -284,6 +252,125 @@ export default function FinancialMetricsPage() {
                     <h2 className="text-2xl font-bold mt-2">
                         ${metrics.average_transaction_value.toFixed(2)}
                     </h2>
+                </div>
+            </div>
+
+            <div className="grid grid-cols-1 xl:grid-cols-[minmax(320px,0.8fr)_minmax(0,1.6fr)] gap-5">
+                <div className="bg-white rounded-xl shadow-sm border p-5">
+                    <div className="flex items-center gap-2 mb-4">
+                        <SlidersHorizontal className="w-5 h-5 text-green-600" />
+                        <h2 className="text-lg font-semibold">Platform Fee Setting</h2>
+                    </div>
+
+                    {error && (
+                        <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 mb-3">
+                            {error}
+                        </div>
+                    )}
+
+                    {successMessage && (
+                        <div className="rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-700 mb-3">
+                            {successMessage}
+                        </div>
+                    )}
+
+                    <label className="block text-sm font-medium mb-2">
+                        Fee per transaction (AUD)
+                    </label>
+                    <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-3">
+                        <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={platformFee}
+                            onChange={(e) => setPlatformFee(Number(e.target.value))}
+                            className="w-full rounded-lg border px-3 py-2"
+                        />
+                        <button
+                            onClick={handleUpdatePlatformFee}
+                            disabled={feeSaving}
+                            className="rounded-lg bg-green-600 text-white px-5 py-2 font-medium hover:bg-green-700 disabled:opacity-60"
+                        >
+                            {feeSaving ? "Saving..." : "Update"}
+                        </button>
+                    </div>
+                </div>
+
+                <div className="bg-white rounded-xl shadow-sm border p-5">
+                    <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+                        <div className="flex items-center gap-2">
+                            <CalendarRange className="w-5 h-5 text-blue-600" />
+                            <h2 className="text-lg font-semibold">Filter Transactions</h2>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                            <button
+                                type="button"
+                                onClick={() => handleQuickFilter("today")}
+                                disabled={filterLoading}
+                                className="rounded-lg border px-3 py-1.5 text-sm font-medium hover:bg-gray-50 disabled:opacity-60"
+                            >
+                                Today
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => handleQuickFilter("week")}
+                                disabled={filterLoading}
+                                className="rounded-lg border px-3 py-1.5 text-sm font-medium hover:bg-gray-50 disabled:opacity-60"
+                            >
+                                Last 7 days
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => handleQuickFilter("month")}
+                                disabled={filterLoading}
+                                className="rounded-lg border px-3 py-1.5 text-sm font-medium hover:bg-gray-50 disabled:opacity-60"
+                            >
+                                This month
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => handleQuickFilter("clear")}
+                                disabled={filterLoading}
+                                className="rounded-lg border px-3 py-1.5 text-sm font-medium hover:bg-gray-50 disabled:opacity-60"
+                            >
+                                Clear
+                            </button>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-[1fr_1fr_auto] gap-3 items-end">
+                        <div>
+                            <label className="block text-sm font-medium mb-2">From</label>
+                            <input
+                                type="date"
+                                value={fromDate}
+                                onChange={(e) => setFromDate(e.target.value)}
+                                className="w-full rounded-lg border px-3 py-2"
+                            />
+                        </div>
+
+                        <div>
+                            <label className="block text-sm font-medium mb-2">To</label>
+                            <input
+                                type="date"
+                                value={toDate}
+                                onChange={(e) => setToDate(e.target.value)}
+                                className="w-full rounded-lg border px-3 py-2"
+                            />
+                        </div>
+
+                        <button
+                            onClick={handleFilter}
+                            disabled={filterLoading || !!dateError}
+                            className="rounded-lg bg-blue-600 text-white px-8 py-2 font-medium hover:bg-blue-700 disabled:opacity-60"
+                        >
+                            {filterLoading ? "Loading..." : "Filter"}
+                        </button>
+                    </div>
+
+                    {dateError && (
+                        <p className="text-sm text-red-600 mt-2">{dateError}</p>
+                    )}
                 </div>
             </div>
 
