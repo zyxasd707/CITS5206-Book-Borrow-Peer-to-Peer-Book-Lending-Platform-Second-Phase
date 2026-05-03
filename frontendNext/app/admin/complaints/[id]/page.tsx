@@ -82,7 +82,7 @@ const TYPE_LABELS: Record<Complaint["type"], string> = {
 
 const DEPOSIT_STATUS_META: Record<string, { label: string; className: string }> = {
   held: { label: "Held", className: "bg-gray-100 text-gray-700" },
-  pending_review: { label: "Awaiting Response from Admin", className: "bg-yellow-100 text-yellow-700" },
+  pending_review: { label: "Pending Review", className: "bg-yellow-100 text-yellow-700" },
   refund_ready: { label: "Refund Ready (awaiting borrower claim)", className: "bg-emerald-100 text-emerald-700" },
   released: { label: "Released", className: "bg-green-100 text-green-700" },
   partially_deducted: { label: "Partially Deducted", className: "bg-orange-100 text-orange-700" },
@@ -351,7 +351,7 @@ export default function AdminComplaintDetailPage() {
       return {
         canResolve: false,
         banner:
-          "Deposit is awaiting response from admin. Make a release / deduct / forfeit decision in the deposit arbitration view before resolving the complaint.",
+          "Deposit is still pending review. Make a release / deduct / forfeit decision in the deposit arbitration view before resolving the complaint.",
       };
     }
     return { canResolve: false, banner: null };

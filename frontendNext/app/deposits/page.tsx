@@ -10,7 +10,7 @@ import { getMyDeposits, DepositSummaryItem } from "@/utils/deposits";
 import { formatLocalDateTime } from "@/utils/datetime";
 
 const STATUS_META: Record<string, { label: string; className: string }> = {
-  pending_review: { label: "Awaiting Response from Admin", className: "bg-yellow-100 text-yellow-700" },
+  pending_review: { label: "Pending Review", className: "bg-yellow-100 text-yellow-700" },
   released: { label: "Released", className: "bg-green-100 text-green-700" },
   partially_deducted: { label: "Partially Deducted", className: "bg-orange-100 text-orange-700" },
   forfeited: { label: "Forfeited", className: "bg-red-100 text-red-700" },
@@ -102,7 +102,7 @@ export default function MyDepositsPage() {
         </div>
         <div className="rounded-xl border bg-white p-4">
           <div className="flex items-center gap-2 text-yellow-600 text-sm mb-1">
-            <Wallet className="w-4 h-4" /> Awaiting Response from Admin
+            <Wallet className="w-4 h-4" /> Pending Review
           </div>
           <div className="text-2xl font-bold text-yellow-700">{pendingCount}</div>
         </div>

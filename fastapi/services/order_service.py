@@ -13,14 +13,6 @@ from models.complaint import Complaint
 from sqlalchemy import or_
 from services.complaint_service import ComplaintService
 from services.notification_service import NotificationService
-from services.deposit_service import (
-    DEDUCTION_PCT,
-    _apply_strike,
-    _deposit_cents,
-    _persist_refund_record,
-    _stripe_refund,
-    _stripe_transfer_to_lender,
-)
 from typing import Set
 import logging
 from services.email_service import (
@@ -1045,10 +1037,20 @@ class OrderService:
             raise HTTPException(status_code=403, detail="Only owner can confirm received books")
 
         severity = (damage_severity or "none").lower()
-        if severity == "full":
-            severity = "severe"
         if severity not in {"none", "light", "medium", "severe"}:
             raise HTTPException(status_code=400, detail="Invalid damage_severity")
+
+        # Order lifecycle: always advance to COMPLETED. Deposit lifecycle is tracked separately.
+        order.status = "COMPLETED"
+        order.completed_at = datetime.now(timezone.utc)
+
+        # Restore book availability for borrow orders
+        if order.action_type == "borrow":
+            for order_book in order.books:
+                if order_book.book:
+                    book = db.query(Book).filter(Book.id == order_book.book_id).first()
+                    if book and book.status == "lent":
+                        book.status = "listed"
 
         # Deferred imports to avoid circular refs
         from models.deposit_evidence import DepositEvidence
@@ -1056,20 +1058,7 @@ class OrderService:
         import json
         import uuid
 
-        def complete_return() -> None:
-            order.status = "COMPLETED"
-            order.completed_at = datetime.now(timezone.utc)
-            if order.action_type == "borrow":
-                for order_book in order.books:
-                    if order_book.book:
-                        book = db.query(Book).filter(Book.id == order_book.book_id).first()
-                        if book and book.status == "lent":
-                            book.status = "listed"
-
         if severity == "none":
-            # Clean return completes the order immediately.
-            complete_return()
-
             # Clean return → auto release
             order.deposit_status = "released"
             order.deposit_deducted_cents = 0
@@ -1111,103 +1100,6 @@ class OrderService:
                     refund_payment(order.payment_id, refund_data, db=db)
                 except Exception as e:
                     print(f"[WARN] refund_payment failed: {e}")
-        elif severity in {"light", "medium"}:
-            # Light/medium damage uses the lender-selected automatic deduction.
-            # Only severe/full-forfeit cases require admin arbitration.
-            complete_return()
-
-            total_cents = _deposit_cents(order, db)
-            deducted = total_cents * DEDUCTION_PCT[severity] // 100
-            to_refund = max(0, total_cents - deducted)
-
-            order.deposit_status = "partially_deducted"
-            order.deposit_deducted_cents = deducted
-            order.damage_severity_final = severity
-
-            db.add(DepositEvidence(
-                order_id=order.id,
-                submitter_id=order.owner_id,
-                submitter_role="lender",
-                photos=json.dumps(evidence_photos or []),
-                claimed_severity=severity,
-                note=note,
-            ))
-
-            borrower = db.query(User).filter(User.user_id == order.borrower_id).first()
-            strike_signal = (
-                _apply_strike(db, borrower, severity)
-                if borrower
-                else {"restrict_applied": False, "strike_count": 0, "severity_score": 0}
-            )
-
-            db.add(DepositAuditLog(
-                order_id=order.id,
-                actor_id=order.owner_id,
-                actor_role="lender",
-                action="partial_deduct",
-                amount_cents=deducted,
-                final_severity=severity,
-                note=(note or "").strip() or (
-                    f"Lender selected automatic {DEDUCTION_PCT[severity]}% deduction for {severity} damage."
-                ),
-            ))
-
-            if borrower and strike_signal["restrict_applied"]:
-                db.add(DepositAuditLog(
-                    order_id=order.id,
-                    actor_id=order.owner_id,
-                    actor_role="system",
-                    action="restrict",
-                    note=borrower.restriction_reason,
-                ))
-
-            NotificationService.create(
-                db, user_id=order.borrower_id, order_id=order.id,
-                type="DEPOSIT_UPDATED",
-                title="Deposit Partially Refunded",
-                message=(
-                    f"The lender reported {severity} damage. "
-                    f"{DEDUCTION_PCT[severity]}% of the deposit was deducted "
-                    f"(${deducted / 100:.2f}); the remaining ${to_refund / 100:.2f} refund was initiated."
-                    + (" Your borrowing is now restricted due to repeated damage reports."
-                       if strike_signal["restrict_applied"] else "")
-                ),
-                commit=False,
-            )
-            NotificationService.create(
-                db, user_id=order.owner_id, order_id=order.id,
-                type="DEPOSIT_UPDATED",
-                title="Damage Deduction Applied",
-                message=(
-                    f"Your {severity} damage report applied a {DEDUCTION_PCT[severity]}% deposit deduction "
-                    f"(${deducted / 100:.2f}). The order is now complete."
-                ),
-                commit=False,
-            )
-
-            if order.payment_id and to_refund > 0:
-                try:
-                    refund = _stripe_refund(
-                        order.payment_id,
-                        to_refund,
-                        f"{severity} damage automatic partial deposit refund",
-                    )
-                    _persist_refund_record(
-                        db,
-                        order.payment_id,
-                        refund,
-                        f"{severity} damage automatic partial deposit refund",
-                    )
-                except Exception as e:
-                    logger.exception("Automatic partial deposit refund failed for order %s: %s", order.id, e)
-
-            db.commit()
-            db.refresh(order)
-
-            try:
-                _stripe_transfer_to_lender(order, deducted)
-            except Exception as e:
-                logger.exception("Automatic deposit deduction transfer failed for order %s: %s", order.id, e)
         else:
             # Damaged return → lender evidence on record, admin arbitrates later
             order.deposit_status = "pending_review"
