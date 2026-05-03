@@ -377,7 +377,7 @@ export default function OrderDetailPage() {
       if (damageSeverity === "none") {
         toast.success("Book received. Deposit refund will be processed.");
       } else {
-        toast.success("Damage report submitted. Deposit is now pending admin review.");
+        toast.success("Damage report submitted. The order is now pending admin review.");
       }
 
       resetDamageForm();
@@ -1188,7 +1188,7 @@ export default function OrderDetailPage() {
                 ? "Submitting..."
                 : damageSeverity === "none"
                 ? "Confirm & Release Deposit"
-                : "Submit Damage Report"}
+                : "Submit for Admin Review"}
             </Button>
           </div>
         </div>

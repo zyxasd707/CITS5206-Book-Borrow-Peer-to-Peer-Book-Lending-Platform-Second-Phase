@@ -157,7 +157,8 @@ def owner_confirm_received(
         if severity == "none":
             return {"message": "Order marked as COMPLETED and refund triggered if applicable"}
         return {
-            "message": "Order marked as COMPLETED. Damage reported — deposit pending admin review.",
+            "message": "Damage reported. Order remains RETURNED and is pending admin review.",
+            "order_status": "RETURNED",
             "deposit_status": "pending_review",
             "severity": severity,
         }

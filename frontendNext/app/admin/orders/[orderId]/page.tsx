@@ -7,6 +7,7 @@ import {
   AlertTriangle,
   BookOpen,
   CreditCard,
+  Download,
   FileText,
   MessageSquareWarning,
   PackageCheck,
@@ -57,6 +58,8 @@ function statusClass(status?: string | null) {
     case "pending":
     case "PENDING_SHIPMENT":
       return "bg-yellow-100 text-yellow-700";
+    case "RETURNED":
+      return "bg-amber-200 text-amber-900 ring-2 ring-amber-400";
     case "OVERDUE":
     case "forfeited":
     case "open":
@@ -124,6 +127,298 @@ function EmptyState({ label }: { label: string }) {
   return <p className="rounded-lg bg-gray-50 p-4 text-sm text-gray-500">{label}</p>;
 }
 
+type ReportRow = {
+  section: string;
+  field: string;
+  value: string;
+};
+
+function addReportRow(
+  rows: ReportRow[],
+  section: string,
+  field: string,
+  value?: string | number | null
+) {
+  rows.push({ section, field, value: text(value) });
+}
+
+function csvEscape(value: string) {
+  return `"${value.replace(/"/g, '""')}"`;
+}
+
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+function downloadTextFile(filename: string, content: string, mimeType: string) {
+  const blob = new Blob([content], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+function buildOrderReportRows(detail: AdminOrderDetails): ReportRow[] {
+  const rows: ReportRow[] = [];
+  const { order } = detail;
+
+  addReportRow(rows, "Order Summary", "Order ID", order.id);
+  addReportRow(rows, "Order Summary", "Status", order.status);
+  addReportRow(rows, "Order Summary", "Action Type", order.action_type);
+  addReportRow(rows, "Order Summary", "Created", fmtDate(order.created_at));
+  addReportRow(rows, "Order Summary", "Updated", fmtDate(order.updated_at));
+  addReportRow(rows, "Order Summary", "Started", fmtDate(order.start_at));
+  addReportRow(rows, "Order Summary", "Due", fmtDate(order.due_at));
+  addReportRow(rows, "Order Summary", "Returned", fmtDate(order.returned_at));
+  addReportRow(rows, "Order Summary", "Completed", fmtDate(order.completed_at));
+  addReportRow(rows, "Order Summary", "Canceled", fmtDate(order.canceled_at));
+  addReportRow(rows, "Order Summary", "Notes", order.notes);
+
+  [
+    ["Owner", detail.people.owner],
+    ["Borrower", detail.people.borrower],
+  ].forEach(([role, user]) => {
+    const person = user as AdminOrderUser;
+    addReportRow(rows, role as string, "Name", person.name);
+    addReportRow(rows, role as string, "Email", person.email);
+    addReportRow(rows, role as string, "Phone", person.phone_number);
+    addReportRow(
+      rows,
+      role as string,
+      "Location",
+      [person.city, person.state, person.country].filter(Boolean).join(", ")
+    );
+    addReportRow(rows, role as string, "Damage Strikes", person.damage_strike_count ?? 0);
+    addReportRow(rows, role as string, "Severity Score", person.damage_severity_score ?? 0);
+    addReportRow(rows, role as string, "Restricted", person.is_restricted ? "Yes" : "No");
+  });
+
+  addReportRow(rows, "Contact", "Name", detail.people.contact.name);
+  addReportRow(rows, "Contact", "Email", detail.people.contact.email);
+  addReportRow(rows, "Contact", "Phone", detail.people.contact.phone);
+
+  detail.books.forEach((book, index) => {
+    const section = `Book ${index + 1}`;
+    addReportRow(rows, section, "Title", book.title_or);
+    addReportRow(rows, section, "English Title", book.title_en);
+    addReportRow(rows, section, "Author", book.author);
+    addReportRow(rows, section, "Category", book.category);
+    addReportRow(rows, section, "Condition", book.condition);
+    addReportRow(rows, section, "Status", book.status);
+    addReportRow(rows, section, "Sale Price", fmtMoney(book.sale_price));
+    addReportRow(rows, section, "Deposit", fmtMoney(book.deposit));
+    addReportRow(rows, section, "Max Lending", `${book.max_lending_days} days`);
+    addReportRow(rows, section, "Date Added", fmtDate(book.date_added));
+  });
+
+  addReportRow(rows, "Shipping", "Method", detail.shipping.method);
+  addReportRow(rows, "Shipping", "Estimated Delivery", detail.shipping.estimated_delivery_time ? `${detail.shipping.estimated_delivery_time} days` : "-");
+  addReportRow(rows, "Shipping", "Street", detail.shipping.address.street);
+  addReportRow(rows, "Shipping", "City", detail.shipping.address.city);
+  addReportRow(rows, "Shipping", "Postcode", detail.shipping.address.postcode);
+  addReportRow(rows, "Shipping", "Country", detail.shipping.address.country);
+  addReportRow(rows, "Shipping", "Outbound Carrier", detail.shipping.outbound.carrier);
+  addReportRow(rows, "Shipping", "Outbound Tracking", detail.shipping.outbound.tracking_number);
+  addReportRow(rows, "Shipping", "Return Carrier", detail.shipping.return.carrier);
+  addReportRow(rows, "Shipping", "Return Tracking", detail.shipping.return.tracking_number);
+
+  addReportRow(rows, "Payment", "Payment ID", detail.payment.payment_id);
+  addReportRow(rows, "Payment", "Payment Status", detail.payment.payment_status);
+  addReportRow(rows, "Payment", "Payment Amount", fmtCents(detail.payment.payment_amount_cents));
+  addReportRow(rows, "Payment", "Payment Created", fmtDate(detail.payment.payment_created_at));
+  addReportRow(rows, "Payment", "Deposit / Sale", fmtMoney(detail.payment.deposit_or_sale_amount));
+  addReportRow(rows, "Payment", "Owner Income", fmtMoney(detail.payment.owner_income_amount));
+  addReportRow(rows, "Payment", "Service Fee", fmtMoney(detail.payment.service_fee_amount));
+  addReportRow(rows, "Payment", "Shipping Fee", fmtMoney(detail.payment.shipping_out_fee_amount));
+  addReportRow(rows, "Payment", "Total Paid", fmtMoney(detail.payment.total_paid_amount));
+  addReportRow(rows, "Payment", "Total Refunded", fmtMoney(detail.payment.total_refunded_amount));
+  addReportRow(rows, "Payment", "Late Fee", fmtMoney(detail.payment.late_fee_amount));
+  addReportRow(rows, "Payment", "Damage Fee", fmtMoney(detail.payment.damage_fee_amount));
+
+  addReportRow(rows, "Deposit", "Status", detail.deposit.status);
+  addReportRow(rows, "Deposit", "Deducted", fmtCents(detail.deposit.deducted_cents));
+  addReportRow(rows, "Deposit", "Final Severity", detail.deposit.damage_severity_final);
+
+  detail.deposit_evidence.forEach((item, index) => {
+    const section = `Deposit Evidence ${index + 1}`;
+    addReportRow(rows, section, "Submitter", item.submitter.name);
+    addReportRow(rows, section, "Role", item.submitter_role);
+    addReportRow(rows, section, "Severity", item.claimed_severity);
+    addReportRow(rows, section, "Submitted", fmtDate(item.submitted_at));
+    addReportRow(rows, section, "Note", item.note);
+  });
+
+  detail.payment_splits.forEach((split, index) => {
+    const section = `Payment Split ${index + 1}`;
+    addReportRow(rows, section, "Owner", split.owner.name);
+    addReportRow(rows, section, "Transfer Status", split.transfer_status);
+    addReportRow(rows, section, "Transfer ID", split.transfer_id);
+    addReportRow(rows, section, "Owner Transfer", fmtCents(split.transfer_amount_cents));
+    addReportRow(rows, section, "Service Fee", fmtCents(split.service_fee_cents));
+  });
+
+  detail.refunds.forEach((refund, index) => {
+    const section = `Refund ${index + 1}`;
+    addReportRow(rows, section, "Refund ID", refund.refund_id);
+    addReportRow(rows, section, "Amount", fmtCents(refund.amount_cents));
+    addReportRow(rows, section, "Status", refund.status);
+    addReportRow(rows, section, "Reason", refund.reason);
+    addReportRow(rows, section, "Created", fmtDate(refund.created_at));
+  });
+
+  detail.disputes.forEach((dispute, index) => {
+    const section = `Dispute ${index + 1}`;
+    addReportRow(rows, section, "Dispute ID", dispute.dispute_id);
+    addReportRow(rows, section, "User", dispute.user.name);
+    addReportRow(rows, section, "Reason", dispute.reason);
+    addReportRow(rows, section, "Status", dispute.status);
+    addReportRow(rows, section, "Deduction", fmtCents(dispute.deduction_cents));
+    addReportRow(rows, section, "Note", dispute.note);
+  });
+
+  detail.complaints.forEach((complaint, index) => {
+    const section = `Complaint ${index + 1}`;
+    addReportRow(rows, section, "Type", complaint.type);
+    addReportRow(rows, section, "Subject", complaint.subject);
+    addReportRow(rows, section, "Status", complaint.status);
+    addReportRow(rows, section, "Damage Severity", complaint.damage_severity);
+    addReportRow(rows, section, "Complainant", complaint.complainant.name);
+    addReportRow(rows, section, "Respondent", complaint.respondent?.name);
+    addReportRow(rows, section, "Description", complaint.description);
+    addReportRow(rows, section, "Admin Response", complaint.admin_response);
+  });
+
+  detail.reviews.forEach((review, index) => {
+    const section = `Review ${index + 1}`;
+    addReportRow(rows, section, "Rating", `${review.rating} / 5`);
+    addReportRow(rows, section, "Reviewer", review.reviewer.name);
+    addReportRow(rows, section, "Reviewee", review.reviewee.name);
+    addReportRow(rows, section, "Comment", review.comment);
+    addReportRow(rows, section, "Created", fmtDate(review.created_at));
+  });
+
+  detail.deposit_audit_logs.forEach((audit, index) => {
+    const section = `Deposit Audit ${index + 1}`;
+    addReportRow(rows, section, "Action", audit.action);
+    addReportRow(rows, section, "Actor", audit.actor?.name);
+    addReportRow(rows, section, "Actor Role", audit.actor_role);
+    addReportRow(rows, section, "Amount", audit.amount_cents === null ? "-" : fmtCents(audit.amount_cents));
+    addReportRow(rows, section, "Final Severity", audit.final_severity);
+    addReportRow(rows, section, "Note", audit.note);
+    addReportRow(rows, section, "Created", fmtDate(audit.created_at));
+  });
+
+  return rows;
+}
+
+function exportOrderCsv(detail: AdminOrderDetails) {
+  const rows = buildOrderReportRows(detail);
+  const csv = [
+    ["Section", "Field", "Value"].map(csvEscape).join(","),
+    ...rows.map((row) => [row.section, row.field, row.value].map(csvEscape).join(",")),
+  ].join("\n");
+
+  downloadTextFile(
+    `bookborrow-order-${detail.order.id}.csv`,
+    csv,
+    "text/csv;charset=utf-8"
+  );
+}
+
+function exportOrderPdf(detail: AdminOrderDetails) {
+  const rows = buildOrderReportRows(detail);
+  const sections = rows.reduce<Record<string, ReportRow[]>>((acc, row) => {
+    acc[row.section] = acc[row.section] || [];
+    acc[row.section].push(row);
+    return acc;
+  }, {});
+
+  const reportHtml = Object.entries(sections)
+    .map(
+      ([section, sectionRows]) => `
+        <section>
+          <h2>${escapeHtml(section)}</h2>
+          <table>
+            <tbody>
+              ${sectionRows
+                .map(
+                  (row) => `
+                    <tr>
+                      <th>${escapeHtml(row.field)}</th>
+                      <td>${escapeHtml(row.value)}</td>
+                    </tr>
+                  `
+                )
+                .join("")}
+            </tbody>
+          </table>
+        </section>
+      `
+    )
+    .join("");
+
+  const iframe = document.createElement("iframe");
+  iframe.style.position = "fixed";
+  iframe.style.right = "0";
+  iframe.style.bottom = "0";
+  iframe.style.width = "0";
+  iframe.style.height = "0";
+  iframe.style.border = "0";
+  iframe.title = "BookBorrow order PDF export";
+
+  const html = `
+    <!doctype html>
+    <html>
+      <head>
+        <title>BookBorrow Order Report - ${escapeHtml(detail.order.id)}</title>
+        <style>
+          body { font-family: Arial, sans-serif; color: #111827; margin: 32px; }
+          h1 { font-size: 24px; margin: 0 0 4px; }
+          .meta { color: #4b5563; margin: 0 0 24px; }
+          section { break-inside: avoid; margin: 0 0 24px; }
+          h2 { border-bottom: 1px solid #d1d5db; font-size: 16px; margin: 0 0 8px; padding-bottom: 6px; }
+          table { border-collapse: collapse; width: 100%; }
+          th, td { border: 1px solid #e5e7eb; font-size: 12px; padding: 8px; text-align: left; vertical-align: top; }
+          th { background: #f9fafb; width: 28%; }
+          @media print { body { margin: 18mm; } button { display: none; } }
+        </style>
+      </head>
+      <body>
+        <h1>BookBorrow Order Report</h1>
+        <p class="meta">Order ${escapeHtml(detail.order.id)} | Generated ${escapeHtml(new Date().toLocaleString())}</p>
+        ${reportHtml}
+      </body>
+    </html>
+  `;
+
+  document.body.appendChild(iframe);
+  const iframeDocument = iframe.contentWindow?.document;
+  if (!iframeDocument || !iframe.contentWindow) {
+    iframe.remove();
+    alert("Unable to prepare the PDF export. Please try again.");
+    return;
+  }
+
+  iframeDocument.open();
+  iframeDocument.write(html);
+  iframeDocument.close();
+
+  window.setTimeout(() => {
+    iframe.contentWindow?.focus();
+    iframe.contentWindow?.print();
+    window.setTimeout(() => iframe.remove(), 1000);
+  }, 100);
+}
+
 export default function AdminOrderDetailsPage() {
   const router = useRouter();
   const params = useParams<{ orderId: string }>();
@@ -178,6 +473,7 @@ export default function AdminOrderDetailsPage() {
   }
 
   const order = detail.order;
+  const needsDamageReview = order.status === "RETURNED" && detail.deposit.status === "pending_review";
 
   return (
     <div className="max-w-7xl mx-auto p-6 space-y-6">
@@ -189,11 +485,29 @@ export default function AdminOrderDetailsPage() {
           <h1 className="text-2xl font-bold">Order Details</h1>
           <p className="text-gray-600 font-mono text-sm break-all">{order.id}</p>
         </div>
-        <span
-          className={`inline-flex w-fit rounded-full px-3 py-1 text-xs font-semibold ${statusClass(order.status)}`}
-        >
-          {order.status}
-        </span>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => exportOrderCsv(detail)}
+            className="inline-flex items-center gap-2 rounded-md border bg-white px-3 py-2 text-sm font-medium hover:bg-gray-50"
+          >
+            <Download className="h-4 w-4" />
+            Export CSV
+          </button>
+          <button
+            type="button"
+            onClick={() => exportOrderPdf(detail)}
+            className="inline-flex items-center gap-2 rounded-md bg-black px-3 py-2 text-sm font-medium text-white hover:bg-gray-800"
+          >
+            <FileText className="h-4 w-4" />
+            Export PDF
+          </button>
+          <span
+            className={`inline-flex w-fit rounded-full px-3 py-1 text-xs font-semibold ${statusClass(order.status)}`}
+          >
+            {order.status}
+          </span>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -222,6 +536,36 @@ export default function AdminOrderDetailsPage() {
           <div className="text-2xl font-bold capitalize">{detail.deposit.status}</div>
         </div>
       </div>
+
+      {needsDamageReview && (
+        <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-4">
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div>
+              <div className="font-semibold text-yellow-900">Admin review required</div>
+              <p className="text-sm text-yellow-800">
+                The lender reported damage after return. This order must stay RETURNED until the
+                deposit review is resolved.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Link
+                href={`/admin/deposits/${order.id}`}
+                className="rounded-md bg-black px-3 py-2 text-sm text-white hover:bg-gray-800"
+              >
+                Resolve Deposit
+              </Link>
+              {detail.complaints[0] && (
+                <Link
+                  href={`/complain/${detail.complaints[0].id}`}
+                  className="rounded-md border bg-white px-3 py-2 text-sm hover:bg-gray-50"
+                >
+                  View Complaint
+                </Link>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
         <Section title="Order Summary" icon={ReceiptText}>

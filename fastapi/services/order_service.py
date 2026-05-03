@@ -18,7 +18,9 @@ import logging
 from services.email_service import (
     send_order_confirmation_receipt_email,
     send_shipment_status_email,
+    send_admin_damage_review_email,
 )
+from core.config import settings
 
 logger = logging.getLogger(__name__)
 PLATFORM_SERVICE_FEE_AMOUNT = 2.0
@@ -966,7 +968,8 @@ class OrderService:
         now = now.replace(tzinfo=None)
         orders = db.query(Order).filter(
             Order.status == "RETURNED",
-            Order.returned_at.isnot(None)
+            Order.returned_at.isnot(None),
+            Order.deposit_status != "pending_review",
         ).all()
         
         count = 0
@@ -1187,7 +1190,8 @@ class OrderService:
                 ),
                 commit=False,
             )
-            for admin in db.query(User).filter(User.is_admin == True).all():  # noqa: E712
+            admins = db.query(User).filter(User.is_admin == True).all()  # noqa: E712
+            for admin in admins:
                 NotificationService.create(
                     db, user_id=admin.user_id, order_id=order.id,
                     type="COMPLAINT_CREATED",
@@ -1201,6 +1205,27 @@ class OrderService:
 
             db.commit()
             db.refresh(order)
+            review_url = f"{settings.FRONTEND_URL.rstrip('/')}/admin/orders/{order.id}"
+            for admin in admins:
+                if not admin.email:
+                    continue
+                try:
+                    send_admin_damage_review_email(
+                        admin_email=admin.email,
+                        admin_name=admin.name,
+                        order_id=order.id,
+                        lender_name=order.owner.name if order.owner else None,
+                        borrower_name=order.borrower.name if order.borrower else None,
+                        severity=severity,
+                        note=note,
+                        review_url=review_url,
+                    )
+                except Exception as e:
+                    logger.exception(
+                        "Failed to send admin damage review email for order %s: %s",
+                        order.id,
+                        e,
+                    )
             # NO automatic refund — admin will trigger partial/full via /deposits/admin endpoints
 
         return True
