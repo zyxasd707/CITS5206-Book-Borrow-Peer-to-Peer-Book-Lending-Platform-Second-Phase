@@ -968,7 +968,8 @@ class OrderService:
         now = now.replace(tzinfo=None)
         orders = db.query(Order).filter(
             Order.status == "RETURNED",
-            Order.returned_at.isnot(None)
+            Order.returned_at.isnot(None),
+            Order.deposit_status != "pending_review",
         ).all()
         
         count = 0

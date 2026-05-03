@@ -37,7 +37,6 @@ function getStatusBadgeClass(status: string) {
 export default function ViewOrdersPage() {
     const [selectedStatus, setSelectedStatus] = useState("ALL");
     const [orders, setOrders] = useState<OrderItem[]>([]);
-    const [totalOrders, setTotalOrders] = useState(0);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
 
@@ -48,7 +47,7 @@ export default function ViewOrdersPage() {
             ? localStorage.getItem("access_token")
             : null;
 
-    const fetchOrders = async (status: string) => {
+    const fetchOrders = async () => {
         try {
             setLoading(true);
             setError("");
@@ -60,7 +59,7 @@ export default function ViewOrdersPage() {
             }
 
             const res = await fetch(
-                `${API_URL}/api/v1/analytics/orders?status=${status}`,
+                `${API_URL}/api/v1/analytics/orders?status=ALL`,
                 {
                     headers: {
                         Authorization: `Bearer ${token}`,
@@ -74,7 +73,6 @@ export default function ViewOrdersPage() {
 
             const result = await res.json();
 
-            setTotalOrders(result.total_orders ?? 0);
             setOrders(result.orders ?? []);
         } catch (err) {
             console.error(err);
@@ -85,13 +83,60 @@ export default function ViewOrdersPage() {
     };
 
     useEffect(() => {
-        fetchOrders(selectedStatus);
-    }, [selectedStatus]);
+        fetchOrders();
+    }, []);
 
     const completedCount = orders.filter((o) => o.status === "COMPLETED").length;
     const overdueCount = orders.filter((o) => o.status === "OVERDUE").length;
     const borrowingCount = orders.filter((o) => o.status === "BORROWING").length;
     const returnedCount = orders.filter((o) => o.status === "RETURNED").length;
+    const visibleOrders =
+        selectedStatus === "ALL"
+            ? orders
+            : orders.filter((order) => order.status === selectedStatus);
+
+    const kpiCards = [
+        {
+            status: "ALL",
+            label: "Total Orders",
+            count: orders.length,
+            hint: "all statuses",
+            className: "border-gray-200 bg-white text-gray-900",
+            labelClassName: "text-gray-500",
+        },
+        {
+            status: "RETURNED",
+            label: "Returned",
+            count: returnedCount,
+            hint: "needs attention",
+            className: "border-amber-300 bg-amber-50 text-amber-900",
+            labelClassName: "text-amber-800",
+        },
+        {
+            status: "COMPLETED",
+            label: "Completed",
+            count: completedCount,
+            hint: "resolved orders",
+            className: "border-gray-200 bg-white text-gray-900",
+            labelClassName: "text-gray-500",
+        },
+        {
+            status: "OVERDUE",
+            label: "Overdue",
+            count: overdueCount,
+            hint: "past due date",
+            className: "border-gray-200 bg-white text-gray-900",
+            labelClassName: "text-gray-500",
+        },
+        {
+            status: "BORROWING",
+            label: "Borrowing",
+            count: borrowingCount,
+            hint: "currently active",
+            className: "border-gray-200 bg-white text-gray-900",
+            labelClassName: "text-gray-500",
+        },
+    ];
 
     return (
         <div className="max-w-7xl mx-auto p-6 space-y-6">
@@ -107,31 +152,25 @@ export default function ViewOrdersPage() {
             </div>
 
             <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-4">
-                <div className="rounded-xl border bg-white p-4">
-                    <div className="text-sm text-gray-500 mb-1">Total Orders</div>
-                    <div className="text-2xl font-bold">{totalOrders}</div>
-                </div>
+                {kpiCards.map((card) => {
+                    const selected = selectedStatus === card.status;
 
-                <div className="rounded-xl border border-amber-300 bg-amber-50 p-4">
-                    <div className="text-sm text-amber-800 mb-1">Returned</div>
-                    <div className="text-2xl font-bold text-amber-900">{returnedCount}</div>
-                    <div className="text-xs text-amber-700">needs attention</div>
-                </div>
-
-                <div className="rounded-xl border bg-white p-4">
-                    <div className="text-sm text-gray-500 mb-1">Completed</div>
-                    <div className="text-2xl font-bold">{completedCount}</div>
-                </div>
-
-                <div className="rounded-xl border bg-white p-4">
-                    <div className="text-sm text-gray-500 mb-1">Overdue</div>
-                    <div className="text-2xl font-bold">{overdueCount}</div>
-                </div>
-
-                <div className="rounded-xl border bg-white p-4">
-                    <div className="text-sm text-gray-500 mb-1">Borrowing</div>
-                    <div className="text-2xl font-bold">{borrowingCount}</div>
-                </div>
+                    return (
+                        <button
+                            key={card.status}
+                            type="button"
+                            onClick={() => setSelectedStatus(card.status)}
+                            aria-pressed={selected}
+                            className={`rounded-xl border p-4 text-left transition hover:-translate-y-0.5 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                                card.className
+                            } ${selected ? "ring-2 ring-blue-500" : ""}`}
+                        >
+                            <div className={`text-sm mb-1 ${card.labelClassName}`}>{card.label}</div>
+                            <div className="text-2xl font-bold">{card.count}</div>
+                            <div className="text-xs opacity-80">{card.hint}</div>
+                        </button>
+                    );
+                })}
             </div>
 
             <div className="bg-white rounded-xl shadow-sm border p-4">
@@ -158,7 +197,9 @@ export default function ViewOrdersPage() {
 
             {!loading && !error && (
                 <div className="bg-white rounded-xl shadow-sm border p-6 overflow-x-auto">
-                    <h2 className="text-xl font-semibold mb-4">Orders List</h2>
+                    <h2 className="text-xl font-semibold mb-4">
+                        {selectedStatus === "ALL" ? "Orders List" : `${selectedStatus} Orders`}
+                    </h2>
 
                     <table className="min-w-full border-collapse">
                         <thead>
@@ -175,8 +216,8 @@ export default function ViewOrdersPage() {
                             </tr>
                         </thead>
                         <tbody>
-                            {orders.length > 0 ? (
-                                orders.map((order) => (
+                            {visibleOrders.length > 0 ? (
+                                visibleOrders.map((order) => (
                                     <tr
                                         key={order.id}
                                         className={`border-b align-top ${
@@ -240,7 +281,7 @@ export default function ViewOrdersPage() {
                             ) : (
                                 <tr>
                                     <td colSpan={9} className="py-4 px-4 text-center text-gray-500">
-                                        No orders found for the selected filter.
+                                        No orders found for the selected status.
                                     </td>
                                 </tr>
                             )}

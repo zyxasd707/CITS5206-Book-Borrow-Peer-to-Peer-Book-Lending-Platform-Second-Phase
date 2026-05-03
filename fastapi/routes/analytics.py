@@ -3,6 +3,7 @@ from datetime import date, datetime, timedelta
 from collections import Counter
 
 from fastapi import APIRouter, Depends, Query, HTTPException
+from pydantic import BaseModel
 from sqlalchemy import func, text, case
 from sqlalchemy.orm import Session, joinedload
 
@@ -19,6 +20,10 @@ from models.payment_split import PaymentSplit
 from models.review import Review
 
 router = APIRouter(prefix="/analytics", tags=["Analytics"])
+
+
+class AdminStatusUpdate(BaseModel):
+    is_admin: bool
 
 
 def _iso(value):
@@ -197,6 +202,7 @@ def get_user_metrics(
     admin: User = Depends(get_current_admin),
 ):
     total_users = db.query(User).count()
+    admin_users = db.query(User).filter(User.is_admin == True).count()
 
     seven_days_ago = datetime.utcnow() - timedelta(days=7)
 
@@ -206,6 +212,7 @@ def get_user_metrics(
 
     return {
         "total_users": total_users,
+        "admin_users": admin_users,
         "new_users_last_7_days": new_users_last_7_days,
     }
 
@@ -236,6 +243,7 @@ def get_user_signups(
             "user_id": user.user_id,
             "name": user.name,
             "email": user.email,
+            "is_admin": bool(user.is_admin),
             "created_at": user.created_at.isoformat() if user.created_at else None,
             "city": user.city,
             "state": user.state,
@@ -337,9 +345,15 @@ def search_users(
     db: Session = Depends(get_db),
     admin: User = Depends(get_current_admin),
 ):
+    term = f"%{q.strip()}%"
     users = (
         db.query(User)
-        .filter(User.name.ilike(f"%{q}%"))
+        .filter(
+            (User.name.ilike(term))
+            | (User.email.ilike(term))
+            | (User.user_id.ilike(term))
+        )
+        .order_by(User.created_at.desc())
         .limit(10)
         .all()
     )
@@ -350,9 +364,40 @@ def search_users(
             "user_id": user.user_id,
             "name": user.name,
             "email": user.email,
+            "is_admin": bool(user.is_admin),
+            "created_at": user.created_at.isoformat() if user.created_at else None,
+            "city": user.city,
+            "state": user.state,
+            "country": user.country,
         })
 
     return results
+
+
+@router.patch("/users/{user_id}/admin-status")
+def update_user_admin_status(
+    user_id: str,
+    body: AdminStatusUpdate,
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_current_admin),
+):
+    user = db.query(User).filter(User.user_id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    if user.user_id == admin.user_id and body.is_admin is False:
+        raise HTTPException(status_code=400, detail="You cannot remove your own admin access")
+
+    user.is_admin = body.is_admin
+    db.commit()
+    db.refresh(user)
+
+    return {
+        "user_id": user.user_id,
+        "name": user.name,
+        "email": user.email,
+        "is_admin": bool(user.is_admin),
+    }
 
 @router.get("/books-by-user/{user_id}")
 def get_books_by_user(
