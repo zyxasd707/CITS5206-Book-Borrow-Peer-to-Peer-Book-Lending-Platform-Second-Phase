@@ -376,8 +376,10 @@ export default function OrderDetailPage() {
 
       if (damageSeverity === "none") {
         toast.success("Book received. Deposit refund will be processed.");
+      } else if (damageSeverity === "severe") {
+        toast.success("Full damage submitted. Awaiting Response from Admin.");
       } else {
-        toast.success("Damage report submitted. The order is now pending admin review.");
+        toast.success("Damage deduction applied. Partial refund will be processed.");
       }
 
       resetDamageForm();
@@ -1083,8 +1085,8 @@ export default function OrderDetailPage() {
         <div className="space-y-4">
           <p className="text-sm text-gray-700">
             Mark the returned book as received. If the book arrived damaged,
-            select a severity and upload evidence so an admin can decide the
-            deposit deduction.
+            select a severity and upload evidence. Light and medium damage
+            apply an automatic refund deduction; severe damage awaits response from admin.
           </p>
 
           <div>
@@ -1152,10 +1154,16 @@ export default function OrderDetailPage() {
                 />
               </div>
 
-              <div className="rounded-md bg-amber-50 border border-amber-200 p-3 text-xs text-amber-800">
-                The borrower will be notified and has 7 days to upload counter-evidence.
-                An admin will review both sides and decide the final deduction.
-              </div>
+              {damageSeverity === "severe" ? (
+                <div className="rounded-md bg-amber-50 border border-amber-200 p-3 text-xs text-amber-800">
+                  Severe damage will be sent to admin attention. The borrower will be notified
+                  and an admin will decide the final deduction.
+                </div>
+              ) : (
+                <div className="rounded-md bg-blue-50 border border-blue-200 p-3 text-xs text-blue-800">
+                  The borrower will be notified and the partial refund deduction will be applied automatically.
+                </div>
+              )}
             </>
           )}
 
@@ -1173,10 +1181,8 @@ export default function OrderDetailPage() {
             <Button
               disabled={confirmSubmitting}
               onClick={async () => {
-                // Q5=A (Phase B.1): non-trivial action — gate damage reports
-                // behind a second confirmation so lenders consciously accept
-                // the downstream consequences (complaint case + borrower hold).
-                if (damageSeverity !== "none") {
+                // Severe damage is the only lender report that awaits response from admin.
+                if (damageSeverity === "severe") {
                   setDamageConfirmOpen(true);
                   return;
                 }
@@ -1188,7 +1194,9 @@ export default function OrderDetailPage() {
                 ? "Submitting..."
                 : damageSeverity === "none"
                 ? "Confirm & Release Deposit"
-                : "Submit for Admin Review"}
+                : damageSeverity === "severe"
+                ? "Submit for Admin Response"
+                : "Confirm & Apply Deduction"}
             </Button>
           </div>
         </div>
@@ -1209,20 +1217,19 @@ export default function OrderDetailPage() {
           <ul className="space-y-2 text-sm text-gray-700">
             <li className="flex gap-2">
               <span className="text-green-600">&#10003;</span>
-              <span>Submit a damage claim against the borrower</span>
+              <span>Send the damage case to admin attention</span>
             </li>
             <li className="flex gap-2">
               <span className="text-green-600">&#10003;</span>
-              <span>Hold the borrower&apos;s deposit pending admin review</span>
+              <span>Hold the borrower&apos;s deposit while awaiting response from admin</span>
             </li>
             <li className="flex gap-2">
               <span className="text-green-600">&#10003;</span>
-              <span>Trigger a complaint case (with full audit trail)</span>
+              <span>Trigger a complaint case and email admins</span>
             </li>
           </ul>
           <div className="rounded-md bg-amber-50 border border-amber-200 p-3 text-xs text-amber-800">
-            The borrower will be notified and has 7 days to upload counter-evidence.
-            An admin will arbitrate the final deduction.
+            Severe damage awaits response from admin before the full deposit can be forfeited.
           </div>
           <div className="flex justify-end gap-2 pt-2">
             <Button

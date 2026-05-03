@@ -34,7 +34,7 @@ const SEVERITY_META: Record<string, { label: string; className: string }> = {
 };
 
 const STATUS_META: Record<string, { label: string; className: string }> = {
-  pending_review: { label: "Pending Review", className: "bg-yellow-100 text-yellow-700 border-yellow-200" },
+  pending_review: { label: "Awaiting Response from Admin", className: "bg-yellow-100 text-yellow-700 border-yellow-200" },
   refund_ready: { label: "Refund Ready to Claim", className: "bg-blue-100 text-blue-700 border-blue-200" },
   released: { label: "Released", className: "bg-green-100 text-green-700 border-green-200" },
   partially_deducted: { label: "Partially Deducted", className: "bg-orange-100 text-orange-700 border-orange-200" },

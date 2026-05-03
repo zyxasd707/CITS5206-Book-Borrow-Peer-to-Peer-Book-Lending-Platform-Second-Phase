@@ -61,7 +61,7 @@ export function getDepositBadge(args: {
   if (orderStatus === "RETURNED") {
     if (depositStatus === "pending_review") {
       return {
-        label: `Pending review · ${fmt(depositCents)} at stake`,
+        label: `Awaiting Response from Admin · ${fmt(depositCents)} at stake`,
         className: "bg-yellow-50 text-yellow-700 border-yellow-200",
       };
     }
@@ -75,7 +75,7 @@ export function getDepositBadge(args: {
     switch (depositStatus) {
       case "pending_review":
         return {
-          label: `Pending review · ${fmt(depositCents)} at stake`,
+          label: `Awaiting Response from Admin · ${fmt(depositCents)} at stake`,
           className: "bg-yellow-50 text-yellow-700 border-yellow-200",
         };
       case "refund_ready":

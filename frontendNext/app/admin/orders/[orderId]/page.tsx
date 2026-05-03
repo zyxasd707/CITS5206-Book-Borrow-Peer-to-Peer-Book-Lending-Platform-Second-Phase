@@ -541,10 +541,10 @@ export default function AdminOrderDetailsPage() {
         <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-4">
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div>
-              <div className="font-semibold text-yellow-900">Admin review required</div>
+              <div className="font-semibold text-yellow-900">Awaiting Response from Admin</div>
               <p className="text-sm text-yellow-800">
-                The lender reported damage after return. This order must stay RETURNED until the
-                deposit review is resolved.
+                The lender reported full damage after return. This order must stay RETURNED until
+                admin resolves the arbitration process.
               </p>
             </div>
             <div className="flex flex-wrap gap-2">

@@ -154,10 +154,19 @@ def owner_confirm_received(
     )
     if success:
         severity = (request.damage_severity or "none").lower()
+        if severity == "full":
+            severity = "severe"
         if severity == "none":
             return {"message": "Order marked as COMPLETED and refund triggered if applicable"}
+        if severity in {"light", "medium"}:
+            return {
+                "message": "Damage deduction applied automatically. Order marked as COMPLETED and partial refund triggered if applicable.",
+                "order_status": "COMPLETED",
+                "deposit_status": "partially_deducted",
+                "severity": severity,
+            }
         return {
-            "message": "Damage reported. Order remains RETURNED and is pending admin review.",
+            "message": "Severe damage reported. Order remains RETURNED and is pending admin review.",
             "order_status": "RETURNED",
             "deposit_status": "pending_review",
             "severity": severity,

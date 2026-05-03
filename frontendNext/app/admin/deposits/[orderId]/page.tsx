@@ -49,7 +49,7 @@ const SEVERITY_META: Record<string, { label: string; className: string }> = {
 };
 
 const STATUS_META: Record<string, { label: string; className: string }> = {
-  pending_review: { label: "Pending Review", className: "bg-yellow-100 text-yellow-700 border-yellow-200" },
+  pending_review: { label: "Awaiting Response from Admin", className: "bg-yellow-100 text-yellow-700 border-yellow-200" },
   // PR #97 mid-state: admin already decided, borrower has not claimed yet.
   // Pre-B.2 this page lacked the key, so the status banner fell back to "Held"
   // (gray) right after a successful arbitration — confusing because the

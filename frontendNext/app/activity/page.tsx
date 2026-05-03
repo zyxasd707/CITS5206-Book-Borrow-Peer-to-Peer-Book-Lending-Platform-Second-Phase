@@ -275,7 +275,7 @@ function ActiveTab({ items }: { items: ActiveItem[] }) {
       {items.map((item) => {
         if (item.kind === "deposit-in-review") {
           const statusLabel =
-            item.depositStatus === "pending_review" ? "Pending Review" : "Refund Ready";
+            item.depositStatus === "pending_review" ? "Awaiting Response from Admin" : "Refund Ready";
           const roleLabel = item.role === "borrower" ? "I borrowed" : "I lent";
           return (
             <Card

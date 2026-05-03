@@ -17,7 +17,17 @@ type OrderItem = {
     books: string[];
 };
 
-const FILTER_OPTIONS = ["ALL", "RETURNED", "COMPLETED", "OVERDUE", "BORROWING"];
+const FILTER_OPTIONS = ["ALL", "PENDING", "COMPLETED", "OVERDUE", "BORROWING"];
+
+function getStatusLabel(status: string) {
+    if (status === "RETURNED") return "PENDING";
+    return status;
+}
+
+function getFilterStatus(status: string) {
+    if (status === "PENDING") return "RETURNED";
+    return status;
+}
 
 function getStatusBadgeClass(status: string) {
     switch (status) {
@@ -89,11 +99,11 @@ export default function ViewOrdersPage() {
     const completedCount = orders.filter((o) => o.status === "COMPLETED").length;
     const overdueCount = orders.filter((o) => o.status === "OVERDUE").length;
     const borrowingCount = orders.filter((o) => o.status === "BORROWING").length;
-    const returnedCount = orders.filter((o) => o.status === "RETURNED").length;
+    const pendingCount = orders.filter((o) => o.status === "RETURNED").length;
     const visibleOrders =
         selectedStatus === "ALL"
             ? orders
-            : orders.filter((order) => order.status === selectedStatus);
+            : orders.filter((order) => order.status === getFilterStatus(selectedStatus));
 
     const kpiCards = [
         {
@@ -105,10 +115,10 @@ export default function ViewOrdersPage() {
             labelClassName: "text-gray-500",
         },
         {
-            status: "RETURNED",
-            label: "Returned",
-            count: returnedCount,
-            hint: "needs attention",
+            status: "PENDING",
+            label: "Pending",
+            count: pendingCount,
+            hint: "awaiting response from admin",
             className: "border-amber-300 bg-amber-50 text-amber-900",
             labelClassName: "text-amber-800",
         },
@@ -240,11 +250,11 @@ export default function ViewOrdersPage() {
                                                     order.status
                                                 )}`}
                                             >
-                                                {order.status}
+                                                {getStatusLabel(order.status)}
                                             </span>
                                             {order.status === "RETURNED" && (
                                                 <div className="mt-1 text-xs font-medium text-amber-800">
-                                                    Awaiting admin review
+                                                    Awaiting Response from Admin
                                                 </div>
                                             )}
                                         </td>
