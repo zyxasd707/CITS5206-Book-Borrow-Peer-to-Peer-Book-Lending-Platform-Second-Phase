@@ -172,6 +172,11 @@ export default function BookMetricsPage() {
         const fetchUsers = async () => {
             const trimmed = searchText.trim();
 
+            if (selectedUser && trimmed === selectedUser.name) {
+                setMatchedUsers([]);
+                return;
+            }
+
             if (!trimmed) {
                 setMatchedUsers([]);
                 return;
@@ -209,7 +214,7 @@ export default function BookMetricsPage() {
 
         const timeout = setTimeout(fetchUsers, 300);
         return () => clearTimeout(timeout);
-    }, [searchText, token]);
+    }, [searchText, selectedUser, token]);
 
     const handleSelectUser = async (user: UserSearchResult) => {
         try {
@@ -536,7 +541,7 @@ export default function BookMetricsPage() {
                             <p className="text-sm text-gray-500 mt-2">Searching users...</p>
                         )}
 
-                        {matchedUsers.length > 0 && (
+                        {matchedUsers.length > 0 && !selectedUser && (
                             <div className="absolute z-10 mt-1 w-full bg-white border rounded-lg shadow-lg max-h-56 overflow-y-auto">
                                 {matchedUsers.map((user) => (
                                     <button
@@ -606,7 +611,14 @@ export default function BookMetricsPage() {
                             {userBooks.length > 0 ? (
                                 userBooks.map((book) => (
                                     <tr key={book.id} className="border-b hover:bg-gray-50">
-                                        <td className="py-3 px-4">{book.title_or || "-"}</td>
+                                        <td className="py-3 px-4">
+                                            <Link
+                                                href={`/books/${book.id}`}
+                                                className="font-medium text-blue-600 underline"
+                                            >
+                                                {book.title_or || "-"}
+                                            </Link>
+                                        </td>
                                         <td className="py-3 px-4">{book.author || "-"}</td>
                                         <td className="py-3 px-4">{book.category || "-"}</td>
                                         <td className="py-3 px-4">{book.status || "-"}</td>

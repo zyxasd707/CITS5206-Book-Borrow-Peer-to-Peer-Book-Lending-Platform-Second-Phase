@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { Download, FileText } from "lucide-react";
 import { getApiUrl } from "@/utils/auth";
 import { formatLocalDate } from "@/utils/datetime";
 
@@ -32,6 +33,122 @@ function getStatusBadgeClass(status: string) {
         default:
             return "bg-gray-100 text-gray-700";
     }
+}
+
+function csvEscape(value: string) {
+    return `"${value.replace(/"/g, '""')}"`;
+}
+
+function escapeHtml(value: string) {
+    return value
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
+
+function downloadTextFile(filename: string, content: string, mimeType: string) {
+    const blob = new Blob([content], { type: mimeType });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+}
+
+function buildOrderReportRows(orders: OrderItem[]) {
+    return orders.map((order) => ({
+        "Order ID": order.id,
+        Status: order.status || "-",
+        Type: order.action_type || "-",
+        Owner: order.owner_name || "-",
+        Borrower: order.borrower_name || "-",
+        Books: order.books.join("; ") || "-",
+        "Created Date": formatLocalDate(order.created_at, "-"),
+        "Due Date": formatLocalDate(order.due_at, "-"),
+        "Total Paid": `$${Number(order.total_paid_amount || 0).toFixed(2)}`,
+    }));
+}
+
+function exportOrdersCsv(orders: OrderItem[]) {
+    const rows = buildOrderReportRows(orders);
+    const headers = ["Order ID", "Status", "Type", "Owner", "Borrower", "Books", "Created Date", "Due Date", "Total Paid"];
+    const csv = [
+        headers.map(csvEscape).join(","),
+        ...rows.map((row) => headers.map((header) => csvEscape(row[header as keyof typeof row])).join(",")),
+    ].join("\n");
+
+    downloadTextFile("bookborrow-all-orders.csv", csv, "text/csv;charset=utf-8");
+}
+
+function exportOrdersPdf(orders: OrderItem[]) {
+    const rows = buildOrderReportRows(orders);
+    const headers = ["Order ID", "Status", "Type", "Owner", "Borrower", "Books", "Created Date", "Due Date", "Total Paid"];
+    const bodyRows = rows
+        .map(
+            (row) => `
+                <tr>
+                    ${headers.map((header) => `<td>${escapeHtml(row[header as keyof typeof row])}</td>`).join("")}
+                </tr>
+            `
+        )
+        .join("");
+
+    const iframe = document.createElement("iframe");
+    iframe.style.position = "fixed";
+    iframe.style.right = "0";
+    iframe.style.bottom = "0";
+    iframe.style.width = "0";
+    iframe.style.height = "0";
+    iframe.style.border = "0";
+    iframe.title = "BookBorrow all orders PDF export";
+
+    const html = `
+        <!doctype html>
+        <html>
+          <head>
+            <title>BookBorrow All Orders Report</title>
+            <style>
+              body { font-family: Arial, sans-serif; color: #111827; margin: 32px; }
+              h1 { font-size: 24px; margin: 0 0 4px; }
+              .meta { color: #4b5563; margin: 0 0 24px; }
+              table { border-collapse: collapse; width: 100%; }
+              th, td { border: 1px solid #e5e7eb; font-size: 11px; padding: 7px; text-align: left; vertical-align: top; }
+              th { background: #f9fafb; }
+              @media print { body { margin: 14mm; } }
+            </style>
+          </head>
+          <body>
+            <h1>BookBorrow All Orders Report</h1>
+            <p class="meta">${rows.length} order(s) | Generated ${escapeHtml(new Date().toLocaleString())}</p>
+            <table>
+              <thead><tr>${headers.map((header) => `<th>${escapeHtml(header)}</th>`).join("")}</tr></thead>
+              <tbody>${bodyRows}</tbody>
+            </table>
+          </body>
+        </html>
+    `;
+
+    document.body.appendChild(iframe);
+    const iframeDocument = iframe.contentWindow?.document;
+    if (!iframeDocument || !iframe.contentWindow) {
+        iframe.remove();
+        alert("Unable to prepare the PDF export. Please try again.");
+        return;
+    }
+
+    iframeDocument.open();
+    iframeDocument.write(html);
+    iframeDocument.close();
+    window.setTimeout(() => {
+        iframe.contentWindow?.focus();
+        iframe.contentWindow?.print();
+        window.setTimeout(() => iframe.remove(), 1000);
+    }, 100);
 }
 
 export default function ViewOrdersPage() {
@@ -146,9 +263,29 @@ export default function ViewOrdersPage() {
                     <h1 className="text-2xl font-bold">View Orders</h1>
                     <p className="text-gray-600">Browse and filter platform orders.</p>
                 </div>
-                <Link href="/admin" className="text-sm underline self-center">
-                    Back to Dashboard
-                </Link>
+                <div className="flex flex-wrap items-center gap-2">
+                    <button
+                        type="button"
+                        onClick={() => exportOrdersCsv(orders)}
+                        disabled={orders.length === 0}
+                        className="inline-flex items-center gap-2 rounded-lg border bg-white px-3 py-2 text-sm font-medium hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                        <Download className="h-4 w-4" />
+                        Export CSV
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => exportOrdersPdf(orders)}
+                        disabled={orders.length === 0}
+                        className="inline-flex items-center gap-2 rounded-lg bg-black px-3 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                        <FileText className="h-4 w-4" />
+                        Export PDF
+                    </button>
+                    <Link href="/admin" className="text-sm underline self-center">
+                        Back to Dashboard
+                    </Link>
+                </div>
             </div>
 
             <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-4">

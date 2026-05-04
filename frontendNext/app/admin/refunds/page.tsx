@@ -15,6 +15,8 @@ import {
   ChevronLeft,
   ChevronRight,
   Plus,
+  Download,
+  FileText,
 } from "lucide-react";
 import { getCurrentUser } from "@/utils/auth";
 import { getAdminRefunds, manualAdminRefund } from "@/utils/payments";
@@ -91,6 +93,152 @@ interface Pagination {
   total_pages: number;
 }
 
+function csvEscape(value: string) {
+  return `"${value.replace(/"/g, '""')}"`;
+}
+
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+function downloadTextFile(filename: string, content: string, mimeType: string) {
+  const blob = new Blob([content], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+function formatRefundAmount(cents: number, currency: string) {
+  const dollars = (cents / 100).toFixed(2);
+  const sym = currency?.toUpperCase() === "AUD" ? "A$" : "$";
+  return `${sym}${dollars}`;
+}
+
+function buildRefundReportRows(refunds: AdminRefundItem[]) {
+  return refunds.map((refund) => ({
+    "Refund ID": refund.refund_id,
+    "Payment ID": refund.payment_id,
+    "Order ID": refund.order?.order_id || "-",
+    Books: refund.order?.book_titles?.join("; ") || "-",
+    Borrower: refund.borrower?.name || "-",
+    "Borrower Email": refund.borrower?.email || "-",
+    Lender: refund.lender?.name || "-",
+    "Lender Email": refund.lender?.email || "-",
+    Amount: formatRefundAmount(refund.amount, refund.currency),
+    Status: STATUS_META[refund.status]?.label || refund.status || "-",
+    Type: TYPE_LABELS[refund.refund_type] || refund.refund_type || "-",
+    Trigger: TRIGGER_LABELS[refund.trigger] || refund.trigger || "-",
+    Reason: refund.reason || "-",
+    "Created At": formatLocalDateTime(refund.created_at, "-"),
+    "Updated At": formatLocalDateTime(refund.updated_at, "-"),
+    Disputes: refund.disputes.map((item) => `${item.reason} (${item.status})`).join("; ") || "-",
+  }));
+}
+
+function exportRefundsCsv(refunds: AdminRefundItem[]) {
+  const rows = buildRefundReportRows(refunds);
+  const headers = [
+    "Refund ID",
+    "Payment ID",
+    "Order ID",
+    "Books",
+    "Borrower",
+    "Borrower Email",
+    "Lender",
+    "Lender Email",
+    "Amount",
+    "Status",
+    "Type",
+    "Trigger",
+    "Reason",
+    "Created At",
+    "Updated At",
+    "Disputes",
+  ];
+  const csv = [
+    headers.map(csvEscape).join(","),
+    ...rows.map((row) => headers.map((header) => csvEscape(row[header as keyof typeof row])).join(",")),
+  ].join("\n");
+
+  downloadTextFile("bookborrow-refund-report.csv", csv, "text/csv;charset=utf-8");
+}
+
+function exportRefundsPdf(refunds: AdminRefundItem[]) {
+  const rows = buildRefundReportRows(refunds);
+  const headers = ["Refund ID", "Order ID", "Books", "Borrower", "Lender", "Amount", "Status", "Type", "Trigger", "Created At"];
+  const bodyRows = rows
+    .map(
+      (row) => `
+        <tr>
+          ${headers.map((header) => `<td>${escapeHtml(row[header as keyof typeof row])}</td>`).join("")}
+        </tr>
+      `
+    )
+    .join("");
+
+  const iframe = document.createElement("iframe");
+  iframe.style.position = "fixed";
+  iframe.style.right = "0";
+  iframe.style.bottom = "0";
+  iframe.style.width = "0";
+  iframe.style.height = "0";
+  iframe.style.border = "0";
+  iframe.title = "BookBorrow refund PDF export";
+
+  const html = `
+    <!doctype html>
+    <html>
+      <head>
+        <title>BookBorrow Refund Report</title>
+        <style>
+          body { font-family: Arial, sans-serif; color: #111827; margin: 32px; }
+          h1 { font-size: 24px; margin: 0 0 4px; }
+          .meta { color: #4b5563; margin: 0 0 24px; }
+          table { border-collapse: collapse; width: 100%; }
+          th, td { border: 1px solid #e5e7eb; font-size: 11px; padding: 7px; text-align: left; vertical-align: top; }
+          th { background: #f9fafb; }
+          @media print { body { margin: 14mm; } }
+        </style>
+      </head>
+      <body>
+        <h1>BookBorrow Refund Report</h1>
+        <p class="meta">${rows.length} refund(s) | Generated ${escapeHtml(new Date().toLocaleString())}</p>
+        <table>
+          <thead><tr>${headers.map((header) => `<th>${escapeHtml(header)}</th>`).join("")}</tr></thead>
+          <tbody>${bodyRows}</tbody>
+        </table>
+      </body>
+    </html>
+  `;
+
+  document.body.appendChild(iframe);
+  const iframeDocument = iframe.contentWindow?.document;
+  if (!iframeDocument || !iframe.contentWindow) {
+    iframe.remove();
+    alert("Unable to prepare the PDF export. Please try again.");
+    return;
+  }
+
+  iframeDocument.open();
+  iframeDocument.write(html);
+  iframeDocument.close();
+  window.setTimeout(() => {
+    iframe.contentWindow?.focus();
+    iframe.contentWindow?.print();
+    window.setTimeout(() => iframe.remove(), 1000);
+  }, 100);
+}
+
 export default function AdminRefundsPage() {
   const [loading, setLoading] = useState(true);
   const [meAdmin, setMeAdmin] = useState(false);
@@ -118,6 +266,7 @@ export default function AdminRefundsPage() {
   const [manualRefundType, setManualRefundType] = useState("full");
   const [manualReason, setManualReason] = useState("");
   const [manualSubmitting, setManualSubmitting] = useState(false);
+  const [reportExporting, setReportExporting] = useState(false);
 
   const router = useRouter();
 
@@ -198,13 +347,38 @@ export default function AdminRefundsPage() {
     }
   };
 
-  const fmtAmount = (cents: number, currency: string) => {
-    const dollars = (cents / 100).toFixed(2);
-    const sym = currency?.toUpperCase() === "AUD" ? "A$" : "$";
-    return `${sym}${dollars}`;
-  };
+  const fmtAmount = formatRefundAmount;
 
   const fmtDate = (v?: string | null) => formatLocalDateTime(v, "-");
+
+  const loadRefundReportRows = async () => {
+    if (pagination.total <= refunds.length) return refunds;
+    setReportExporting(true);
+    try {
+      const data = await getAdminRefunds({
+        status_filter: statusFilter || undefined,
+        refund_type: typeFilter || undefined,
+        search: search || undefined,
+        sort_by: sortBy,
+        sort_order: sortOrder,
+        page: 1,
+        page_size: Math.max(pagination.total, 20),
+      });
+      return data.refunds as AdminRefundItem[];
+    } finally {
+      setReportExporting(false);
+    }
+  };
+
+  const handleExportRefundCsv = async () => {
+    const rows = await loadRefundReportRows();
+    exportRefundsCsv(rows);
+  };
+
+  const handleExportRefundPdf = async () => {
+    const rows = await loadRefundReportRows();
+    exportRefundsPdf(rows);
+  };
 
   if (!meAdmin && !loading) {
     return (
@@ -224,6 +398,20 @@ export default function AdminRefundsPage() {
           <p className="text-gray-600">Monitor and manage all refunds across the platform.</p>
         </div>
         <div className="flex gap-2">
+          <button
+            onClick={handleExportRefundCsv}
+            disabled={refunds.length === 0 || reportExporting}
+            className="px-4 py-2 border bg-white rounded-lg text-sm flex items-center gap-1 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <Download className="w-4 h-4" /> Export CSV
+          </button>
+          <button
+            onClick={handleExportRefundPdf}
+            disabled={refunds.length === 0 || reportExporting}
+            className="px-4 py-2 bg-black text-white rounded-lg text-sm flex items-center gap-1 hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <FileText className="w-4 h-4" /> Export PDF
+          </button>
           <button
             onClick={() => setShowManualRefund(true)}
             className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm flex items-center gap-1 hover:bg-blue-700"

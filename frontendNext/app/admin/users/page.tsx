@@ -124,6 +124,12 @@ export default function AdminUsersPage() {
 
   useEffect(() => {
     const query = lookupId.trim();
+    if (lookupResult && query === `${lookupResult.name} (${lookupResult.email})`) {
+      setSearchResults([]);
+      setDropdownOpen(false);
+      return;
+    }
+
     if (query.length < 2) {
       setSearchResults([]);
       setDropdownOpen(false);
@@ -303,7 +309,7 @@ export default function AdminUsersPage() {
                 setLookupResult(null);
               }}
               onFocus={() => {
-                if (searchResults.length > 0) setDropdownOpen(true);
+                if (!lookupResult && searchResults.length > 0) setDropdownOpen(true);
               }}
               onKeyDown={(e) => {
                 if (e.key === "Enter") handleLookup();
@@ -313,7 +319,7 @@ export default function AdminUsersPage() {
               className="w-full border rounded-md px-3 py-2"
               autoComplete="off"
             />
-            {dropdownOpen && (
+            {dropdownOpen && !lookupResult && (
               <div className="absolute left-0 right-0 top-full z-20 mt-1 overflow-hidden rounded-lg border bg-white shadow-lg">
                 {searchLoading ? (
                   <div className="px-4 py-3 text-sm text-gray-500">Searching users...</div>
