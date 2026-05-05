@@ -707,13 +707,20 @@ class OrderService:
                         PaymentSplit.order_id == order.id
                     ).first()
                     if sp and sp.transfer_amount_cents > 0 and sp.connected_account_id:
-                        tr = _stripe.Transfer.create(
-                            amount=sp.transfer_amount_cents,
-                            currency=sp.currency or "aud",
-                            destination=sp.connected_account_id,
-                        )
+                        transfer_payload = {
+                            "amount": sp.transfer_amount_cents,
+                            "currency": sp.currency or "aud",
+                            "destination": sp.connected_account_id,
+                        }
+                        payment_intent = _stripe.PaymentIntent.retrieve(order.payment_id)
+                        latest_charge = getattr(payment_intent, "latest_charge", None)
+                        if latest_charge:
+                            transfer_payload["source_transaction"] = (
+                                latest_charge if isinstance(latest_charge, str) else latest_charge.id
+                            )
+                        tr = _stripe.Transfer.create(**transfer_payload)
                         sp.transfer_id = tr.id
-                        sp.transfer_status = tr.object
+                        sp.transfer_status = getattr(tr, "status", None) or tr.object
                         db.commit()
             except Exception as e:
                 db.rollback()
