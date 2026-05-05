@@ -25,6 +25,16 @@ def to_cents(amount) -> int:
     """Convert a decimal/float dollar amount to integer cents."""
     return int(round(float(amount or 0) * 100))
 
+def latest_charge_id_for_payment_intent(payment_id: str) -> Optional[str]:
+    """Return the latest charge for a PaymentIntent so transfers can use pending funds."""
+    if not payment_id:
+        return None
+    intent = stripe.PaymentIntent.retrieve(payment_id)
+    latest_charge = getattr(intent, "latest_charge", None)
+    if not latest_charge:
+        return None
+    return latest_charge if isinstance(latest_charge, str) else latest_charge.id
+
 logger = logging.getLogger(__name__)
 
 # -------- Helpers --------
@@ -1136,11 +1146,15 @@ def transfer_for_order(
     for sp in splits:
         if sp.transfer_amount_cents <= 0 or not sp.connected_account_id:
             continue
-        tr = stripe.Transfer.create(
-            amount=sp.transfer_amount_cents,
-            currency=sp.currency or "aud",
-            destination=sp.connected_account_id,
-        )
+        transfer_payload = {
+            "amount": sp.transfer_amount_cents,
+            "currency": sp.currency or "aud",
+            "destination": sp.connected_account_id,
+        }
+        latest_charge_id = latest_charge_id_for_payment_intent(sp.payment_id)
+        if latest_charge_id:
+            transfer_payload["source_transaction"] = latest_charge_id
+        tr = stripe.Transfer.create(**transfer_payload)
         sp.transfer_id = tr.id
         sp.transfer_status = tr.status
         db.add(sp)
