@@ -23,7 +23,7 @@ type FormState = Omit<Book, "id" | "ownerId" | "dateAdded" | "updateDate"> & {
 };
 
 const depositTooltipText =
-  "Deposit is refundable upon timely return of the book in good condition.";
+  "Borrowers pay this security deposit when renting. The platform holds it until the book is returned, then refunds it in full if there are no issues. If damage, loss, or another issue is confirmed, part or all of the deposit may be deducted as lender compensation.";
 const rentalPerDayTooltipText =
   "Set your daily rental rate, including $0/day for free borrowing. Your rental income is calculated from the borrower's rental days.";
 export default function AddBook() {
@@ -555,13 +555,12 @@ export default function AddBook() {
                             <span
                               className="group relative inline-flex items-center"
                               aria-label={depositTooltipText}
-                              title={depositTooltipText}
                             >
                               <CircleHelp
                                 className="h-4 w-4 cursor-help text-gray-400"
                                 aria-hidden="true"
                               />
-                              <span className="pointer-events-none absolute left-1/2 top-full z-10 mt-2 w-64 -translate-x-1/2 rounded-md bg-gray-900 px-3 py-2 text-xs font-normal leading-5 text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100">
+                              <span className="pointer-events-none absolute left-1/2 top-full z-10 mt-2 w-80 -translate-x-1/2 rounded-md bg-gray-900 px-3 py-2 text-xs font-normal leading-5 text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100">
                                 {depositTooltipText}
                               </span>
                             </span>
