@@ -7,10 +7,10 @@ from sqlalchemy.orm import Session
 from models.checkout import Checkout, CheckoutItem, CheckoutCreate
 from models.book import Book
 from models.user import User 
+from services.service_fee_service import get_platform_service_fee_amount
 
 BASE_URL = "https://digitalapi.auspost.com.au/postage/parcel/domestic/calculate.json"
 AUSPOST_API_KEY = os.getenv("AUSPOST_CALCULATE_API_KEY")
-PLATFORM_SERVICE_FEE_AMOUNT = 2.0
 
 
 # -------- Shipping fee calculator --------
@@ -198,9 +198,9 @@ async def _apply_checkout_data(db: Session, checkout: Checkout, checkoutIn: Chec
                 shippingFeeTotal += float(item.shipping_quote)
                 processedOwners.add(item.owner_id)
 
-    # Step D: platform service fee is fixed at $2 per transaction.
+    # Step D: platform service fee is configured by admin and charged per transaction.
     subtotalBeforeServiceFee = depositTotal + ownerIncomeTotal + priceTotal + shippingFeeTotal
-    serviceFeeAmount = PLATFORM_SERVICE_FEE_AMOUNT if checkout.items else 0.0
+    serviceFeeAmount = get_platform_service_fee_amount(db) if checkout.items else 0.0
 
     # Step E: update checkout totals
     checkout.deposit = depositTotal

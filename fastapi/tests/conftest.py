@@ -332,8 +332,10 @@ def restriction_guard_schema(deposit_strike_schema, engine):
     declarative_base in `models/checkout.py`, so they aren't picked up by
     `models.base.Base.metadata`. We create them table-by-table.
     """
+    from models.admin_setting import AdminSetting
     from models.checkout import Checkout, CheckoutItem
 
+    AdminSetting.__table__.create(bind=engine, checkfirst=True)
     Checkout.__table__.create(bind=engine, checkfirst=True)
     CheckoutItem.__table__.create(bind=engine, checkfirst=True)
     yield
