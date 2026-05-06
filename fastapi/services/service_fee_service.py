@@ -1,5 +1,16 @@
 from sqlalchemy.orm import Session
+from models.admin_setting import AdminSetting
 from models.service_fee import ServiceFee, ServiceFeeUpdate
+
+DEFAULT_PLATFORM_SERVICE_FEE_AMOUNT = 2.0
+PLATFORM_SERVICE_FEE_SETTING_KEY = "platform_fee_per_transaction"
+
+
+def get_platform_service_fee_amount(db: Session) -> float:
+    setting = db.query(AdminSetting).filter(
+        AdminSetting.key == PLATFORM_SERVICE_FEE_SETTING_KEY
+    ).first()
+    return float(setting.max_value) if setting else DEFAULT_PLATFORM_SERVICE_FEE_AMOUNT
 
 def get_all_fees(db: Session):
     return db.query(ServiceFee).all()

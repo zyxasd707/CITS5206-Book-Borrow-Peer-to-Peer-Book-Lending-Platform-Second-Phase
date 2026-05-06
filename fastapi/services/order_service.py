@@ -13,6 +13,7 @@ from models.complaint import Complaint
 from sqlalchemy import or_
 from services.complaint_service import ComplaintService
 from services.notification_service import NotificationService
+from services.service_fee_service import get_platform_service_fee_amount
 from typing import Set
 import logging
 from services.email_service import (
@@ -23,7 +24,6 @@ from services.email_service import (
 from core.config import settings
 
 logger = logging.getLogger(__name__)
-PLATFORM_SERVICE_FEE_AMOUNT = 2.0
 
 class OrderService:
     """
@@ -102,9 +102,9 @@ class OrderService:
         return orders_data
 
     @staticmethod
-    def _calculate_service_fee(base_amount: float) -> float:
-        """Platform service fee is fixed at $2 per transaction."""
-        return PLATFORM_SERVICE_FEE_AMOUNT if float(base_amount or 0) > 0 else 0.0
+    def _calculate_service_fee(db: Session, base_amount: float) -> float:
+        """Platform service fee is configured by admin and charged per transaction."""
+        return get_platform_service_fee_amount(db) if float(base_amount or 0) > 0 else 0.0
 
     @staticmethod
     def _is_post_shipping(shipping_method: Optional[str]) -> bool:
@@ -124,14 +124,14 @@ class OrderService:
             - shipping_out_fee_amount
             - order_total
 
-        Return examples (post-PR-#88: fixed $2 service fee charged ONCE on
-        the first order in a multi-order checkout, $0 on the rest):
+        Return examples when the configured service fee is $2 and is charged
+        ONCE on the first order in a multi-order checkout, $0 on the rest:
             [
                 {
                     "items": [CheckoutItem(ci1), CheckoutItem(ci2)],  # borrow, owner1 (first)
                     "deposit_or_sale_amount": 25.0,                   # 10 + 15
                     "owner_income_amount": 2.5,
-                    "service_fee_amount": 2.0,                        # PLATFORM_SERVICE_FEE_AMOUNT
+                    "service_fee_amount": 2.0,                        # configured platform fee
                     "shipping_out_fee_amount": 3.0,                   # first post shipping_quote
                     "order_total": 32.5                               # 25 + 2.5 + 2 + 3
                 },
@@ -182,7 +182,7 @@ class OrderService:
             # charged ONCE per checkout — only on the first order, not on
             # subsequent orders in a multi-owner checkout.
             service_fee_base = deposit_or_sale_amount + owner_income_amount + shipping_out_fee_amount
-            service_fee_amount = OrderService._calculate_service_fee(service_fee_base) if index == 0 else 0.0
+            service_fee_amount = OrderService._calculate_service_fee(db, service_fee_base) if index == 0 else 0.0
 
             # keep original item
             results.append({
