@@ -80,11 +80,19 @@ def _stripe_transfer_to_lender(order: Order, amount_cents: int) -> Optional[str]
     if amount_cents <= 0:
         return None
     try:
-        tr = stripe.Transfer.create(
-            amount=amount_cents,
-            currency="aud",
-            destination=order.owner.stripe_account_id,
-        )
+        transfer_payload = {
+            "amount": amount_cents,
+            "currency": "aud",
+            "destination": order.owner.stripe_account_id,
+        }
+        if order.payment_id:
+            payment_intent = stripe.PaymentIntent.retrieve(order.payment_id)
+            latest_charge = getattr(payment_intent, "latest_charge", None)
+            if latest_charge:
+                transfer_payload["source_transaction"] = (
+                    latest_charge if isinstance(latest_charge, str) else latest_charge.id
+                )
+        tr = stripe.Transfer.create(**transfer_payload)
         return tr.id
     except stripe.error.StripeError as e:
         print(f"[WARN] deposit transfer to lender failed: {e}")
