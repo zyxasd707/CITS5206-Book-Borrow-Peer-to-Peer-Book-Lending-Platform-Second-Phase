@@ -6,8 +6,10 @@ BookBorrow is a community-driven web platform that enables secure and accountabl
 
 ## Product Reference
 
-Product Requirement Document (PRD):  
-<https://skfusc.axshare.com/?g=4>
+Product Requirement Document (PRD): [Axure PRD Source](docs/BookBorrow_PRD.rp)
+
+The external Axure workspace, if used by the team, may require authenticated
+access and should not be treated as a public project link.
 
 ---
 
@@ -81,7 +83,7 @@ Product Requirement Document (PRD):
 
 **Supporting Tools**
 - GitHub (version control and collaboration)
-- Axure RP (PRD and prototype)
+- Axure RP (PRD source)
 - Stripe (payments)
 - Brevo (email notifications)
 
@@ -96,7 +98,7 @@ Key milestones:
 - Payment integration completed
 - Stabilization, documentation, and demonstration completed
 
-Detailed timeline: [Gantt Chart](docs/gantt.png)
+Detailed timeline: [Gantt Chart](docs/GANTT_CHART.xlsx)
 
 ---
 
@@ -106,7 +108,7 @@ Detailed timeline: [Gantt Chart](docs/gantt.png)
 BookBorrow/
 ├── frontendNext/   # Next.js frontend
 ├── fastapi/        # FastAPI backend
-├── docs/           # Project docs, requirements, notes, diagrams
+├── docs/           # Project docs, runbooks, guides, notes, diagrams
 └── README.md       # Project overview and runbook
 ```
 
@@ -117,8 +119,8 @@ BookBorrow/
 ### 1) Clone Repository
 
 ```bash
-git clone https://github.com/ChienAnTu/BookBorrow.git
-cd BookBorrow
+git clone https://github.com/zyxasd707/CITS5206-Book-Borrow-Peer-to-Peer-Book-Lending-Platform-Second-Phase.git
+cd CITS5206-Book-Borrow-Peer-to-Peer-Book-Lending-Platform-Second-Phase
 cp .env.example .env
 ```
 
@@ -159,10 +161,10 @@ Backend URL: <http://localhost:8000>
 make up
 ```
 
-- Uses `compose.yaml` with `compose.prod.yaml`
+- Uses `compose.yaml` through the production Makefile commands
 - HTTPS enabled (TLS via Certbot)
 - Security block rules enabled
-- Public endpoint: `https://bookborrow.org`
+- Public endpoint: `https://www.bookborrow.org` (`https://bookborrow.org` redirects to the same site)
 
 ### Development (Docker Local)
 
@@ -332,9 +334,14 @@ brew install make
 
 ## Documentation and Resources
 
-- [Draft Requirements](docs/requirements.md)
-- [Axure Prototype](https://chienantu.github.io/BookBorrow/prototype/)
-- Meeting notes in `docs/`
+- [Production Verification Runbook](docs/production-runbook.md)
+- [Axure PRD Source](docs/BookBorrow_PRD.rp)
+- [Gantt Chart](docs/GANTT_CHART.xlsx)
+- [Database Design Notes](docs/Database.xlsx)
+- [BookBorrow ERD](docs/bookborrow_ERD.png)
+- [Order Workflow User Guide](docs/operating%20guide/order_workflow_guide.pdf)
+- [Borrowing Demonstration Video](docs/operating%20guide/Borrow_books_from_our_website.mp4)
+- Project notes and screenshots in `docs/`
 
 ---
 

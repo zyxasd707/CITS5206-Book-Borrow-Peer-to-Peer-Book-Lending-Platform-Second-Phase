@@ -1,7 +1,7 @@
 # Production Verification Runbook
 
 This runbook covers the BookBorrow VPS deployment after the Phase 2
-BookHive-to-BookBorrow migration.
+production migration.
 
 ## Source of Truth
 
