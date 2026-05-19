@@ -78,32 +78,6 @@ export async function distributeShippingFee(
   };
 }
 
-// refund payment
-export async function refundPayment(
-  paymentId: string,
-  opts?: { amount_cents?: number; reason?: string } // partial refunds in the future
-) {
-  const res = await axios.post(
-    `${API_URL}/api/v1/payment_gateway/payment/refund/${paymentId}`,
-    { reason: opts?.reason },
-    {
-      headers: {
-        Authorization: `Bearer ${localStorage.getItem("access_token")}`,
-        "Idempotency-Key": `refund-${paymentId}-${opts?.amount_cents ?? "full"}`,
-      },
-      withCredentials: true,
-    }
-  );
-  return res.data as {
-    payment_id: string;
-    refund_id: string;
-    status: "succeeded" | "pending" | "failed" | string;
-    amount_refunded: number; // cents
-    currency: string;        // e.g. "aud"
-    reason?: string | null;
-  };
-}
-
 // Create a new payment dispute (user-initiated)
 export async function createPaymentDispute(
   paymentId: string,
