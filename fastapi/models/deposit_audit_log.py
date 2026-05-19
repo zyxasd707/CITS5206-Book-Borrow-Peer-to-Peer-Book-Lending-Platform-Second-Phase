@@ -47,6 +47,14 @@ class DepositAuditLog(Base):
                             nullable=True)
     note = Column(Text, nullable=True)
 
+    # Outcome of the Stripe transfer that moves a deducted/forfeited deposit to
+    # the lender. Without these, the transfer_id was returned in the HTTP
+    # response and then lost — a deduction could not be reconciled against
+    # Stripe, and a silent transfer failure was invisible.
+    # transfer_status: succeeded / failed / skipped_no_account / skipped_zero_amount
+    transfer_id = Column(String(255), nullable=True)
+    transfer_status = Column(String(50), nullable=True)
+
     created_at = Column(DateTime, server_default=func.now(), nullable=False, index=True)
 
     order = relationship("Order", foreign_keys=[order_id])

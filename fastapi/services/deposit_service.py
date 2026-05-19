@@ -72,13 +72,24 @@ def _deposit_cents(order: Order, db: Session) -> int:
     return int(round(float(order.deposit_or_sale_amount or 0) * 100))
 
 
-def _stripe_transfer_to_lender(order: Order, amount_cents: int) -> Optional[str]:
-    """Transfer deducted deposit amount to lender's connected Stripe account. Returns transfer_id or None."""
+def _stripe_transfer_to_lender(order: Order, amount_cents: int) -> Dict[str, Any]:
+    """Transfer a deducted/forfeited deposit to the lender's connected Stripe
+    account.
+
+    Returns {'id': transfer_id or None, 'status': str}, where status is one of:
+      - 'succeeded'            — transfer created, id is the Stripe tr_...
+      - 'failed'               — Stripe raised; id is None
+      - 'skipped_no_account'   — lender has no connected account; id is None
+      - 'skipped_zero_amount'  — nothing to transfer; id is None
+
+    Persisting the status is what makes a silent transfer failure visible and
+    a deduction reconcilable against Stripe.
+    """
     if not order.owner or not order.owner.stripe_account_id:
         print(f"[WARN] lender {order.owner_id} has no stripe_account_id — skipping deposit transfer")
-        return None
+        return {"id": None, "status": "skipped_no_account"}
     if amount_cents <= 0:
-        return None
+        return {"id": None, "status": "skipped_zero_amount"}
     try:
         transfer_payload = {
             "amount": amount_cents,
@@ -93,10 +104,10 @@ def _stripe_transfer_to_lender(order: Order, amount_cents: int) -> Optional[str]
                     latest_charge if isinstance(latest_charge, str) else latest_charge.id
                 )
         tr = stripe.Transfer.create(**transfer_payload)
-        return tr.id
+        return {"id": tr.id, "status": "succeeded"}
     except stripe.error.StripeError as e:
         print(f"[WARN] deposit transfer to lender failed: {e}")
-        return None
+        return {"id": None, "status": "failed"}
 
 
 def _stripe_refund(payment_id: str, amount_cents: int, reason: str) -> Dict[str, Any]:
@@ -277,11 +288,12 @@ def admin_deduct(db: Session, order_id: str, admin: User,
 
     strike_signal = _apply_strike(db, borrower, severity)
 
-    db.add(DepositAuditLog(
+    deduct_log = DepositAuditLog(
         order_id=order.id, actor_id=admin.user_id, actor_role="admin",
         action="partial_deduct", amount_cents=deducted, final_severity=severity,
         note=note or f"Admin deducted {DEDUCTION_PCT[severity]}% for {severity} damage. Awaiting borrower claim.",
-    ))
+    )
+    db.add(deduct_log)
 
     if strike_signal["restrict_applied"]:
         db.add(DepositAuditLog(
@@ -305,8 +317,13 @@ def admin_deduct(db: Session, order_id: str, admin: User,
     db.commit()
     db.refresh(order)
 
-    # Transfer deducted portion to lender (compensation for damage)
-    transfer_id = _stripe_transfer_to_lender(order, deducted)
+    # Transfer deducted portion to lender (compensation for damage), then
+    # persist the transfer outcome onto the audit row so the deduction can be
+    # reconciled against Stripe and a silent transfer failure stays visible.
+    transfer = _stripe_transfer_to_lender(order, deducted)
+    deduct_log.transfer_id = transfer["id"]
+    deduct_log.transfer_status = transfer["status"]
+    db.commit()
 
     return {
         "order_id": order.id,
@@ -314,7 +331,8 @@ def admin_deduct(db: Session, order_id: str, admin: User,
         "deducted_cents": deducted,
         "refund_ready_cents": to_refund,
         "strike": strike_signal,
-        "lender_transfer_id": transfer_id,
+        "lender_transfer_id": transfer["id"],
+        "lender_transfer_status": transfer["status"],
     }
 
 
@@ -338,11 +356,12 @@ def admin_forfeit(db: Session, order_id: str, admin: User, note: Optional[str] =
 
     strike_signal = _apply_strike(db, borrower, "severe")
 
-    db.add(DepositAuditLog(
+    forfeit_log = DepositAuditLog(
         order_id=order.id, actor_id=admin.user_id, actor_role="admin",
         action="forfeit", amount_cents=total_cents, final_severity="severe",
         note=note or "Admin forfeited the full deposit (severe damage / non-return).",
-    ))
+    )
+    db.add(forfeit_log)
 
     if strike_signal["restrict_applied"]:
         db.add(DepositAuditLog(
@@ -366,8 +385,13 @@ def admin_forfeit(db: Session, order_id: str, admin: User, note: Optional[str] =
     db.commit()
     db.refresh(order)
 
-    # Transfer full deposit to lender (severe damage / non-return)
-    transfer_id = _stripe_transfer_to_lender(order, total_cents)
+    # Transfer full deposit to lender (severe damage / non-return), then
+    # persist the transfer outcome onto the audit row so the forfeit can be
+    # reconciled against Stripe and a silent transfer failure stays visible.
+    transfer = _stripe_transfer_to_lender(order, total_cents)
+    forfeit_log.transfer_id = transfer["id"]
+    forfeit_log.transfer_status = transfer["status"]
+    db.commit()
 
     return {
         "order_id": order.id,
@@ -375,7 +399,8 @@ def admin_forfeit(db: Session, order_id: str, admin: User, note: Optional[str] =
         "deducted_cents": total_cents,
         "refunded_cents": 0,
         "strike": strike_signal,
-        "lender_transfer_id": transfer_id,
+        "lender_transfer_id": transfer["id"],
+        "lender_transfer_status": transfer["status"],
     }
 
 
