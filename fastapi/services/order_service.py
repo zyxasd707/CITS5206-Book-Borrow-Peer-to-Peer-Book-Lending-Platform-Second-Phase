@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from collections import defaultdict
 from services.cart_service import remove_cart_items_by_book_ids
 from models.complaint import Complaint
-from sqlalchemy import or_
+from sqlalchemy import or_, func
 from services.complaint_service import ComplaintService
 from services.notification_service import NotificationService
 from services.service_fee_service import get_platform_service_fee_amount
@@ -203,7 +203,30 @@ class OrderService:
             raise HTTPException(status_code=404, detail=f"Checkout {checkout_id} not found")
         if checkout.user_id != user_id:
             raise HTTPException(status_code=403, detail="Access denied: Checkout does not belong to this user")
-    
+
+        # MVP6-1: restricted borrowers cannot create a borrow order. This is the
+        # chokepoint every order-creation path funnels through (direct endpoint,
+        # Stripe webhook, webhook fallback), so the check belongs here rather
+        # than only in routes/order.py.
+        borrower = db.query(User).filter(User.user_id == user_id).first()
+        if borrower and borrower.is_restricted:
+            has_borrow = (
+                db.query(CheckoutItem)
+                .filter(
+                    CheckoutItem.checkout_id == checkout_id,
+                    func.lower(CheckoutItem.action_type) == "borrow",
+                )
+                .first()
+            )
+            if has_borrow:
+                raise HTTPException(
+                    status_code=403,
+                    detail=(
+                        borrower.restriction_reason
+                        or "Your account is restricted from borrowing. Please contact support."
+                    ),
+                )
+
         orders_data_without_price = OrderService.split_checkout_to_orders(checkout, db, user_id=user_id)
         orders_data = OrderService.add_calculate_order_amounts(db, orders_data=orders_data_without_price)
         created_orders = []

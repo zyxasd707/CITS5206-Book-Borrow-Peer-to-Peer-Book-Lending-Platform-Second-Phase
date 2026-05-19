@@ -167,6 +167,19 @@ def initiate_payment(data: dict, db: Session):
 
     checkout_id = data.get("checkout_id")
 
+    # MVP6-1 early gate: block restricted borrowers before any Stripe charge,
+    # so a restricted user never reaches a "deposit paid but no order" state.
+    gate_items = db.query(CheckoutItem).filter_by(checkout_id=checkout_id).all()
+    if any((it.action_type or "").lower() == "borrow" for it in gate_items):
+        borrower = db.query(User).filter(User.user_id == user_id).first()
+        if borrower and borrower.is_restricted:
+            raise HTTPException(
+                status_code=403,
+                detail=(
+                    borrower.restriction_reason
+                    or "Your account is restricted from borrowing. Please contact support."
+                ),
+            )
 
     try:
         payment_intent_payload = {

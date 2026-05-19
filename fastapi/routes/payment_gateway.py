@@ -55,6 +55,9 @@ def initiate_payment(body: PaymentInitiateRequest, db: Session = Depends(get_db)
     try:
         result = payment_gateway_service.initiate_payment(body.dict(), db=db)
         return result
+    except HTTPException:
+        # Preserve intended status (e.g. 403 for restricted borrowers)
+        raise
     except Exception as e:
         traceback.print_exc()
         raise HTTPException(status_code=400, detail=str(e))
