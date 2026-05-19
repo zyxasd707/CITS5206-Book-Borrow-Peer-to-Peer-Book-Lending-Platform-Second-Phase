@@ -35,7 +35,6 @@ type ComplaintFormState = {
   orderId: string;
   respondentId: string;
   damageSeverity: "none" | "light" | "medium" | "severe";
-  needsRefund: boolean;
 };
 
 const initialComplaintForm: ComplaintFormState = {
@@ -45,7 +44,6 @@ const initialComplaintForm: ComplaintFormState = {
   orderId: "",
   respondentId: "",
   damageSeverity: "none",
-  needsRefund: false,
 };
 
 const ComplainPage: React.FC = () => {
@@ -205,15 +203,6 @@ const ComplainPage: React.FC = () => {
     if (newComplaint.orderId) {
       respondentId = await determineRespondentId(newComplaint.orderId, currentUser.id);
       console.log("🧩 Auto-detected respondentId:", respondentId);
-    }
-
-    // If user selects refund option, redirect to refund flow instead
-    if (newComplaint.needsRefund && newComplaint.orderId) {
-      const reason = encodeURIComponent(newComplaint.subject);
-      const description = encodeURIComponent(newComplaint.description);
-      router.push(`/borrowing/${newComplaint.orderId}?action=refund&reason=${reason}&description=${description}`);
-      setIsSubmitting(false);
-      return;
     }
 
     const complaintData: CreateComplaintRequest = {
@@ -556,45 +545,6 @@ const ComplainPage: React.FC = () => {
                       placeholder="Enter order ID if complaint is related to a specific order"
                     />
                   </div>
-
-                  {newComplaint.orderId && (
-                    <div className="bg-blue-50 border border-blue-200 rounded-md p-4">
-                      <label className="block text-sm font-medium text-gray-700 mb-3">
-                        Do you need a refund?
-                      </label>
-                      <div className="space-y-2">
-                        <label className="flex items-center">
-                          <input
-                            type="radio"
-                            name="refundOption"
-                            checked={!newComplaint.needsRefund}
-                            onChange={() => setNewComplaint({ ...newComplaint, needsRefund: false })}
-                            className="w-4 h-4 text-blue-600"
-                          />
-                          <span className="ml-2 text-sm text-gray-700">
-                            No, just file a complaint
-                          </span>
-                        </label>
-                        <label className="flex items-center">
-                          <input
-                            type="radio"
-                            name="refundOption"
-                            checked={newComplaint.needsRefund}
-                            onChange={() => setNewComplaint({ ...newComplaint, needsRefund: true })}
-                            className="w-4 h-4 text-blue-600"
-                          />
-                          <span className="ml-2 text-sm text-gray-700">
-                            Yes, I need a refund
-                          </span>
-                        </label>
-                      </div>
-                      {newComplaint.needsRefund && (
-                        <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded text-xs text-amber-800">
-                          ⚠️ Selecting refund will redirect you to the refund process instead of filing a complaint.
-                        </div>
-                      )}
-                    </div>
-                  )}
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">

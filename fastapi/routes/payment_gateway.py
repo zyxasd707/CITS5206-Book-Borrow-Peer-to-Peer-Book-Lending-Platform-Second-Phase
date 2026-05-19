@@ -10,7 +10,6 @@ from models.payment_gateway import (
     PaymentInitiateRequest,
     PaymentStatusResponse,
     DistributeShippingFeeRequest,
-    PaymentRefundRequest,
     DisputeCreateRequest,
     PaymentDisputeRequest,
     DonationInitiateRequest,
@@ -111,21 +110,13 @@ def distribute_shipping_fee(payment_id: str, body: DistributeShippingFeeRequest,
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@router.post("/payment/refund/{payment_id}", status_code=status.HTTP_200_OK)
-def refund_payment(payment_id: str, body: PaymentRefundRequest, db: Session = Depends(get_db)):
-    """
-    Refund a payment:
-    - Call Stripe Refund API
-    - Insert refund record into DB
-    - Update payment status accordingly
-    - Return refund details
-    """
-    try:
-        result = payment_gateway_service.refund_payment(payment_id, body.dict(), db=db)
-        return result
-    except Exception as e:
-        traceback.print_exc()
-        raise HTTPException(status_code=400, detail=str(e))
+# NOTE: The old `POST /payment/refund/{payment_id}` endpoint was removed.
+# It had no authentication and no order-state checks — any caller who knew a
+# payment_id could trigger a full Stripe refund, bypassing the BRD v2.5 deposit
+# arbitration flow (complaint -> pending_review -> admin ruling -> borrower claim).
+# Automatic refunds still happen via order cancellation (refund_on_cancel) and
+# clean-return confirmation (order_service -> refund_payment service fn).
+# Admin-driven refunds go through /refunds/admin/manual and /refunds/admin/{id}/retry.
 
 
 # ---------------------------

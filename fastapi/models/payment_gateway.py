@@ -135,11 +135,6 @@ class DistributeShippingFeeRequest(BaseModel):
     lender_account_id: str = Field(..., description="Connected account ID to receive the transfer")
 
 
-class PaymentRefundRequest(BaseModel):
-    reason: Optional[str] = Field(None, description="Reason for the refund")
-    refund_type: Optional[str] = Field("deposit", description="Refund type: deposit | shipping | full")
-
-
 class DisputeCreateRequest(BaseModel):
     payment_id: str
     user_id: str
